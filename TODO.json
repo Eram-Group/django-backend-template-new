@@ -132,9 +132,10 @@
       "title": "Build config/urls.py (entrypoints already cleaned in G0C)",
       "endGoal": "URL conf resolves: admin at env path, /api/v1/, /healthz + /readyz, allauth headless mounted; manage.py defaults to config.settings.local (verify - set in G0C).",
       "tips": [
-        "websocket.py, old api.py, and the sys.path hacks were already removed in G0C cleanup-old-app; urls.py is currently a stub."
+        "websocket.py, old api.py, and the sys.path hacks were already removed in G0C cleanup-old-app; urls.py is currently a stub.",
+        "RESOLVED: users router + allauth headless mount move to G04 - mounting /users/me before the ninja auth class exists would expose an unauthenticated 500; G03 scope = admin + /api/v1/ root + healthz/readyz."
       ],
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "users-migrations-fresh",
@@ -147,7 +148,7 @@
       "dependsOn": [
         "settings-base"
       ],
-      "status": "pending"
+      "status": "in_progress"
     },
     {
       "id": "auth-investigation",
