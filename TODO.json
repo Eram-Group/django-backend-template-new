@@ -129,9 +129,11 @@
       "group": "G09",
       "title": "Root conftest + pytest plumbing",
       "endGoal": "Root conftest.py provides autouse tmp MEDIA_ROOT and a user fixture; a trivial test passes under pytest -n auto with coverage wiring active.",
-      "status": "pending",
+      "status": "done",
       "tips": [
-        "MOVED to G09 (outside-in): pytest plumbing + one trivial test must exist before G10 CI (pytest exits 5 on empty suites, which would fail the fast job)."
+        "MOVED to G09 (outside-in): pytest plumbing + one trivial test must exist before G10 CI (pytest exits 5 on empty suites, which would fail the fast job).",
+        "VERIFIED: 2 smoke tests pass under pytest -n auto against compose postgres; --cov produces a report (86% already - fail_under gate stays for the G07 checkpoint; CI should use --cov-fail-under=0 until then or omit --cov).",
+        "user fixture creates the verified+primary EmailAddress row (auth-probe finding) and asserts passwordlessness."
       ]
     },
     {
