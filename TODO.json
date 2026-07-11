@@ -29,7 +29,7 @@
       "id": "G01",
       "title": "Dependencies (add-only) + tool config",
       "rationale": "All code written from here on is measured against the final ruff/mypy/pytest rules.",
-      "checkpoint": "uv sync clean; uv run ruff check + uv run mypy run with final config (nothing boots yet by design - G0C removed the old app); commit."
+      "checkpoint": "uv sync clean; uv run ruff check + ruff format --check + uv run mypy (strict) all green with final config; commit."
     },
     {
       "id": "G02",
@@ -133,7 +133,9 @@
         "Repo intentionally does not boot from here until G03 builds the new settings - manage.py commands are expected to fail.",
         "G03's settings/urls tasks are now build-from-scratch (git history keeps the old files as reference)."
       ],
-      "dependsOn": ["delete-mpa-cruft"],
+      "dependsOn": [
+        "delete-mpa-cruft"
+      ],
       "status": "done"
     },
     {
@@ -147,7 +149,9 @@
         "RESOLVED (user decision 2026-07-11): dev-QoL tools are KEPT - ipdb, pytest-sugar, django-extensions, werkzeug[watchdog] (runserver_plus) stay in the dev group; watchfiles stays pruned (its only consumer was uvicorn's reloader). django_extensions must be added to local settings INSTALLED_APPS in G03 settings-envs.",
         "RESOLVED: also purged stale .gitignore entries (sample_project/media/, .envs/*, redis dump.rdb)."
       ],
-      "dependsOn": ["cleanup-old-app"],
+      "dependsOn": [
+        "cleanup-old-app"
+      ],
       "status": "done"
     },
     {
@@ -158,16 +162,20 @@
       "tips": [
         "PLAN.md step 2 is the authoritative list (psycopg[binary,pool], pydantic-settings, dj-database-url, django-unfold, django-import-export+openpyxl, django-tasks-db, django-modeltranslation, django-structlog, django-guid, django-health-check, django-axes, django-ratelimit...).",
         "Verify whether Django 6 native django.tasks needs the django-tasks backport at all - likely only django-tasks-db (backend django_tasks_db.DatabaseBackend); resolve and append the answer here.",
+        "RESOLVED (verified 2026-07-11): Django 6.0.7 ships native django.tasks; the only declared dep is django-tasks-db (0.12.0). The django-tasks backport arrives transitively as its internal dependency (the backend subclasses its base classes; compat.py accepts native django.tasks Task objects). Wiring: INSTALLED_APPS += django_tasks_db; TASKS = {default: {BACKEND: django_tasks_db.DatabaseBackend}}; worker = manage.py db_worker. Runtime smoke of native-enqueue -> db_worker happens in G05.",
         "Let uv pick versions (pin ranges, not exact patches)."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "deps-add-dev",
       "group": "G01",
       "title": "Add new dev-group dependencies",
       "endGoal": "pytest-xdist, pytest-cov, pytest-mock, django-test-migrations, import-linter in the dev group; lock updated; old-app pytest still green.",
-      "status": "pending"
+      "status": "done",
+      "tips": [
+        "RESOLVED: 'old-app pytest still green' clause is moot post-G0C (no tests exist yet); observed: all five packages in dev group, lock updated, uv sync clean."
+      ]
     },
     {
       "id": "toolcfg-rewrite",
@@ -176,9 +184,10 @@
       "endGoal": "ruff (lean select + DTZ,T20,PT,S; S101 allowed in tests; isort force-single-line; migrations excluded), mypy strict + django-stubs + pydantic plugin, pytest, coverage (80% fail_under over apps/** and config/**) all match PLAN; djlint config removed.",
       "tips": [
         "The base already uses pytest 9's native [tool.pytest] table - keep it, do not revert to ini_options; keep --ds and add --reuse-db --import-mode=importlib (mind xdist interplay).",
-        "mypy strict will scream about old-app code - acceptable until G03 deletes it; do not weaken the config to silence the doomed code."
+        "mypy strict will scream about old-app code - acceptable until G03 deletes it; do not weaken the config to silence the doomed code.",
+        "RESOLVED: a minimal config/settings/{__init__,test}.py stub was created so the django-stubs plugin can boot Django and mypy runs green from G01 onward (G03 rewrites it). mypy files= starts as [config, manage.py] - APPEND \"apps\" in G02. djlint config was already removed in G0C."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "env-module",
@@ -241,7 +250,12 @@
         "Drop the old ACCOUNT_FORMS/SOCIALACCOUNT_FORMS string refs to sample_project.users.forms.",
         "django.contrib.sites leaves too: remove SITE_ID and the MIGRATION_MODULES sites override; verify allauth 65.x boots without sites."
       ],
-      "dependsOn": ["deps-add-runtime", "env-module", "common-core", "users-core"],
+      "dependsOn": [
+        "deps-add-runtime",
+        "env-module",
+        "common-core",
+        "users-core"
+      ],
       "status": "pending"
     },
     {
@@ -285,7 +299,9 @@
       "tips": [
         "Never write an alter-pk migration - UUIDv7 pk is incompatible with the old AutoField rows; there is no production data, so drop the local DB volume and start clean."
       ],
-      "dependsOn": ["settings-base"],
+      "dependsOn": [
+        "settings-base"
+      ],
       "status": "pending"
     },
     {
@@ -323,7 +339,9 @@
       "group": "G04",
       "title": "Ninja auth class (session cookie or X-Session-Token)",
       "endGoal": "Set as the NinjaAPI default auth: valid session cookie OR valid allauth app-client X-Session-Token authenticates; unauthenticated call returns 401 with the {\"message\"} error shape.",
-      "dependsOn": ["config-api-v1"],
+      "dependsOn": [
+        "config-api-v1"
+      ],
       "status": "pending"
     },
     {
@@ -352,7 +370,9 @@
       "group": "G05",
       "title": "Run the DB worker end to end",
       "endGoal": "manage.py db_worker drains the queued welcome email to Mailpit and records a successful task result; the worker runbook (command, graceful SIGTERM, ECS stopTimeout note) is written down for README.",
-      "dependsOn": ["signup-signal-welcome-task"],
+      "dependsOn": [
+        "signup-signal-welcome-task"
+      ],
       "status": "pending"
     },
     {
@@ -361,7 +381,8 @@
       "title": "Scheduled-job template + task-result pruning",
       "endGoal": "apps/users/management/commands/sample_scheduled_job.py (thin wrapper over a service) runs clean; a prune path for old task results exists and runs; the EventBridge cron recipe (clearsessions + prune + sample) is noted for README.",
       "tips": [
-        "Check whether django-tasks-db ships a prune management command before writing one."
+        "Check whether django-tasks-db ships a prune management command before writing one.",
+        "RESOLVED (verified 2026-07-11 from django-tasks-db 0.12.0): it ships prune_db_task_results with retention-policy options - do not write one. Bonus: the backend supports OPTIONS id_function (incl. db expressions on Django 6) if we want uuidv7 task ids."
       ],
       "status": "pending"
     },
@@ -394,7 +415,10 @@
       "group": "G06",
       "title": "Users admin package (dogfood the scaffolder)",
       "endGoal": "admin/user/ generated then fleshed out: search, filters, readonly rules, export resource, explicit can_* decisions; User fully manageable in admin.",
-      "dependsOn": ["admin-framework", "generate-dashboard-cmd"],
+      "dependsOn": [
+        "admin-framework",
+        "generate-dashboard-cmd"
+      ],
       "status": "pending"
     },
     {
@@ -423,7 +447,9 @@
       "group": "G07",
       "title": "Factory-coverage gate",
       "endGoal": "A test iterating apps.get_models() fails listing any concrete model without a registered factory (third-party/historical models excluded); passes on the real tree.",
-      "dependsOn": ["factories-registry"],
+      "dependsOn": [
+        "factories-registry"
+      ],
       "status": "pending"
     },
     {
@@ -434,7 +460,10 @@
       "tips": [
         "The save round-trip must GET the form and re-POST it unchanged (the legacy version that only POSTs _continue passes on validation failures)."
       ],
-      "dependsOn": ["factories-registry", "users-admin-package"],
+      "dependsOn": [
+        "factories-registry",
+        "users-admin-package"
+      ],
       "status": "pending"
     },
     {
@@ -449,7 +478,9 @@
       "group": "G07",
       "title": "seed_db command over the factory registry",
       "endGoal": "manage.py seed_db populates a local database through the registry (guarded against production); seeded data is browsable in admin.",
-      "dependsOn": ["factories-registry"],
+      "dependsOn": [
+        "factories-registry"
+      ],
       "status": "pending"
     },
     {
@@ -457,7 +488,9 @@
       "group": "G07",
       "title": "Import-linter contracts enforced",
       "endGoal": "[tool.importlinter] contracts from PLAN (layers incl. signals, domain-app independence, common-imports-no-domain-app) pass via lint-imports; suite green; coverage >= 80%; mypy strict green repo-wide.",
-      "dependsOn": ["delete-mpa-cruft"],
+      "dependsOn": [
+        "delete-mpa-cruft"
+      ],
       "status": "pending"
     },
     {
@@ -469,7 +502,9 @@
         "The image is the single ECS artifact - the worker service overrides the command (manage.py db_worker).",
         "Release step (migrate + createcachetable + collectstatic) is a one-off ECS task, never the entrypoint."
       ],
-      "dependsOn": ["deps-prune"],
+      "dependsOn": [
+        "deps-prune"
+      ],
       "status": "pending"
     },
     {
@@ -488,7 +523,9 @@
         "postgres:18 moved its data dir - mount /var/lib/postgresql/18/docker or persistence silently breaks.",
         "depends_on with condition: service_healthy replaces wait-for-it scripts."
       ],
-      "dependsOn": ["dockerfile-multistage"],
+      "dependsOn": [
+        "dockerfile-multistage"
+      ],
       "status": "pending"
     },
     {
@@ -496,7 +533,9 @@
       "group": "G08",
       "title": "Wave-3 deletion: old local compose file",
       "endGoal": "docker-compose.local.yml deleted once the new compose.yaml replaces it (compose/ and .envs/ already died in G0C); a single Dockerfile + compose.yaml remain.",
-      "dependsOn": ["compose-rewrite"],
+      "dependsOn": [
+        "compose-rewrite"
+      ],
       "status": "pending"
     },
     {
@@ -504,7 +543,10 @@
       "group": "G09",
       "title": "Rewrite the justfile",
       "endGoal": "Full recipe set runs: bootstrap (uv sync + .env copy + pre-commit install incl. pre-push + migrate + createcachetable), up/stop/logs/manage passthrough, test, lint, fmt, typecheck, migrate, makemigrations, shell, worker, seed, db-reset (warned), bash, clean, check-deploy.",
-      "dependsOn": ["compose-rewrite", "seed-db-cmd"],
+      "dependsOn": [
+        "compose-rewrite",
+        "seed-db-cmd"
+      ],
       "status": "pending"
     },
     {
@@ -515,7 +557,10 @@
       "tips": [
         "The exclude: line still references deleted paths (^docs/, devcontainer.json) - set the final exclude (migrations only) in this rewrite."
       ],
-      "dependsOn": ["import-linter-contracts", "toolcfg-rewrite"],
+      "dependsOn": [
+        "import-linter-contracts",
+        "toolcfg-rewrite"
+      ],
       "status": "pending"
     },
     {
@@ -523,7 +568,10 @@
       "group": "G10",
       "title": "Rewrite ci.yml as the hybrid pipeline",
       "endGoal": "Two parallel jobs with concurrency cancel-in-progress: fast job (setup-uv -> pre-commit action -> mypy -> uv lock --check -> makemigrations --check -> pytest against a postgres:18 service incl. createcachetable) and image job (buildx with GHA layer cache -> compose up -> smoke /healthz, /readyz, one API call).",
-      "dependsOn": ["precommit-rewrite", "compose-rewrite"],
+      "dependsOn": [
+        "precommit-rewrite",
+        "compose-rewrite"
+      ],
       "status": "pending"
     },
     {
@@ -541,7 +589,9 @@
       "group": "G10",
       "title": "Main-branch ECR push via OIDC",
       "endGoal": "A main-only workflow builds and pushes the image tagged github.sha to ECR assuming a role via GitHub OIDC (no static AWS keys); skips gracefully when AWS repo config is absent; documented as the deploy artifact.",
-      "dependsOn": ["dockerfile-multistage"],
+      "dependsOn": [
+        "dockerfile-multistage"
+      ],
       "status": "pending"
     },
     {

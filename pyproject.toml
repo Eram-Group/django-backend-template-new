@@ -7,121 +7,96 @@ license = { text = "MIT" }
 authors = [
   { name = "Eram Dev Team", email = "eramdevteam@gmail.com" },
 ]
-requires-python = "==3.14.*"
+requires-python = ">=3.14"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  "argon2-cffi==25.1.0",
-  "django==6.0.7",
-  "django-allauth[mfa]==65.18.0",
-  "django-anymail[amazon-ses]==15.0",
-  "django-cors-headers==4.9.0",
-  "django-ninja==1.6.2",
-  "django-storages[s3]==1.14.6",
-  "gunicorn==26.0.0",
-  "psycopg[binary]==3.3.4",
-  "sentry-sdk==2.64.0",
+  "argon2-cffi>=25.1",
+  "dj-database-url>=3.1.2",
+  "django>=6.0,<6.1",
+  "django-allauth[headless-spec,socialaccount]>=65.18",
+  "django-anymail[amazon-ses]>=15.0",
+  "django-axes>=8.3.1",
+  "django-cors-headers>=4.9",
+  "django-guid>=3.6.1",
+  "django-health-check>=4.4.3",
+  "django-import-export>=4.4.1",
+  "django-modeltranslation>=0.20.3",
+  "django-ninja>=1.6.2",
+  "django-ratelimit>=4.1.0",
+  "django-storages[s3]>=1.14.6",
+  "django-structlog>=10.1.0",
+  "django-tasks-db>=0.12.0",
+  "django-unfold>=0.100.0",
+  "gunicorn>=26.0",
+  "openpyxl>=3.1.5",
+  "psycopg[binary,pool]>=3.3.4",
+  "pydantic-settings>=2.14.2",
+  "sentry-sdk>=2.64",
 ]
 
 [dependency-groups]
 dev = [
-  "coverage==7.15.0",
-  "django-debug-toolbar==7.0.0",
+  "coverage>=7.15",
+  "django-debug-toolbar>=7.0",
   "django-extensions>=4.1",
-  "django-stubs[compatible-mypy]==6.0.6",
-  "django-upgrade==1.31.1",
-  "factory-boy==3.3.3",
+  "django-stubs[compatible-mypy]>=6.0.6",
+  "django-test-migrations>=1.5.0",
+  "django-upgrade>=1.31",
+  "factory-boy>=3.3.3",
+  "import-linter>=2.13",
   "ipdb>=0.13.13",
-  "mypy==2.1.0",
-  "pre-commit==4.6.0",
-  "psycopg[binary]==3.3.4",
-  "pytest==9.1.1",
-  "pytest-django==4.12.0",
+  "mypy>=2.1",
+  "pre-commit>=4.6",
+  "pytest>=9.1",
+  "pytest-cov>=7.1.0",
+  "pytest-django>=4.12",
+  "pytest-mock>=3.15.1",
   "pytest-sugar>=1.1.1",
-  "ruff==0.15.21",
+  "pytest-xdist>=3.8.0",
+  "ruff>=0.15",
   "werkzeug[watchdog]>=3.1.8",
 ]
 
 # ==== ruff ====
 [tool.ruff]
-# Exclude a variety of commonly ignored directories.
 extend-exclude = [
   "*/migrations/*.py",
-  "staticfiles/*",
 ]
 lint.select = [
-  "A",
-  "ASYNC",
-  "B",
-  "BLE",
-  "C4",
-  "C90",
-  "COM",
-  "DJ",
-  "DTZ",
-  "E",
-  "EM",
-  "ERA",
-  "EXE",
-  "F",
-  "FA",
-  "FBT",
-  "FLY",
-  "G",
-  "I",
-  "ICN",
-  "INP",
-  "INT",
-  "ISC",
-  "N",
-  "PD",
-  "PERF",
-  "PGH",
-  "PIE",
-  "PL",
-  "PT",
-  "PTH",
-  "PYI",
-  "Q",
-  "RET",
-  "RSE",
-  "RUF",
-  "S",
-  "SIM",
-  "SLF",
-  "SLOT",
-  "T10",
-  "T20",
-  "TC",
-  "TID",
-  "TRY",
-  "UP",
-  "W",
-  "YTT",
+  "E",   # pycodestyle errors
+  "W",   # pycodestyle warnings
+  "F",   # pyflakes
+  "I",   # isort
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "DJ",  # flake8-django
+  "C4",  # flake8-comprehensions
+  "PIE", # flake8-pie
+  "SIM", # flake8-simplify
+  "RUF", # ruff-specific
+  "DTZ", # flake8-datetimez (naive datetimes)
+  "T20", # flake8-print (no stray prints)
+  "PT",  # flake8-pytest-style
+  "S",   # flake8-bandit (security)
 ]
 lint.ignore = [
-  "RUF012", # Mutable class attributes should be annotated with `typing.ClassVar`
-  "S101",   # Use of assert detected https://docs.astral.sh/ruff/rules/assert/
-  "SIM102", # sometimes it's better to nest
-  # of types for comparison.
-  # Deactivated because it can make the code slow:
-  # https://github.com/astral-sh/ruff/issues/7871
+  "RUF012", # ClassVar annotations conflict with Django's class-attr idiom (Meta, admin, etc.)
 ]
+lint.per-file-ignores = { "**/tests/**" = [ "S101" ], "conftest.py" = [ "S101" ] }
 lint.isort.force-single-line = true
 
 # ==== mypy ====
 [tool.mypy]
-ignore_missing_imports = true
 python_version = "3.14"
-check_untyped_defs = true
-warn_redundant_casts = true
-warn_unused_ignores = true
+strict = true
+files = [ "config", "manage.py" ] # append "apps" when G02 creates it
 plugins = [
   "mypy_django_plugin.main",
+  "pydantic.mypy",
 ]
-warn_unused_configs = true
 overrides = [
   # Django migrations should not produce any errors:
   { module = "*.migrations.*", ignore_errors = true },
@@ -147,3 +122,4 @@ python_files = [
 # ==== Coverage ====
 run.include = [ "apps/**", "config/**" ]
 run.omit = [ "*/migrations/*", "*/tests/*" ]
+report.fail_under = 80
