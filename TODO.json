@@ -158,9 +158,11 @@
       "dependsOn": [
         "compose-rewrite"
       ],
-      "status": "pending",
+      "status": "done",
       "tips": [
-        "seed recipe: placeholder explaining seed_db lands in G07 (dep removed by the outside-in reorder); wire the real recipe in G07."
+        "seed recipe: placeholder explaining seed_db lands in G07 (dep removed by the outside-in reorder); wire the real recipe in G07.",
+        "VERIFIED: every recipe ran - bootstrap (idempotent), run/up/stop/logs, manage, test(-n auto), lint (ruff+format+lint-imports), fmt, typecheck, migrate(+cachetable), makemigrations, shell, worker (TASKS_IMMEDIATE=false; --batch drains+exits), seed placeholder, db-reset ([confirm], --yes to bypass), bash (image shell), clean, check-deploy.",
+        "check-deploy already reports ZERO warnings with deployed-mode dummy env - pre-verifies part of G12 verify-prod-posture."
       ]
     },
     {
@@ -413,7 +415,10 @@
       "group": "G12",
       "title": "Production posture verification (PLAN verification 6, 7)",
       "endGoal": "check --deploy with production settings reports zero warnings; docker compose up --build passes the same smokes with a non-root container; final commit marks the transformation complete.",
-      "status": "pending"
+      "status": "pending",
+      "tips": [
+        "Early signal (2026-07-11): `just check-deploy` (production settings, dummy deployed env) already reports 0 warnings - re-confirm at G12 with the real setup."
+      ]
     },
     {
       "id": "social-providers",
