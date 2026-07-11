@@ -92,7 +92,7 @@ lint.isort.force-single-line = true
 [tool.mypy]
 python_version = "3.14"
 strict = true
-files = [ "config", "manage.py" ] # append "apps" when G02 creates it
+files = [ "apps", "config", "manage.py" ]
 plugins = [
   "mypy_django_plugin.main",
   "pydantic.mypy",
@@ -100,6 +100,10 @@ plugins = [
 overrides = [
   # Django migrations should not produce any errors:
   { module = "*.migrations.*", ignore_errors = true },
+  # Third-party packages without type stubs / py.typed:
+  { module = [ "allauth.*", "health_check.*" ], ignore_missing_imports = true },
+  # Adapters subclass allauth's untyped base classes:
+  { module = "apps.*.adapters", disallow_subclassing_any = false },
 ]
 
 [tool.django-stubs]

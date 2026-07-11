@@ -196,9 +196,10 @@
       "endGoal": "A typed Env(BaseSettings) importable with no .env present: SecretStr secrets, Literal environment, DB pool knobs, DJANGO_SUPERUSER_*, COOKIE_DOMAIN, FRONTEND_ALLOWED_ORIGINS, Google/Apple OAuth creds, safe local defaults, required-in-prod fields.",
       "tips": [
         "This is the ONLY reader of os.environ/.env in the codebase - settings must consume the env object exclusively.",
-        "Gawdat template's config/helpers/env.py is the concept reference - modernize, don't port."
+        "Gawdat template's config/helpers/env.py is the concept reference - modernize, don't port.",
+        "RESOLVED: modernized from Gawdat config/helpers/env.py - key divergences: safe local defaults + required-in-prod model_validator (fail-fast lists ALL missing fields) instead of everything-required + dummy.env; env_ignore_empty=True (FOO= means unset); CSV lists via NoDecode+validator (no JSON in .env); no fetch-secrets-at-boot (anti-adopt, ECS injects)."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "env-example-file",
@@ -206,9 +207,10 @@
       "title": "Author .env.example and local .env",
       "endGoal": ".env.example committed documenting every Env field (incl. ENVIRONMENT=local|staging|production) with safe local values; .env copied locally and gitignored.",
       "tips": [
-        ".envs/ was deleted in G0C (local compose now uses inline dev creds); the new .env serves config/env.py only."
+        ".envs/ was deleted in G0C (local compose now uses inline dev creds); the new .env serves config/env.py only.",
+        "RESOLVED: .env.example groups fields with comments; .env copied locally (gitignored, verified). Empty-value semantics: FOO= means unset."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "common-core",
@@ -217,16 +219,20 @@
       "endGoal": "apps/common importable standalone: BaseModel with UUIDv7 pk (db_default=Func(function=\"uuidv7\")), indexed created_at, updated_at; ApplicationError hierarchy; cursor pagination ordered by pk; apps.py.",
       "tips": [
         "uuidv7() is PG18-native - db_default keeps generation in the database.",
-        "Old app untouched; nothing imports apps.common yet."
+        "Old app untouched; nothing imports apps.common yet.",
+        "RESOLVED: ApplicationError designed fresh (single base with message+extra; Gawdat had per-app APIException + ErrorCode objects - not adopted). CursorPagination orders -pk (uuid7 = newest first), opaque urlsafe-b64 cursor, limit<=100. apps/common/__init__ stays EMPTY: leaf modules import ninja/django lazily-by-consumer so bare 'import apps.common' works without settings."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "common-health",
       "group": "G02",
       "title": "Health endpoints on django-health-check",
       "endGoal": "apps/common/health.py exposes /healthz (liveness, no DB) and /readyz (DB/cache/storage) view functions, importable; URL wiring lands with the flip.",
-      "status": "pending"
+      "status": "done",
+      "tips": [
+        "RESOLVED: healthz = plain 200 no-DB; readyz = CheckMixin().check_all() over registered plugins, 503 + failed dict. health_check import kept inside view; mypy override for health_check.* (no py.typed)."
+      ]
     },
     {
       "id": "users-core",
@@ -235,9 +241,10 @@
       "endGoal": "apps/users importable: User(BaseModel, AbstractUser-derived) with email login, no username, single name field, language (ar/en); email-based manager; constants.py, exceptions.py; minimal adapters.py with is_open_for_signup from env. No migrations generated yet.",
       "tips": [
         "Keep the default app label 'users' so AUTH_USER_MODEL = \"users.User\" never changes - but never have old and new users apps installed simultaneously.",
-        "Do NOT run makemigrations here - fresh 0001 is generated after the flip (users-migrations-fresh)."
+        "Do NOT run makemigrations here - fresh 0001 is generated after the flip (users-migrations-fresh).",
+        "RESOLVED (user decisions 2026-07-11): language defaults to ARABIC; full exemplar tree created now - placeholder layer packages (schemas/services/selectors/apis/tasks/admin/management/tests) carry docstrings naming their fill group. Manager: password=None -> set_unusable_password (passwordless default). Adapter lives IN the app (fixes Gawdat placement smell) with mypy disallow_subclassing_any=false override for apps.*.adapters. Settings stub extended with INSTALLED_APPS+AUTH_USER_MODEL so mypy strict stays green; mypy files now include apps."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "settings-base",
