@@ -42,6 +42,8 @@ INSTALLED_APPS = [
     "corsheaders",
     "allauth",
     "allauth.account",
+    "allauth.headless",
+    "allauth.usersessions",
     "import_export",
     "django_tasks_db",
     "django_structlog",
@@ -140,11 +142,28 @@ AXES_FAILURE_LIMIT = 5
 AXES_COOLOFF_TIME = timedelta(hours=1)
 AXES_LOCKOUT_PARAMETERS = [["username", "ip_address"]]
 
-# Minimal allauth block - the full passwordless/headless config lands in G04.
+# --- Passwordless headless auth (allauth) ----------------------------------
 ACCOUNT_ADAPTER = "apps.users.adapters.AccountAdapter"
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_LOGIN_METHODS = {"email"}
-ACCOUNT_SIGNUP_FIELDS = ["email*"]
+ACCOUNT_SIGNUP_FIELDS = ["email*"]  # no password anywhere in signup
+ACCOUNT_LOGIN_BY_CODE_ENABLED = True
+ACCOUNT_LOGIN_BY_CODE_REQUIRED = True  # login = email + 6-digit code, no password
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED = True
+
+# API-only: no server-rendered account pages; browser + app clients are the
+# HEADLESS_CLIENTS default. The auth OpenAPI spec serves at /_allauth/openapi.json.
+HEADLESS_ONLY = True
+HEADLESS_SERVE_SPECIFICATION = True
+HEADLESS_FRONTEND_URLS = {
+    "account_confirm_email": f"{env.FRONTEND_BASE_URL}/auth/verify-email/{{key}}",
+    "account_reset_password": f"{env.FRONTEND_BASE_URL}/auth/password-reset",
+    "account_reset_password_from_key": (
+        f"{env.FRONTEND_BASE_URL}/auth/password-reset/{{key}}"
+    ),
+    "account_signup": f"{env.FRONTEND_BASE_URL}/auth/signup",
+}
 
 # --- i18n / tz (site default: Arabic - user decision 2026-07-11) -----------
 LANGUAGE_CODE = "ar"

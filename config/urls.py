@@ -9,6 +9,7 @@ from django.contrib import admin
 from django.http import HttpRequest
 from django.http import HttpResponse
 from django.http import JsonResponse
+from django.urls import include
 from django.urls import path
 from django.views.defaults import page_not_found
 
@@ -32,6 +33,7 @@ handler404 = "config.urls.handle_404"
 urlpatterns = [
     path(env.ADMIN_URL, admin.site.urls),
     path("api/v1/", api.urls),
+    path("_allauth/", include("allauth.headless.urls")),
     path("healthz", healthz, name="healthz"),
     path("readyz", readyz, name="readyz"),
 ]

@@ -163,9 +163,12 @@
       "title": "Full passwordless allauth headless configuration",
       "endGoal": "Headless auth endpoints mounted and listed in the served auth OpenAPI spec: HEADLESS_ONLY=True, HEADLESS_FRONTEND_URLS, ACCOUNT_LOGIN_BY_CODE_REQUIRED, ACCOUNT_SIGNUP_FIELDS=[\"email*\"], email verification by code, allauth.usersessions installed, browser + app client types active.",
       "tips": [
-        "No password fields anywhere in signup; staff/superusers still keep passwords for admin login (Argon2)."
+        "No password fields anywhere in signup; staff/superusers still keep passwords for admin login (Argon2).",
+        "VERIFIED live (app client): signup with email only -> 401 + login_by_code pending + session_token; code email delivered to Mailpit IN ARABIC (LANGUAGE_CODE=ar via allauth translations); code/confirm with X-Session-Token -> 200 is_authenticated, has_usable_password=false, uuid7 id. Welcome email also arrived (adapter->service->task pipeline, ImmediateBackend).",
+        "Auth OpenAPI spec serves at /_allauth/openapi.json (HEADLESS_SERVE_SPECIFICATION=True); browser+app clients are the HEADLESS_CLIENTS default; socialaccount/usersessions endpoints mount conditionally on INSTALLED_APPS.",
+        "Default allauth login code format is XXXX-XXXX alphanumeric - the 6-digit numeric override is adapters-passwordless (next task)."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "adapters-passwordless",
