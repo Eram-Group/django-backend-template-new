@@ -190,6 +190,8 @@ UNFOLD = {
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": True,
+        # Each item carries the matching view permission - links hide for
+        # staff who cannot open them (consistency enforced by a G07 gate).
         "navigation": [
             {
                 "title": _("Users"),
@@ -198,17 +200,26 @@ UNFOLD = {
                         "title": _("Users"),
                         "icon": "person",
                         "link": reverse_lazy("admin:users_user_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "users.view_user"
+                        ),
                     },
                     {
                         "title": _("Email addresses"),
                         "icon": "mail",
                         "link": reverse_lazy("admin:account_emailaddress_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "account.view_emailaddress"
+                        ),
                     },
                     {
                         "title": _("Sessions"),
                         "icon": "devices",
                         "link": reverse_lazy(
                             "admin:usersessions_usersession_changelist"
+                        ),
+                        "permission": lambda request: request.user.has_perm(
+                            "usersessions.view_usersession"
                         ),
                     },
                 ],
@@ -222,11 +233,17 @@ UNFOLD = {
                         "link": reverse_lazy(
                             "admin:django_tasks_database_dbtaskresult_changelist"
                         ),
+                        "permission": lambda request: request.user.has_perm(
+                            "django_tasks_database.view_dbtaskresult"
+                        ),
                     },
                     {
                         "title": _("Login attempts"),
                         "icon": "lock",
                         "link": reverse_lazy("admin:axes_accessattempt_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "axes.view_accessattempt"
+                        ),
                     },
                 ],
             },
