@@ -16,9 +16,10 @@ Copy this app to start a new domain (one app = one bounded context):
 ## Rules that shape every file here
 
 - Layering, imports point down only:
-  `apis / admin / management` → `services / tasks` → `selectors` → `models`.
-  Leaf modules (`constants.py`, `exceptions.py`, `types.py`) are importable
-  by every layer.
+  `apis / admin / management` → `services` → `tasks` → `selectors` → `models`.
+  Services enqueue tasks (`on_commit`); task bodies use models/selectors only -
+  business logic stays in services. Leaf modules (`constants.py`,
+  `exceptions.py`, `types.py`) are importable by every layer.
 - No signals: services call services; third-party boundaries use adapter hooks.
 - Cross-app access ONLY via the other app's `services`/`selectors`.
 - Models inherit `apps.common.models.BaseModel` (UUIDv7 pk, timestamps).
