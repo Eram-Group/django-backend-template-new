@@ -6,6 +6,7 @@ from django.contrib.admin import ShowFacets
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models import Model
+from django.forms import ModelForm
 from django.http import HttpRequest
 from import_export.admin import ExportActionModelAdmin
 from unfold.admin import ModelAdmin
@@ -22,8 +23,9 @@ _Fieldsets = list[tuple[str | None, dict[str, Any]]]
 class BaseModelAdmin(ModelAdmin):
     """unfold ModelAdmin that forces every admin to state its capabilities.
 
-    - can_add / can_change / can_delete MUST be declared (loud import-time
-      failure; intermediates set ``abstract_admin = True`` in their own body).
+    - can_add / can_change / can_delete MUST be declared on the class or an
+      ancestor (loud import-time failure; intermediates that decide nothing
+      set ``abstract_admin = True`` in their own body).
       Per-OBJECT decisions: override has_change_permission/has_delete_permission.
     - field_permissions rules shape the form AND the declared fieldsets AND
       list_display per request/object (state-conditional views: use
@@ -54,7 +56,14 @@ class BaseModelAdmin(ModelAdmin):
     def __init__(self, model: type[Model], admin_site: AdminSite) -> None:
         super().__init__(model, admin_site)
         if not self.filter_horizontal:
-            self.filter_horizontal = [field.name for field in model._meta.many_to_many]
+            # Custom-`through` M2Ms are not admin-editable and fail admin.E013
+            # when listed in filter_horizontal.
+            self.filter_horizontal = [
+                field.name
+                for field in model._meta.many_to_many
+                if (through := field.remote_field.through) is not None
+                and through._meta.auto_created
+            ]
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
@@ -96,6 +105,10 @@ class BaseModelAdmin(ModelAdmin):
                 readonly[timestamp] = None
         return tuple(readonly)
 
+    # Hiding a field needs BOTH get_exclude (removes it from the auto-built
+    # form) and get_fieldsets filtering (a form-less field still named in
+    # declared fieldsets is a KeyError at render); one path is load-bearing
+    # per admin depending on whether it declares fieldsets.
     def get_exclude(
         self, request: HttpRequest, obj: Any | None = None
     ) -> list[str] | None:
@@ -107,6 +120,23 @@ class BaseModelAdmin(ModelAdmin):
             if field not in excluded
         ]
         return excluded or None
+
+    def get_form(
+        self,
+        request: HttpRequest,
+        obj: Any | None = None,
+        change: bool = False,
+        **kwargs: Any,
+    ) -> type[ModelForm[Any]]:
+        """Fields a custom ``form`` declares survive Meta.exclude - without
+        this they stay bound/saved on POST while invisible on the page."""
+        form: type[ModelForm[Any]] = super().get_form(
+            request, obj, change=change, **kwargs
+        )
+        context = AdminContext(request=request, obj=obj)
+        for name in self.field_permissions.hidden_fields(context):
+            form.base_fields.pop(name, None)
+        return form
 
     def get_fieldsets(self, request: HttpRequest, obj: Any | None = None) -> _Fieldsets:
         """Filter hidden fields out of declared fieldsets; drop emptied ones."""
