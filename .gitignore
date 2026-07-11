@@ -270,3 +270,6 @@ tags
 
 # IDE
 .idea/
+
+# Reference template (read-only concept quarry - never committed)
+Gawdat_Django_Template/
