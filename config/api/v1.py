@@ -19,6 +19,5 @@ api = NinjaAPI(
 )
 register_exception_handlers(api)
 
-# Per-app routers are mounted by urls-entrypoints (G03), e.g.:
-#   from apps.users.apis import router as users_router
-#   api.add_router("/users", users_router)
+# Per-app routers - one line per app.
+api.add_router("/users", "apps.users.apis.router.router")
