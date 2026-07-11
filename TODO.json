@@ -4,7 +4,7 @@
   "created": "2026-07-11",
   "workflow": [
     "Groups run in array order; tasks run in array order within their group unless dependsOn says otherwise.",
-    "baseline-commit blocks every other task (universal prerequisite; not repeated in each dependsOn).",
+    "Completed work is removed from this file - groups G00 (baseline), G0C (aggressive cleanup), G01 (deps + tool config), G02 (foundation code) plus the early apps/users fill are done; their tasks, resolutions and checkpoints live in the git checkpoint commits.",
     "One task = one working session. Set status=in_progress before starting; set done only when the endGoal is observed, not assumed.",
     "Never start a task whose dependsOn are not all done.",
     "After the last task of a group: run the group's checkpoint, fix any fallout, then `git commit -m \"checkpoint(<groupId>): <group title>\"`.",
@@ -13,30 +13,6 @@
     "From G03 onward ruff+mypy must be green at every checkpoint; GitHub CI is expectedly broken until G10 rewrites it (no remote exists yet) - local checkpoints are the gate."
   ],
   "groups": [
-    {
-      "id": "G00",
-      "title": "Baseline",
-      "rationale": "Everything must be diffable against the untouched cookiecutter base; universal prerequisite.",
-      "checkpoint": "git log --oneline shows exactly one commit; git status clean apart from gitignored files."
-    },
-    {
-      "id": "G0C",
-      "title": "Aggressive cleanup (delete old app + cruft)",
-      "rationale": "User decision (2026-07-11): front-load the cleanup instead of deferring deletions to G03/G08 - delete everything that does not match PLAN.md, including sample_project itself. Accepted trade-off: the repo intentionally does NOT boot or run tests from here until G03 builds the new settings; G01/G02 do not need a booting app.",
-      "checkpoint": "grep -ri sample_project (excluding .git/.venv/.idea and this file's own prose) returns nothing; uv sync clean + uv lock --check; docker compose -f docker-compose.local.yml up -d brings postgres:18 + mailpit healthy; pre-commit run --all-files green; commit."
-    },
-    {
-      "id": "G01",
-      "title": "Dependencies (add-only) + tool config",
-      "rationale": "All code written from here on is measured against the final ruff/mypy/pytest rules.",
-      "checkpoint": "uv sync clean; uv run ruff check + ruff format --check + uv run mypy (strict) all green with final config; commit."
-    },
-    {
-      "id": "G02",
-      "title": "Foundation code (built alongside, uninstalled)",
-      "rationale": "New packages land while nothing imports them - zero-risk prep so the config-build group stays small.",
-      "checkpoint": "uv run python -c 'import config.env, apps.common, apps.users' succeeds; commit."
-    },
     {
       "id": "G03",
       "title": "Build the new config: settings + entrypoints (first boot)",
@@ -100,153 +76,6 @@
   ],
   "tasks": [
     {
-      "id": "baseline-commit",
-      "group": "G00",
-      "title": "Commit the untouched cookiecutter base",
-      "endGoal": "One commit on main containing the unmodified base plus PLAN.md and TODO.json; git status clean apart from gitignored files (.env, .venv, .idea).",
-      "tips": [
-        "Verify .idea/ and .env are actually ignored by the cookiecutter .gitignore before committing.",
-        ".envs/.local/* are committed by cookiecutter design (dev-only credentials) - leave as is; they die in G08.",
-        "RESOLVED: .idea/ was not ignored by the generated .gitignore - appended .idea/ to .gitignore as part of the baseline commit.",
-        "RESOLVED: this generation ignores .envs/* entirely (no !.envs/.local negation), so .envs files stay on disk untracked; old compose reads them from disk - unaffected. They still die in G08.",
-        "RESOLVED: this task's commit doubles as the G00 checkpoint commit (checkpoint requires exactly one commit), so TODO.json status was set before committing."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "delete-mpa-cruft",
-      "group": "G0C",
-      "title": "Delete unreferenced cookiecutter cruft",
-      "endGoal": "Gone: Sphinx docs/, .readthedocs.yml, docker-compose.docs.yml, docker-compose.production.yml, compose/ (entire tree), .devcontainer/, root tests/, merge_production_dotenvs_in_dotenv.py, CONTRIBUTORS.txt, .github/dependabot.yml, .envs/; locale/{en_US,fr_FR,pt_BR} + locale/README.md replaced by empty ar/ and en/ LC_MESSAGES skeletons; README.md reduced to a stub pointing at PLAN.md.",
-      "tips": [
-        "MOVED from G03 (was wave-1 deletion) per user decision to front-load cleanup; compose/ and .envs/ deletions absorbed from the old G08 wave-3 task.",
-        ".envs/.production contains generated secrets - gitignored, so disk-only deletion; nothing enters history."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "cleanup-old-app",
-      "group": "G0C",
-      "title": "Delete sample_project + old config (settings, api, websocket)",
-      "endGoal": "sample_project/, config/settings/, config/api.py, config/websocket.py deleted; manage.py/wsgi.py/asgi.py stripped of sys.path hacks and websocket dispatch; config/urls.py a minimal stub; docker-compose.local.yml rewritten to official postgres:18 (inline dev creds, healthcheck, /var/lib/postgresql/18/docker volume) + mailpit only; justfile trimmed to recipes that still work.",
-      "tips": [
-        "Repo intentionally does not boot from here until G03 builds the new settings - manage.py commands are expected to fail.",
-        "G03's settings/urls tasks are now build-from-scratch (git history keeps the old files as reference)."
-      ],
-      "dependsOn": [
-        "delete-mpa-cruft"
-      ],
-      "status": "done"
-    },
-    {
-      "id": "deps-prune",
-      "group": "G0C",
-      "title": "Prune now-unused dependencies + dead tool config",
-      "endGoal": "uv remove: collectfasta, crispy-bootstrap5, django-crispy-forms, django-environ, django-model-utils, django-redis, hiredis, pillow, python-slugify, redis, uvicorn, uvicorn-worker; dev group: django-coverage-plugin, djlint, sphinx, sphinx-autobuild, watchfiles; [project].name renamed sample_project -> backend; [tool.djlint] + [tool.pyproject-fmt] sections and their pre-commit hooks removed; coverage include points at apps/** + config/**; uv sync clean.",
-      "tips": [
-        "MOVED from G03 per user decision; the old app is gone so nothing imports the pruned packages.",
-        "Survivors match PLAN's keep-list; allauth extras swap [mfa] -> [headless-spec,socialaccount] stays in G01 deps-add-runtime.",
-        "RESOLVED (user decision 2026-07-11): dev-QoL tools are KEPT - ipdb, pytest-sugar, django-extensions, werkzeug[watchdog] (runserver_plus) stay in the dev group; watchfiles stays pruned (its only consumer was uvicorn's reloader). django_extensions must be added to local settings INSTALLED_APPS in G03 settings-envs.",
-        "RESOLVED: also purged stale .gitignore entries (sample_project/media/, .envs/*, redis dump.rdb)."
-      ],
-      "dependsOn": [
-        "cleanup-old-app"
-      ],
-      "status": "done"
-    },
-    {
-      "id": "deps-add-runtime",
-      "group": "G01",
-      "title": "Add new runtime dependencies (no removals yet)",
-      "endGoal": "uv sync clean with all PLAN step-2 runtime deps added and allauth extras switched [mfa] -> [headless-spec,socialaccount]; the old app still boots.",
-      "tips": [
-        "PLAN.md step 2 is the authoritative list (psycopg[binary,pool], pydantic-settings, dj-database-url, django-unfold, django-import-export+openpyxl, django-tasks-db, django-modeltranslation, django-structlog, django-guid, django-health-check, django-axes, django-ratelimit...).",
-        "Verify whether Django 6 native django.tasks needs the django-tasks backport at all - likely only django-tasks-db (backend django_tasks_db.DatabaseBackend); resolve and append the answer here.",
-        "RESOLVED (verified 2026-07-11): Django 6.0.7 ships native django.tasks; the only declared dep is django-tasks-db (0.12.0). The django-tasks backport arrives transitively as its internal dependency (the backend subclasses its base classes; compat.py accepts native django.tasks Task objects). Wiring: INSTALLED_APPS += django_tasks_db; TASKS = {default: {BACKEND: django_tasks_db.DatabaseBackend}}; worker = manage.py db_worker. Runtime smoke of native-enqueue -> db_worker happens in G05.",
-        "Let uv pick versions (pin ranges, not exact patches)."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "deps-add-dev",
-      "group": "G01",
-      "title": "Add new dev-group dependencies",
-      "endGoal": "pytest-xdist, pytest-cov, pytest-mock, django-test-migrations, import-linter in the dev group; lock updated; old-app pytest still green.",
-      "status": "done",
-      "tips": [
-        "RESOLVED: 'old-app pytest still green' clause is moot post-G0C (no tests exist yet); observed: all five packages in dev group, lock updated, uv sync clean."
-      ]
-    },
-    {
-      "id": "toolcfg-rewrite",
-      "group": "G01",
-      "title": "Rewrite [tool.*] configs in pyproject.toml",
-      "endGoal": "ruff (lean select + DTZ,T20,PT,S; S101 allowed in tests; isort force-single-line; migrations excluded), mypy strict + django-stubs + pydantic plugin, pytest, coverage (80% fail_under over apps/** and config/**) all match PLAN; djlint config removed.",
-      "tips": [
-        "The base already uses pytest 9's native [tool.pytest] table - keep it, do not revert to ini_options; keep --ds and add --reuse-db --import-mode=importlib (mind xdist interplay).",
-        "mypy strict will scream about old-app code - acceptable until G03 deletes it; do not weaken the config to silence the doomed code.",
-        "RESOLVED: a minimal config/settings/{__init__,test}.py stub was created so the django-stubs plugin can boot Django and mypy runs green from G01 onward (G03 rewrites it). mypy files= starts as [config, manage.py] - APPEND \"apps\" in G02. djlint config was already removed in G0C."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "env-module",
-      "group": "G02",
-      "title": "Create config/env.py (typed pydantic-settings Env)",
-      "endGoal": "A typed Env(BaseSettings) importable with no .env present: SecretStr secrets, Literal environment, DB pool knobs, DJANGO_SUPERUSER_*, COOKIE_DOMAIN, FRONTEND_ALLOWED_ORIGINS, Google/Apple OAuth creds, safe local defaults, required-in-prod fields.",
-      "tips": [
-        "This is the ONLY reader of os.environ/.env in the codebase - settings must consume the env object exclusively.",
-        "Gawdat template's config/helpers/env.py is the concept reference - modernize, don't port.",
-        "RESOLVED: modernized from Gawdat config/helpers/env.py - key divergences: safe local defaults + required-in-prod model_validator (fail-fast lists ALL missing fields) instead of everything-required + dummy.env; env_ignore_empty=True (FOO= means unset); CSV lists via NoDecode+validator (no JSON in .env); no fetch-secrets-at-boot (anti-adopt, ECS injects)."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "env-example-file",
-      "group": "G02",
-      "title": "Author .env.example and local .env",
-      "endGoal": ".env.example committed documenting every Env field (incl. ENVIRONMENT=local|staging|production) with safe local values; .env copied locally and gitignored.",
-      "tips": [
-        ".envs/ was deleted in G0C (local compose now uses inline dev creds); the new .env serves config/env.py only.",
-        "RESOLVED: .env.example groups fields with comments; .env copied locally (gitignored, verified). Empty-value semantics: FOO= means unset."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "common-core",
-      "group": "G02",
-      "title": "Create apps/common core (BaseModel, errors, pagination)",
-      "endGoal": "apps/common importable standalone: BaseModel with UUIDv7 pk (db_default=Func(function=\"uuidv7\")), indexed created_at, updated_at; ApplicationError hierarchy; cursor pagination ordered by pk; apps.py.",
-      "tips": [
-        "uuidv7() is PG18-native - db_default keeps generation in the database.",
-        "Old app untouched; nothing imports apps.common yet.",
-        "RESOLVED: ApplicationError designed fresh (single base with message+extra; Gawdat had per-app APIException + ErrorCode objects - not adopted). CursorPagination orders -pk (uuid7 = newest first), opaque urlsafe-b64 cursor, limit<=100. apps/common/__init__ stays EMPTY: leaf modules import ninja/django lazily-by-consumer so bare 'import apps.common' works without settings."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "common-health",
-      "group": "G02",
-      "title": "Health endpoints on django-health-check",
-      "endGoal": "apps/common/health.py exposes /healthz (liveness, no DB) and /readyz (DB/cache/storage) view functions, importable; URL wiring lands with the flip.",
-      "status": "done",
-      "tips": [
-        "RESOLVED: healthz = plain 200 no-DB; readyz = CheckMixin().check_all() over registered plugins, 503 + failed dict. health_check import kept inside view; mypy override for health_check.* (no py.typed)."
-      ]
-    },
-    {
-      "id": "users-core",
-      "group": "G02",
-      "title": "Create apps/users core (model, manager, adapters skeleton)",
-      "endGoal": "apps/users importable: User(BaseModel, AbstractUser-derived) with email login, no username, single name field, language (ar/en); email-based manager; constants.py, exceptions.py; minimal adapters.py with is_open_for_signup from env. No migrations generated yet.",
-      "tips": [
-        "Keep the default app label 'users' so AUTH_USER_MODEL = \"users.User\" never changes - but never have old and new users apps installed simultaneously.",
-        "Do NOT run makemigrations here - fresh 0001 is generated after the flip (users-migrations-fresh).",
-        "RESOLVED (user decisions 2026-07-11): language defaults to ARABIC; full exemplar tree created now - placeholder layer packages (schemas/services/selectors/apis/tasks/admin/management/tests) carry docstrings naming their fill group. Manager: password=None -> set_unusable_password (passwordless default). Adapter lives IN the app (fixes Gawdat placement smell) with mypy disallow_subclassing_any=false override for apps.*.adapters. Settings stub extended with INSTALLED_APPS+AUTH_USER_MODEL so mypy strict stays green; mypy files now include apps."
-      ],
-      "status": "done"
-    },
-    {
       "id": "settings-base",
       "group": "G03",
       "title": "Rewrite config/settings/base.py on the typed env",
@@ -255,13 +84,9 @@
         "INSTALLED_APPS order: modeltranslation AND unfold (+unfold.contrib.import_export) MUST precede django.contrib.admin; import_export after unfold's contrib - wrong order fails silently.",
         "Middleware order per PLAN: guid -> security -> ... -> session -> locale -> ... -> axes (axes last).",
         "Drop the old ACCOUNT_FORMS/SOCIALACCOUNT_FORMS string refs to sample_project.users.forms.",
-        "django.contrib.sites leaves too: remove SITE_ID and the MIGRATION_MODULES sites override; verify allauth 65.x boots without sites."
-      ],
-      "dependsOn": [
-        "deps-add-runtime",
-        "env-module",
-        "common-core",
-        "users-core"
+        "django.contrib.sites leaves too: remove SITE_ID and the MIGRATION_MODULES sites override; verify allauth 65.x boots without sites.",
+        "TASKS wiring (resolved in G01): INSTALLED_APPS += django_tasks_db; TASKS = {default: {BACKEND: django_tasks_db.DatabaseBackend}}; worker command = manage.py db_worker; the django-tasks backport is only a transitive dep - never declare or import it.",
+        "config/settings/{__init__,test}.py currently exist as a minimal mypy stub (G01/G02) - replace them fully; keep mypy green after the rewrite."
       ],
       "status": "pending"
     },
@@ -312,6 +137,18 @@
       "status": "pending"
     },
     {
+      "id": "auth-investigation",
+      "group": "G04",
+      "title": "USER: deep-dive into the authentication design",
+      "endGoal": "Omar has investigated the auth stack in detail and signed off; decisions and answers appended here as tips. Scope: allauth headless passwordless email-code flow (request -> confirm), browser client (session cookie + CSRF + CORS) vs app client (X-Session-Token) and when each applies, HEADLESS_ONLY + HEADLESS_FRONTEND_URLS + the served auth OpenAPI spec, adapter hooks (save_user post-signup, generate_login_code, is_login_by_code_required, skip-OTP-for-social), Google/Apple social login + verified-email auto-connect, allauth.usersessions (list/revoke), signup kill-switch, and the security posture (axes lockouts, ratelimit, optional secure_admin_login email-OTP for admin).",
+      "tips": [
+        "USER INVESTIGATION (requested 2026-07-11): Omar leads this; agent supports with research/prototypes on request. G04 implementation must not be finalized before sign-off.",
+        "References: allauth headless docs (openapi spec + client types), Gawdat_Django_Template config/helpers/account_adapter.py (6-digit codes, skip-OTP-for-social) and allauth_adapter.py (headless user payload), PLAN.md Auth row.",
+        "Already decided (context): passwordless (no user passwords; staff keep Argon2), no JWT, no signals - adapters call services (signup hook = save_user; social adapter must trigger user_post_signup itself due to commit=False pass-through)."
+      ],
+      "status": "pending"
+    },
+    {
       "id": "allauth-headless-settings",
       "group": "G04",
       "title": "Full passwordless allauth headless configuration",
@@ -319,7 +156,10 @@
       "tips": [
         "No password fields anywhere in signup; staff/superusers still keep passwords for admin login (Argon2)."
       ],
-      "status": "pending"
+      "status": "pending",
+      "dependsOn": [
+        "auth-investigation"
+      ]
     },
     {
       "id": "adapters-passwordless",
@@ -519,9 +359,6 @@
       "group": "G07",
       "title": "Import-linter contracts enforced",
       "endGoal": "[tool.importlinter] contracts from PLAN (layers - no signals layer per the no-signals rule, domain-app independence, common-imports-no-domain-app) pass via lint-imports; suite green; coverage >= 80%; mypy strict green repo-wide.",
-      "dependsOn": [
-        "delete-mpa-cruft"
-      ],
       "status": "pending"
     },
     {
@@ -532,9 +369,6 @@
       "tips": [
         "The image is the single ECS artifact - the worker service overrides the command (manage.py db_worker).",
         "Release step (migrate + createcachetable + collectstatic) is a one-off ECS task, never the entrypoint."
-      ],
-      "dependsOn": [
-        "deps-prune"
       ],
       "status": "pending"
     },
@@ -589,8 +423,7 @@
         "The exclude: line still references deleted paths (^docs/, devcontainer.json) - set the final exclude (migrations only) in this rewrite."
       ],
       "dependsOn": [
-        "import-linter-contracts",
-        "toolcfg-rewrite"
+        "import-linter-contracts"
       ],
       "status": "pending"
     },
