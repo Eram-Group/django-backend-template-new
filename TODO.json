@@ -176,9 +176,12 @@
       "title": "Complete the passwordless adapter",
       "endGoal": "Requesting a login code delivers a 6-digit numeric code to Mailpit; OTP is skipped for social logins; ACCOUNT_ALLOW_REGISTRATION env kill-switch works (signup rejected when off).",
       "tips": [
-        "Verify the exact allauth 65.x adapter hooks (generate_login_code / generate_email_verification_code / is_login_by_code_required) before writing - the Gawdat adapter is the concept reference."
+        "Verify the exact allauth 65.x adapter hooks (generate_login_code / generate_email_verification_code / is_login_by_code_required) before writing - the Gawdat adapter is the concept reference.",
+        "VERIFIED live: code/request -> Mailpit delivered 6-digit numeric code (652274) -> confirm -> 200 authenticated. Kill-switch: ACCOUNT_ALLOW_REGISTRATION=false -> signup 403 AND no user row created.",
+        "RESOLVED: skip-OTP-for-social needs NO adapter override in allauth 65.18 - ACCOUNT_LOGIN_BY_CODE_REQUIRED accepts a method list ([\"password\"]): 'code' always exempt, unknown methods required, socialaccount not in list -> skipped. Verified from the default is_login_by_code_required source; e2e once a provider exists (social-providers).",
+        "Adapter overrides kept minimal: is_open_for_signup, generate_login_code, generate_email_verification_code, save_user - nothing else."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "social-providers",

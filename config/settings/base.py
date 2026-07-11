@@ -148,7 +148,9 @@ ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*"]  # no password anywhere in signup
 ACCOUNT_LOGIN_BY_CODE_ENABLED = True
-ACCOUNT_LOGIN_BY_CODE_REQUIRED = True  # login = email + 6-digit code, no password
+# Method-list semantics: these methods (and unknown ones) require the email
+# OTP; "code" is always exempt and social logins already prove identity.
+ACCOUNT_LOGIN_BY_CODE_REQUIRED = ["password"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED = True
 

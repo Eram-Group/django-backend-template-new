@@ -5,24 +5,36 @@ adapter's save_user - which calls the service - instead of the
 user_signed_up signal. The social adapter (G04 social-providers) must do
 the same after it saves the user (it calls this one with commit=False).
 
-The full passwordless hooks (generate_login_code, is_login_by_code_required,
-skip-OTP-for-social) land in G04 (adapters-passwordless).
+Skip-OTP-for-social needs no override here: ACCOUNT_LOGIN_BY_CODE_REQUIRED
+uses allauth's method-list semantics in settings (verified in 65.18 source).
 """
 
 from typing import Any
 
 from allauth.account.adapter import DefaultAccountAdapter
 from django.http import HttpRequest
+from django.utils.crypto import get_random_string
 
 from apps.users.models import User
 from apps.users.services import user_post_signup
 from config.env import env
+
+CODE_LENGTH = 6
+CODE_ALPHABET = "0123456789"
 
 
 class AccountAdapter(DefaultAccountAdapter):
     def is_open_for_signup(self, request: HttpRequest) -> bool:
         """Signup kill-switch driven by the ACCOUNT_ALLOW_REGISTRATION env flag."""
         return env.ACCOUNT_ALLOW_REGISTRATION
+
+    def generate_login_code(self) -> str:
+        """6-digit numeric login codes (allauth default is dashed alphanumeric)."""
+        return get_random_string(length=CODE_LENGTH, allowed_chars=CODE_ALPHABET)
+
+    def generate_email_verification_code(self) -> str:
+        """6-digit numeric email verification codes."""
+        return get_random_string(length=CODE_LENGTH, allowed_chars=CODE_ALPHABET)
 
     def save_user(
         self,
