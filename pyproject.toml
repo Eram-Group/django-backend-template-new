@@ -82,10 +82,15 @@ lint.select = [
   "T20", # flake8-print (no stray prints)
   "PT",  # flake8-pytest-style
   "S",   # flake8-bandit (security)
+  "TID25", # flake8-tidy-imports banned-api (Faker ban below)
 ]
 lint.ignore = [
   "RUF012", # ClassVar annotations conflict with Django's class-attr idiom (Meta, admin, etc.)
 ]
+# Faker stays installed only because factory_boy imports it eagerly; our code
+# must use mimesis via apps/common/tests/fake.py instead.
+lint.flake8-tidy-imports.banned-api."faker".msg = "Use mimesis via apps.common.tests.fake - Faker is only factory_boy's internal dependency."
+lint.flake8-tidy-imports.banned-api."factory.faker".msg = "Use mimesis via apps.common.tests.fake, not factory.Faker."
 lint.per-file-ignores = { "**/tests/**" = [ "S101" ], "conftest.py" = [ "S101" ], "config/settings/*" = [ "F403", "F405" ] }
 lint.isort.force-single-line = true
 
