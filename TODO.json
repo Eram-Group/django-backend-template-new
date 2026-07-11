@@ -4,7 +4,7 @@
   "created": "2026-07-11",
   "workflow": [
     "Groups run in array order; tasks run in array order within their group unless dependsOn says otherwise.",
-    "Completed work is removed from this file - groups G00 (baseline), G0C (aggressive cleanup), G01 (deps + tool config), G02 (foundation code) plus the early apps/users fill are done; their tasks, resolutions and checkpoints live in the git checkpoint commits.",
+    "Completed work is removed from this file - G00/G0C/G01/G02/G03 and the G04 auth core (headless settings, passwordless adapter, ninja auth class - each live-verified; commits d0b0304, aa2f03d, 19cf719) are done; git history holds the record. Group ARRAY ORDER is the execution order (outside-in per user decision 2026-07-11): shell first (docker, dev UX, CI), inner feature depth later.",
     "One task = one working session. Set status=in_progress before starting; set done only when the endGoal is observed, not assumed.",
     "Never start a task whose dependsOn are not all done.",
     "After the last task of a group: run the group's checkpoint, fix any fallout, then `git commit -m \"checkpoint(<groupId>): <group title>\"`.",
@@ -13,36 +13,6 @@
     "From G03 onward ruff+mypy must be green at every checkpoint; GitHub CI is expectedly broken until G10 rewrites it (no remote exists yet) - local checkpoints are the gate."
   ],
   "groups": [
-    {
-      "id": "G03",
-      "title": "Build the new config: settings + entrypoints (first boot)",
-      "rationale": "The old app and settings are already gone (G0C), so this group builds the new config from scratch and produces the first bootable state of the new world.",
-      "checkpoint": "docker compose -f docker-compose.local.yml up -d; drop old DB volume if present; uv run manage.py migrate + createcachetable; runserver: admin (env path), /healthz, /readyz, /api/v1/docs all respond; ruff+mypy green; commit."
-    },
-    {
-      "id": "G04",
-      "title": "Auth: passwordless headless + social",
-      "rationale": "First vertical feature slice; needs env/settings/skeleton; Mailpit (old compose) makes the code flow verifiable end to end.",
-      "checkpoint": "Request login code -> code visible in Mailpit -> confirm -> session works in browser mode and via X-Session-Token; GET /api/v1/users/me returns 200; unauthenticated returns 401 {\"message\"}; commit."
-    },
-    {
-      "id": "G05",
-      "title": "Tasks platform (background worker + scheduler)",
-      "rationale": "Proves the db_worker path that the welcome email already uses AND the scheduler story: recurring jobs run as EventBridge Scheduler cron -> ECS run-task management commands (sample_scheduled_job is the template), while async work flows through the django.tasks DB queue. Small group with its own checkpoint because it validates infrastructure, not code volume.",
-      "checkpoint": "Signup enqueues welcome email after commit; manage.py db_worker drains it to Mailpit; task result row visible in admin (or shell); sample_scheduled_job and the prune command run clean; commit."
-    },
-    {
-      "id": "G06",
-      "title": "Admin: unfold + framework",
-      "rationale": "Needs the User model and auth to exist; lands before the test group so the admin-basics gate has a real admin to run against.",
-      "checkpoint": "Admin themed by unfold; users admin fully works (list/search/filter/edit/export) with explicit can_* permissions; generate_dashboard scaffolds a valid package; superuser bootstrap is repeatable; commit."
-    },
-    {
-      "id": "G07",
-      "title": "Tests + static gates",
-      "rationale": "Gates need everything they inspect (models, admin, APIs) to exist; from here the suite is the regression net protecting the infra groups.",
-      "checkpoint": "uv run pytest green including both gates; coverage >= 80%; uv run lint-imports green; uv run mypy strict green repo-wide; commit."
-    },
     {
       "id": "G08",
       "title": "Docker + compose rewrite",
@@ -60,6 +30,24 @@
       "title": "CI/CD",
       "rationale": "CI mirrors pre-commit and the compose smoke, so it must come after both exist; ends the broken-remote-CI window.",
       "checkpoint": "Workflows lint clean (actionlint or careful review); after pushing to a GitHub remote: fast job + image job + secret scan green on a branch; commit."
+    },
+    {
+      "id": "G05",
+      "title": "Tasks platform (background worker + scheduler)",
+      "rationale": "Proves the db_worker path that the welcome email already uses AND the scheduler story: recurring jobs run as EventBridge Scheduler cron -> ECS run-task management commands (sample_scheduled_job is the template), while async work flows through the django.tasks DB queue. Small group with its own checkpoint because it validates infrastructure, not code volume.",
+      "checkpoint": "Signup enqueues welcome email after commit; manage.py db_worker drains it to Mailpit; task result row visible in admin (or shell); sample_scheduled_job and the prune command run clean; commit."
+    },
+    {
+      "id": "G06",
+      "title": "Admin: unfold + framework",
+      "rationale": "Needs the User model and auth to exist; lands before the test group so the admin-basics gate has a real admin to run against.",
+      "checkpoint": "Admin themed by unfold; users admin fully works (list/search/filter/edit/export) with explicit can_* permissions; generate_dashboard scaffolds a valid package; superuser bootstrap is repeatable; commit."
+    },
+    {
+      "id": "G07",
+      "title": "Inner depth: users API + tests + gates",
+      "rationale": "The in-depth inside work (user decision: outside-in): mount+verify the /me exemplar endpoint, then the test suite and the cross-app gates that protect everything.",
+      "checkpoint": "uv run pytest green including both gates; coverage >= 80%; uv run lint-imports green; uv run mypy strict green repo-wide; commit."
     },
     {
       "id": "G11",
@@ -82,137 +70,138 @@
   ],
   "tasks": [
     {
-      "id": "settings-base",
-      "group": "G03",
-      "title": "Rewrite config/settings/base.py on the typed env",
-      "endGoal": "manage.py check passes with new base settings: apps.* installed, old sample_project apps gone, dj-database-url DATABASES + ATOMIC_REQUESTS, DatabaseCache + LocMem 'ratelimit' alias, TASKS db backend, DB sessions, Argon2 hashers, LANGUAGES ar/en + UTC + LOCALE_PATHS, structlog, CSP, EMAIL_TIMEOUT=5, axes, CORS + CSRF_TRUSTED_ORIGINS from env, minimal allauth block pointing at apps.users.adapters.",
+      "id": "dockerfile-multistage",
+      "group": "G08",
+      "title": "Rewrite the production Dockerfile",
+      "endGoal": "docker build succeeds from the pruned lock: uv builder image -> python:3.14-slim runtime, two-phase uv sync --locked --no-dev with BuildKit cache mounts + bind-mounted lock/pyproject, UV_COMPILE_BYTECODE=1 + UV_PYTHON_DOWNLOADS=0, compilemessages baked in (gettext in build stage), non-root user, CMD gunicorn honoring WEB_CONCURRENCY with --max-requests + jitter; NO collectstatic at build or boot.",
       "tips": [
-        "INSTALLED_APPS order: modeltranslation AND unfold (+unfold.contrib.import_export) MUST precede django.contrib.admin; import_export after unfold's contrib - wrong order fails silently.",
-        "Middleware order per PLAN: guid -> security -> ... -> session -> locale -> ... -> axes (axes last).",
-        "Drop the old ACCOUNT_FORMS/SOCIALACCOUNT_FORMS string refs to sample_project.users.forms.",
-        "django.contrib.sites leaves too: remove SITE_ID and the MIGRATION_MODULES sites override; verify allauth 65.x boots without sites.",
-        "TASKS wiring (resolved in G01): INSTALLED_APPS += django_tasks_db; TASKS = {default: {BACKEND: django_tasks_db.DatabaseBackend}}; worker command = manage.py db_worker; the django-tasks backport is only a transitive dep - never declare or import it.",
-        "config/settings/{__init__,test}.py currently exist as a minimal mypy stub (G01/G02) - replace them fully; keep mypy green after the rewrite.",
-        "RESOLVED: LANGUAGE_CODE='ar' (user decision 2026-07-11) - admin UI + no-header fallback are Arabic; MODELTRANSLATION_FALLBACK_LANGUAGES=('ar','en').",
-        "RESOLVED: Django 6 native CSP verified - django.middleware.csp.ContentSecurityPolicyMiddleware + SECURE_CSP dict + django.utils.csp.CSP constants; style-src allows unsafe-inline for admin widgets, scripts nonce-gated - re-tighten after the admin smoke.",
-        "RESOLVED: django-health-check 4.x is a rewrite (dataclass checks, no plugin apps/CheckMixin) - NO health_check.* INSTALLED_APPS entries; apps/common/health.py readyz runs Database/Cache/Storage checks directly as a library.",
-        "RESOLVED: axes 8.x - AxesStandaloneBackend first in AUTHENTICATION_BACKENDS; lockout = (username, ip) combination, 5 failures, 1h cooloff.",
-        "Verified with: DJANGO_SETTINGS_MODULE=config.settings.base manage.py check -> 0 issues; ruff+mypy strict green."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "settings-envs",
-      "group": "G03",
-      "title": "Rewrite local.py, production.py, test.py",
-      "endGoal": "All four settings modules import cleanly: local (DEBUG, Mailpit SMTP, debug toolbar + Docker INTERNAL_IPS trick, django_extensions installed, ImmediateBackend toggle), production (security block, __Secure- cookie names, psycopg pool from env + CONN_MAX_AGE=0, S3 manifest static + S3 media, SES via Anymail, Sentry, JSON logs, DisallowedHost logger silenced), test (fast hashers, ImmediateBackend, locmem email AND locmem cache, no-migrations option).",
-      "tips": [
-        "Pool OPTIONS pair with CONN_MAX_AGE=0 (production only) and NO CONN_HEALTH_CHECKS; local/test use plain connections.",
-        "__Secure- cookie names are production-only (they require the Secure flag and break http://localhost).",
-        "CSRF_COOKIE_HTTPONLY=False is deliberate - the SPA must read the CSRF cookie (PLAN Notes).",
-        "createcachetable is NOT run by migrate - test settings must use LocMem cache or the suite fails on first cache hit.",
-        "USER DECISION (2026-07-11): env.py has NO required-in-prod validator - all fields are required with values from .env; optional X|None fields toggle features. production.py must therefore consume env.AWS_* / SENTRY_DSN directly in required settings so a misconfigured deployed container still fails at boot naturally.",
-        "RESOLVED: tasks toggle = required env field TASKS_IMMEDIATE (env.py + .env.example + .env updated together per the rules); local.py swaps to django.tasks.backends.immediate.ImmediateBackend when true. G05 worker-e2e flips it to false.",
-        "RESOLVED: local.py sets SECURE_CSP={} (disables the header) because debug-toolbar injects inline scripts; CSP is a deployed-env concern.",
-        "VERIFIED: manage.py check passes under local/production/test; production log output confirmed JSON (structlog renderer swap observed); test settings boot django-stubs for mypy (82 files strict-green); pytest collects clean ('no tests ran') after scoping testpaths to apps+config (the gitignored Gawdat reference copy was being collected)."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "config-api-v1",
-      "group": "G03",
-      "title": "Create config/api/v1.py + exception handlers",
-      "endGoal": "/api/v1/docs renders (staff-gated, open in local via env/DEBUG) with zero routers mounted; config/api/exception_handlers.py maps ApplicationError, validation errors and 404 to {\"message\": ..., \"extra\": {\"fields\": ...}}.",
-      "tips": [
-        "Port the cookiecutter openapi-tests idea later in G07 (docs 200 for staff, anon redirected).",
-        "RESOLVED: unified envelope implemented as 6 handlers in config/api/exception_handlers.py (register_exception_handlers). Key insight from ninja source: AuthenticationError/AuthorizationError/Throttled all subclass HttpError -> one handler covers 401/403/429. Ratelimited (PermissionDenied subclass) handled explicitly -> 429.",
-        "RESOLVED: generic Exception handler deliberately NOT overridden - ninja re-raises when DEBUG=False so Django + Sentry own real 500s; overriding would break Sentry capture.",
-        "RESOLVED: ApplicationError gained status_code=400 class attr (subclasses override, e.g. 404).",
-        "VERIFIED at runtime (test client probe): app 400+extra, subclass 404, full_clean 400 fields, 401, 429, Http404 404, payload 422 dotted-fields; /api/v1/docs + openapi.json 200 in local. Docs staff-gating verification for non-local happens in G07 users-tests (openapi gating test).",
-        "REFINED (user request): extra.fields contract normalized - values are ALWAYS lists (pydantic multi-errors per field no longer silently overwrite) and Django's __all__ key maps to non_field_errors. Runtime probe extended: 9/9 pass incl. __all__, plain-message, and two-field payload cases."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "urls-entrypoints",
-      "group": "G03",
-      "title": "Build config/urls.py (entrypoints already cleaned in G0C)",
-      "endGoal": "URL conf resolves: admin at env path, /api/v1/, /healthz + /readyz, allauth headless mounted; manage.py defaults to config.settings.local (verify - set in G0C).",
-      "tips": [
-        "websocket.py, old api.py, and the sys.path hacks were already removed in G0C cleanup-old-app; urls.py is currently a stub.",
-        "RESOLVED: users router + allauth headless mount move to G04 - mounting /users/me before the ninja auth class exists would expose an unauthenticated 500; G03 scope = admin + /api/v1/ root + healthz/readyz."
-      ],
-      "status": "in_progress"
-    },
-    {
-      "id": "users-migrations-fresh",
-      "group": "G03",
-      "title": "Generate fresh initial migration for apps.users",
-      "endGoal": "apps/users/migrations/0001_initial.py generated under the flipped settings; migrate succeeds on a fresh database; makemigrations --check clean.",
-      "tips": [
-        "Never write an alter-pk migration - UUIDv7 pk is incompatible with the old AutoField rows; there is no production data, so drop the local DB volume and start clean."
-      ],
-      "dependsOn": [
-        "settings-base"
-      ],
-      "status": "in_progress"
-    },
-    {
-      "id": "allauth-headless-settings",
-      "group": "G04",
-      "title": "Full passwordless allauth headless configuration",
-      "endGoal": "Headless auth endpoints mounted and listed in the served auth OpenAPI spec: HEADLESS_ONLY=True, HEADLESS_FRONTEND_URLS, ACCOUNT_LOGIN_BY_CODE_REQUIRED, ACCOUNT_SIGNUP_FIELDS=[\"email*\"], email verification by code, allauth.usersessions installed, browser + app client types active.",
-      "tips": [
-        "No password fields anywhere in signup; staff/superusers still keep passwords for admin login (Argon2).",
-        "VERIFIED live (app client): signup with email only -> 401 + login_by_code pending + session_token; code email delivered to Mailpit IN ARABIC (LANGUAGE_CODE=ar via allauth translations); code/confirm with X-Session-Token -> 200 is_authenticated, has_usable_password=false, uuid7 id. Welcome email also arrived (adapter->service->task pipeline, ImmediateBackend).",
-        "Auth OpenAPI spec serves at /_allauth/openapi.json (HEADLESS_SERVE_SPECIFICATION=True); browser+app clients are the HEADLESS_CLIENTS default; socialaccount/usersessions endpoints mount conditionally on INSTALLED_APPS.",
-        "Default allauth login code format is XXXX-XXXX alphanumeric - the 6-digit numeric override is adapters-passwordless (next task)."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "adapters-passwordless",
-      "group": "G04",
-      "title": "Complete the passwordless adapter",
-      "endGoal": "Requesting a login code delivers a 6-digit numeric code to Mailpit; OTP is skipped for social logins; ACCOUNT_ALLOW_REGISTRATION env kill-switch works (signup rejected when off).",
-      "tips": [
-        "Verify the exact allauth 65.x adapter hooks (generate_login_code / generate_email_verification_code / is_login_by_code_required) before writing - the Gawdat adapter is the concept reference.",
-        "VERIFIED live: code/request -> Mailpit delivered 6-digit numeric code (652274) -> confirm -> 200 authenticated. Kill-switch: ACCOUNT_ALLOW_REGISTRATION=false -> signup 403 AND no user row created.",
-        "RESOLVED: skip-OTP-for-social needs NO adapter override in allauth 65.18 - ACCOUNT_LOGIN_BY_CODE_REQUIRED accepts a method list ([\"password\"]): 'code' always exempt, unknown methods required, socialaccount not in list -> skipped. Verified from the default is_login_by_code_required source; e2e once a provider exists (social-providers).",
-        "Adapter overrides kept minimal: is_open_for_signup, generate_login_code, generate_email_verification_code, save_user - nothing else."
-      ],
-      "status": "done"
-    },
-    {
-      "id": "ninja-auth-class",
-      "group": "G04",
-      "title": "Ninja auth class (session cookie or X-Session-Token)",
-      "endGoal": "Set as the NinjaAPI default auth: valid session cookie OR valid allauth app-client X-Session-Token authenticates; unauthenticated call returns 401 with the {\"message\"} error shape.",
-      "dependsOn": [
-        "config-api-v1"
-      ],
-      "status": "done",
-      "tips": [
-        "VERIFIED (probe with temp endpoint): no creds -> 401 {message,extra}; session cookie (force_login) -> 200; REAL X-Session-Token from an in-process code login -> 200; garbage token -> 401 envelope.",
-        "Implementation: config/api/auth.py - api_auth = [ninja django_auth (cookie+CSRF), SessionTokenAuth(APIKeyHeader)] using allauth headless.internal.sessionkit.authenticate_by_x_session_token (internal module - pin with a test in G07 so upgrades fail loudly)."
-      ]
-    },
-    {
-      "id": "users-me-api",
-      "group": "G04",
-      "title": "Users /me vertical slice (schemas, selectors, services, apis)",
-      "endGoal": "GET and PATCH /api/v1/users/me work end to end through the layered path: schemas (UserSummary, UserDetail(Summary), UserUpdateIn all-optional PATCH via exclude_unset), selector fetches only what it serializes, service validates with full_clean before save, thin router mounted in v1.",
-      "tips": [
-        "This is THE exemplar app - every future app copies its shape; no business logic in the router.",
-        "No signup route here - signup belongs to allauth.",
-        "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
-        "Implemented: schemas/users.py (UserSummary/Detail/UpdateIn), selectors/users.py (user_get/user_list), services/users.py (user_update with USER_UPDATABLE_FIELDS whitelist + full_clean), apis/users.py (/me GET+PATCH via AuthedRequest typing) aggregated by apis/router.py."
+        "The image is the single ECS artifact - the worker service overrides the command (manage.py db_worker).",
+        "Release step (migrate + createcachetable + collectstatic) is a one-off ECS task, never the entrypoint."
       ],
       "status": "pending"
     },
     {
+      "id": "dockerignore-rewrite",
+      "group": "G08",
+      "title": "Rewrite .dockerignore",
+      "endGoal": "Build context is minimal: .git, .venv, caches, tests artifacts, .env*, docs excluded; image content unchanged by stray local files.",
+      "status": "pending"
+    },
+    {
+      "id": "compose-rewrite",
+      "group": "G08",
+      "title": "New root compose.yaml (local dev + CI smoke)",
+      "endGoal": "docker compose up --build brings up web (develop: watch:, .env), worker (same image, db_worker command), official postgres:18 (healthchecked, correct volume), mailpit; compose sets DATABASE_URL/DJANGO_SETTINGS_MODULE explicitly so .env stays host-oriented.",
+      "tips": [
+        "postgres:18 moved its data dir - mount /var/lib/postgresql/18/docker or persistence silently breaks.",
+        "depends_on with condition: service_healthy replaces wait-for-it scripts."
+      ],
+      "dependsOn": [
+        "dockerfile-multistage"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "delete-docker-cruft",
+      "group": "G08",
+      "title": "Wave-3 deletion: old local compose file",
+      "endGoal": "docker-compose.local.yml deleted once the new compose.yaml replaces it (compose/ and .envs/ already died in G0C); a single Dockerfile + compose.yaml remain.",
+      "dependsOn": [
+        "compose-rewrite"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "conftest-root",
+      "group": "G09",
+      "title": "Root conftest + pytest plumbing",
+      "endGoal": "Root conftest.py provides autouse tmp MEDIA_ROOT and a user fixture; a trivial test passes under pytest -n auto with coverage wiring active.",
+      "status": "pending",
+      "tips": [
+        "MOVED to G09 (outside-in): pytest plumbing + one trivial test must exist before G10 CI (pytest exits 5 on empty suites, which would fail the fast job)."
+      ]
+    },
+    {
+      "id": "import-linter-contracts",
+      "group": "G09",
+      "title": "Import-linter contracts enforced",
+      "endGoal": "[tool.importlinter] contracts from PLAN (layers, domain-app independence, common-imports-no-domain-app) pass via uv run lint-imports.",
+      "status": "pending",
+      "tips": [
+        "MOVED to G09 (outside-in): static boundary tooling belongs to the shell; the suite-green/coverage>=80% clauses live in the G07 checkpoint."
+      ]
+    },
+    {
+      "id": "justfile-rewrite",
+      "group": "G09",
+      "title": "Rewrite the justfile",
+      "endGoal": "Full recipe set runs: bootstrap (uv sync + .env copy + pre-commit install incl. pre-push + migrate + createcachetable), up/stop/logs/manage passthrough, test, lint, fmt, typecheck, migrate, makemigrations, shell, worker, seed, db-reset (warned), bash, clean, check-deploy.",
+      "dependsOn": [
+        "compose-rewrite"
+      ],
+      "status": "pending",
+      "tips": [
+        "seed recipe: placeholder explaining seed_db lands in G07 (dep removed by the outside-in reorder); wire the real recipe in G07."
+      ]
+    },
+    {
+      "id": "precommit-rewrite",
+      "group": "G09",
+      "title": "Rewrite .pre-commit-config.yaml",
+      "endGoal": "pre-commit run --all-files green with: ruff-check/ruff-format (official mirror), django-upgrade --target-version 6.0, gitleaks, uv lock --check, hygiene hooks (trailing-whitespace, end-of-file, check-yaml/toml/json, check-added-large-files, merge-conflict, debug-statements, detect-private-key), lint-imports; pre-push stage runs branch-behind-main check + makemigrations --check; djlint and pyproject-fmt hooks removed (done early in G0C).",
+      "tips": [
+        "The exclude: line still references deleted paths (^docs/, devcontainer.json) - set the final exclude (migrations only) in this rewrite."
+      ],
+      "dependsOn": [
+        "import-linter-contracts"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "ci-workflow-rewrite",
+      "group": "G10",
+      "title": "Rewrite ci.yml as the hybrid pipeline",
+      "endGoal": "Two parallel jobs with concurrency cancel-in-progress: fast job (setup-uv -> pre-commit action -> mypy -> uv lock --check -> makemigrations --check -> pytest against a postgres:18 service incl. createcachetable) and image job (buildx with GHA layer cache -> compose up -> smoke /healthz, /readyz, one API call).",
+      "dependsOn": [
+        "precommit-rewrite",
+        "compose-rewrite"
+      ],
+      "status": "pending",
+      "tips": [
+        "Env has no code defaults, so any step importing settings (mypy plugin via real test.py, pytest, manage.py) needs `cp .env.example .env` (or explicit env vars) first - add it as an early CI step.",
+        "Outside-in note: at CI-creation time the suite has only the trivial conftest test - the pytest gate strengthens automatically as G07 fills the suite."
+      ]
+    },
+    {
+      "id": "secret-scan-workflow",
+      "group": "G10",
+      "title": "Secret-scan workflow",
+      "endGoal": "TruffleHog full-history scan (fetch-depth: 0) runs on push/PR as its own workflow.",
+      "tips": [
+        "History is clean from the baseline commit onward - keep it that way; the scan is unforgiving once pushed."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "ecr-push-workflow",
+      "group": "G10",
+      "title": "Main-branch ECR push via OIDC",
+      "endGoal": "A main-only workflow builds and pushes the image tagged github.sha to ECR assuming a role via GitHub OIDC (no static AWS keys); skips gracefully when AWS repo config is absent; documented as the deploy artifact.",
+      "dependsOn": [
+        "dockerfile-multistage"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "renovate-config",
+      "group": "G10",
+      "title": "Renovate replaces Dependabot",
+      "endGoal": "renovate.json validates (uv lockfile, github-actions and docker managers, sensible grouping); .github/dependabot.yml was already deleted in G0C.",
+      "status": "pending"
+    },
+    {
       "id": "signup-signal-welcome-task",
-      "group": "G04",
+      "group": "G05",
       "title": "Signup hook (adapter save_user) -> service -> welcome-email task",
       "endGoal": "AccountAdapter.save_user (and the social adapter after G04) calls services.user_post_signup, which enqueues tasks/emails.send_welcome_email via transaction.on_commit; the email renders in user.language; a queued task row exists after signup. No signals anywhere.",
       "tips": [
@@ -297,10 +286,17 @@
       "status": "pending"
     },
     {
-      "id": "conftest-root",
+      "id": "users-me-api",
       "group": "G07",
-      "title": "Root conftest + pytest plumbing",
-      "endGoal": "Root conftest.py provides autouse tmp MEDIA_ROOT and a user fixture; a trivial test passes under pytest -n auto with coverage wiring active.",
+      "title": "Users /me vertical slice (schemas, selectors, services, apis)",
+      "endGoal": "GET and PATCH /api/v1/users/me work end to end through the layered path: schemas (UserSummary, UserDetail(Summary), UserUpdateIn all-optional PATCH via exclude_unset), selector fetches only what it serializes, service validates with full_clean before save, thin router mounted in v1.",
+      "tips": [
+        "This is THE exemplar app - every future app copies its shape; no business logic in the router.",
+        "No signup route here - signup belongs to allauth.",
+        "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
+        "Implemented: schemas/users.py (UserSummary/Detail/UpdateIn), selectors/users.py (user_get/user_list), services/users.py (user_update with USER_UPDATABLE_FIELDS whitelist + full_clean), apis/users.py (/me GET+PATCH via AuthedRequest typing) aggregated by apis/router.py.",
+        "MOVED (user decision 2026-07-11, outside-in): the /me endpoint depth lands with the inner phase, right before users-tests. Code already written+static-verified; this task = mount router in v1 + live verify GET/PATCH in both client modes + 401 envelope."
+      ],
       "status": "pending"
     },
     {
@@ -356,120 +352,6 @@
       "dependsOn": [
         "factories-registry"
       ],
-      "status": "pending"
-    },
-    {
-      "id": "import-linter-contracts",
-      "group": "G07",
-      "title": "Import-linter contracts enforced",
-      "endGoal": "[tool.importlinter] contracts from PLAN (layers - no signals layer per the no-signals rule, domain-app independence, common-imports-no-domain-app) pass via lint-imports; suite green; coverage >= 80%; mypy strict green repo-wide.",
-      "status": "pending"
-    },
-    {
-      "id": "dockerfile-multistage",
-      "group": "G08",
-      "title": "Rewrite the production Dockerfile",
-      "endGoal": "docker build succeeds from the pruned lock: uv builder image -> python:3.14-slim runtime, two-phase uv sync --locked --no-dev with BuildKit cache mounts + bind-mounted lock/pyproject, UV_COMPILE_BYTECODE=1 + UV_PYTHON_DOWNLOADS=0, compilemessages baked in (gettext in build stage), non-root user, CMD gunicorn honoring WEB_CONCURRENCY with --max-requests + jitter; NO collectstatic at build or boot.",
-      "tips": [
-        "The image is the single ECS artifact - the worker service overrides the command (manage.py db_worker).",
-        "Release step (migrate + createcachetable + collectstatic) is a one-off ECS task, never the entrypoint."
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "dockerignore-rewrite",
-      "group": "G08",
-      "title": "Rewrite .dockerignore",
-      "endGoal": "Build context is minimal: .git, .venv, caches, tests artifacts, .env*, docs excluded; image content unchanged by stray local files.",
-      "status": "pending"
-    },
-    {
-      "id": "compose-rewrite",
-      "group": "G08",
-      "title": "New root compose.yaml (local dev + CI smoke)",
-      "endGoal": "docker compose up --build brings up web (develop: watch:, .env), worker (same image, db_worker command), official postgres:18 (healthchecked, correct volume), mailpit; compose sets DATABASE_URL/DJANGO_SETTINGS_MODULE explicitly so .env stays host-oriented.",
-      "tips": [
-        "postgres:18 moved its data dir - mount /var/lib/postgresql/18/docker or persistence silently breaks.",
-        "depends_on with condition: service_healthy replaces wait-for-it scripts."
-      ],
-      "dependsOn": [
-        "dockerfile-multistage"
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "delete-docker-cruft",
-      "group": "G08",
-      "title": "Wave-3 deletion: old local compose file",
-      "endGoal": "docker-compose.local.yml deleted once the new compose.yaml replaces it (compose/ and .envs/ already died in G0C); a single Dockerfile + compose.yaml remain.",
-      "dependsOn": [
-        "compose-rewrite"
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "justfile-rewrite",
-      "group": "G09",
-      "title": "Rewrite the justfile",
-      "endGoal": "Full recipe set runs: bootstrap (uv sync + .env copy + pre-commit install incl. pre-push + migrate + createcachetable), up/stop/logs/manage passthrough, test, lint, fmt, typecheck, migrate, makemigrations, shell, worker, seed, db-reset (warned), bash, clean, check-deploy.",
-      "dependsOn": [
-        "compose-rewrite",
-        "seed-db-cmd"
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "precommit-rewrite",
-      "group": "G09",
-      "title": "Rewrite .pre-commit-config.yaml",
-      "endGoal": "pre-commit run --all-files green with: ruff-check/ruff-format (official mirror), django-upgrade --target-version 6.0, gitleaks, uv lock --check, hygiene hooks (trailing-whitespace, end-of-file, check-yaml/toml/json, check-added-large-files, merge-conflict, debug-statements, detect-private-key), lint-imports; pre-push stage runs branch-behind-main check + makemigrations --check; djlint and pyproject-fmt hooks removed (done early in G0C).",
-      "tips": [
-        "The exclude: line still references deleted paths (^docs/, devcontainer.json) - set the final exclude (migrations only) in this rewrite."
-      ],
-      "dependsOn": [
-        "import-linter-contracts"
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "ci-workflow-rewrite",
-      "group": "G10",
-      "title": "Rewrite ci.yml as the hybrid pipeline",
-      "endGoal": "Two parallel jobs with concurrency cancel-in-progress: fast job (setup-uv -> pre-commit action -> mypy -> uv lock --check -> makemigrations --check -> pytest against a postgres:18 service incl. createcachetable) and image job (buildx with GHA layer cache -> compose up -> smoke /healthz, /readyz, one API call).",
-      "dependsOn": [
-        "precommit-rewrite",
-        "compose-rewrite"
-      ],
-      "status": "pending",
-      "tips": [
-        "Env has no code defaults, so any step importing settings (mypy plugin via real test.py, pytest, manage.py) needs `cp .env.example .env` (or explicit env vars) first - add it as an early CI step."
-      ]
-    },
-    {
-      "id": "secret-scan-workflow",
-      "group": "G10",
-      "title": "Secret-scan workflow",
-      "endGoal": "TruffleHog full-history scan (fetch-depth: 0) runs on push/PR as its own workflow.",
-      "tips": [
-        "History is clean from the baseline commit onward - keep it that way; the scan is unforgiving once pushed."
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "ecr-push-workflow",
-      "group": "G10",
-      "title": "Main-branch ECR push via OIDC",
-      "endGoal": "A main-only workflow builds and pushes the image tagged github.sha to ECR assuming a role via GitHub OIDC (no static AWS keys); skips gracefully when AWS repo config is absent; documented as the deploy artifact.",
-      "dependsOn": [
-        "dockerfile-multistage"
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "renovate-config",
-      "group": "G10",
-      "title": "Renovate replaces Dependabot",
-      "endGoal": "renovate.json validates (uv lockfile, github-actions and docker managers, sensible grouping); .github/dependabot.yml was already deleted in G0C.",
       "status": "pending"
     },
     {
