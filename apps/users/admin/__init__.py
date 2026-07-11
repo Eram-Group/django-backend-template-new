@@ -1,3 +1,4 @@
 from apps.users.admin.user.admin import UserAdmin
+from apps.users.admin.user_session import ProjectUserSessionAdmin
 
-__all__ = ["UserAdmin"]
+__all__ = ["ProjectUserSessionAdmin", "UserAdmin"]
