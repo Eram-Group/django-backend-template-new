@@ -141,9 +141,13 @@
       "group": "G09",
       "title": "Import-linter contracts enforced",
       "endGoal": "[tool.importlinter] contracts from PLAN (layers, domain-app independence, common-imports-no-domain-app) pass via uv run lint-imports.",
-      "status": "pending",
+      "status": "done",
       "tips": [
-        "MOVED to G09 (outside-in): static boundary tooling belongs to the shell; the suite-green/coverage>=80% clauses live in the G07 checkpoint."
+        "MOVED to G09 (outside-in): static boundary tooling belongs to the shell; the suite-green/coverage>=80% clauses live in the G07 checkpoint.",
+        "VERIFIED: 3 contracts kept; negative test (deliberately wrong contract) failed as expected - enforcement is real.",
+        "DESIGN RESOLUTION (found by the contract itself): PLAN's 'services | tasks' siblings forbade the enqueue import - tasks now sit BELOW services (services enqueue via on_commit; task bodies use models/selectors only, business logic stays in services; thin-wrapper-calls-service applies to management commands). PLAN.md + example README updated.",
+        "Exemption codified: apps/common/tests -> domain apps allowed (cross-app gates + factory registry live there by design); unmatched_ignore_imports_alerting=none for the future-proof example pattern.",
+        "New-app checklist: append to containers, independence modules, forbidden ignore_imports."
       ]
     },
     {

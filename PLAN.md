@@ -37,7 +37,7 @@ API-only Django backend (+ Django admin) for web SPA + mobile clients, deployed 
 
 ## Architecture rules
 
-- **Layering per app:** `models/` (data + simple invariants) → `selectors/` (reads) → `services/` (writes/business logic; typed keyword-only `<entity>_<action>` functions) → `schemas/` + `apis/` (thin routers) → `tasks/` + `management/commands/` (thin wrappers calling services).
+- **Layering per app:** `models/` (data + simple invariants) → `selectors/` (reads) → `tasks/` (async units; bodies use models/selectors only — business logic stays in services, which enqueue via `on_commit`) → `services/` (writes/business logic; typed keyword-only `<entity>_<action>` functions) → `schemas/` + `apis/` (thin routers) + `management/commands/` (thin wrappers calling services).
 - **Packages from day one:** every layer is a package split by entity; `__init__.py` re-exports = the app's public interface. Leaf modules (`admin.py`, `constants.py`, `exceptions.py`) start flat, promoted when they grow.
 - **BaseModel** (`apps.common`): UUIDv7 pk (`UUIDField(primary_key=True, db_default=Func(function="uuidv7"))`) + `created_at` (indexed) + `updated_at`. All models inherit it, including custom `User` (email login; no username; single `name` field — no first/last; `language` ar/en driving user-facing emails/notifications).
 - **Pagination:** cursor-based, defined once in `apps/common/pagination.py`, ordered by UUIDv7 pk; every list endpoint declares it.
@@ -61,7 +61,7 @@ root_package = "apps"
 [[tool.importlinter.contracts]]        # layer direction inside every app
 name = "Layered app internals"
 type = "layers"
-layers = ["apis | admin | management", "services | tasks", "selectors", "models"]
+layers = ["apis | admin | management", "services", "tasks", "selectors", "models"]
 containers = ["apps.users"]            # append each new app
 
 [[tool.importlinter.contracts]]        # apps stay independent

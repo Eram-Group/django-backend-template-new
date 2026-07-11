@@ -133,3 +133,43 @@ python_files = [
 run.include = [ "apps/**", "config/**" ]
 run.omit = [ "*/migrations/*", "*/tests/*" ]
 report.fail_under = 80
+
+# ==== import-linter (architecture boundaries; run: uv run lint-imports) ====
+[tool.importlinter]
+root_package = "apps"
+
+[[tool.importlinter.contracts]]
+# Inside every app, imports point down only. Leaf modules (constants,
+# exceptions, types, adapters, schemas) are unlisted = unconstrained.
+name = "Layered app internals"
+type = "layers"
+# services enqueue tasks (on_commit), so tasks sit BELOW services; task
+# bodies stay lean (models/selectors only) - business logic lives in services.
+layers = [
+  "apis | admin | management",
+  "services",
+  "tasks",
+  "selectors",
+  "models",
+]
+containers = [ "apps.users", "apps.example" ] # append each new app
+
+[[tool.importlinter.contracts]]
+# One app = one bounded context; cross-app access via services/selectors
+# re-exports only after an explicit decision - never silently.
+name = "Domain apps independent"
+type = "independence"
+modules = [ "apps.users", "apps.example" ] # append each new app
+
+[[tool.importlinter.contracts]]
+# apps.common is primitives only. Exemption: apps/common/tests hosts the
+# cross-app gates + factory registry, which reference domain apps by design.
+name = "Common imports no domain app"
+type = "forbidden"
+source_modules = [ "apps.common" ]
+forbidden_modules = [ "apps.users", "apps.example" ] # append each new app
+ignore_imports = [
+  "apps.common.tests.** -> apps.users.**",
+  "apps.common.tests.** -> apps.example.**",
+]
+unmatched_ignore_imports_alerting = "none"
