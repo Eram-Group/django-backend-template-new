@@ -85,9 +85,9 @@ superuser:
         uv run manage.py createsuperuser --noinput
     fi
 
-# Placeholder until seed_db lands (G07; factories under user review).
-seed:
-    @echo "seed_db arrives in G07 - the factory registry is pending Omar's factories review."
+# Seed fake data: scale 0..1 is logarithmic (0 = 10 users, 1 = 1,000,000).
+seed scale="0.3":
+    uv run manage.py seed_db --scale {{scale}}
 
 # Destroy the database volume and rebuild from zero.
 [confirm("Drop ALL local containers + volumes and re-migrate? (y/N)")]

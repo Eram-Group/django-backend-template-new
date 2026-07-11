@@ -48,6 +48,7 @@ dev = [
   "factory-boy>=3.3.3",
   "import-linter>=2.13",
   "ipdb>=0.13.13",
+  "mimesis>=19",
   "mypy>=2.1",
   "pre-commit>=4.6",
   "pytest>=9.1",
@@ -107,8 +108,8 @@ overrides = [
   { module = "apps.common.admin.*", disallow_subclassing_any = false },
   # Adapters subclass allauth's untyped base classes:
   { module = "apps.*.adapters", disallow_subclassing_any = false },
-  # factory-boy declarations are typed but its callables are not:
-  { module = "apps.*.tests.factories", disallow_untyped_calls = false },
+  # factory-boy declarations are typed but its callables/decorators are not:
+  { module = "apps.*.tests.factories", disallow_untyped_calls = false, disallow_untyped_decorators = false },
 ]
 
 [tool.django-stubs]
@@ -165,8 +166,9 @@ type = "independence"
 modules = [ "apps.users", "apps.example" ] # append each new app
 
 [[tool.importlinter.contracts]]
-# apps.common is primitives only. Exemption: apps/common/tests hosts the
-# cross-app gates + factory registry, which reference domain apps by design.
+# apps.common is primitives only. Exemptions: apps/common/tests hosts the
+# cross-app gates + factory registry, and seed_db orchestrates seeding across
+# every domain app - both reference domain apps by design.
 name = "Common imports no domain app"
 type = "forbidden"
 source_modules = [ "apps.common" ]
@@ -174,5 +176,7 @@ forbidden_modules = [ "apps.users", "apps.example" ] # append each new app
 ignore_imports = [
   "apps.common.tests.** -> apps.users.**",
   "apps.common.tests.** -> apps.example.**",
+  "apps.common.management.commands.seed_db -> apps.users.**",
+  "apps.common.management.commands.seed_db -> apps.example.**",
 ]
 unmatched_ignore_imports_alerting = "none"

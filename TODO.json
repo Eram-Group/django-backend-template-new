@@ -40,30 +40,6 @@
   ],
   "tasks": [
     {
-      "id": "factories-registry",
-      "group": "G07",
-      "title": "Factories + explicit registry",
-      "endGoal": "apps/users/tests/factories.py (email get-or-create, skip_postgeneration_save) plus an explicit per-app factory registry in apps/common/tests/ that fails loudly on unregistered entries - no auto-discovery, no swallowed exceptions.",
-      "status": "pending",
-      "tips": [
-        "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
-        "UserFactory written early in apps/users/tests/factories.py (email get-or-create, skip_postgeneration_save, DjangoModelFactory[User] - runtime subscript verified). The registry itself (apps/common/tests/) is still G07 work.",
-        "UNBLOCKED (user decision 2026-07-11): implement with the draft approach (UserFactory as written: factory_boy DjangoModelFactory, Sequence email get-or-create, skip_postgeneration_save, Faker for names). Omar's factory_boy/Faker deep-dive moved to G13 factories-review - adjust afterwards if his review decides differently.",
-        "Auth probe finding: ACCOUNT_EMAIL_VERIFICATION=mandatory means code-login only completes for users with a verified EmailAddress row - UserFactory must create one (post_generation or RelatedFactory) or logins in tests/seeded envs will pend on verify_email."
-      ]
-    },
-    {
-      "id": "factory-coverage-gate",
-      "group": "G07",
-      "title": "Factory-coverage gate",
-      "endGoal": "A test iterating apps.get_models() fails listing any concrete model without a registered factory (third-party/historical models excluded); passes on the real tree.",
-      "dependsOn": [
-        "factories-registry"
-      ],
-      "status": "pending",
-      "tips": []
-    },
-    {
       "id": "admin-basics-gate",
       "group": "G07",
       "title": "Admin basics gate (registry-driven, zero per-admin tests)",
@@ -73,9 +49,6 @@
         "ADOPT from Gawdat tests (v2 review): add the sidebar-consistency check - every UNFOLD sidebar item's permission string must match its link's app/model view permission (their test_unfold_sidebar.py concept). Our gate remains a superset otherwise (filters APPLIED + full-form save round-trip vs their _continue-only POST).",
         "ADOPT from admin v2 correctness review (2026-07-11): add a hidden-field tamper check - for any admin whose field_permissions has hidden_when rules, POST the change form with a value for the hidden field and assert it is NOT persisted (BaseModelAdmin.get_form strips hidden declared fields; the gate proves it stays that way)."
       ],
-      "dependsOn": [
-        "factories-registry"
-      ],
       "status": "pending"
     },
     {
@@ -83,16 +56,6 @@
       "group": "G07",
       "title": "Users app tests (services/selectors/apis + auth flow)",
       "endGoal": "Meaningful tests for the exemplar app: service validation paths, selector shapes, /me API round-trips, the headless code-login flow (request code -> confirm -> session), adapter behavior (kill-switch, 6-digit codes), and the openapi docs gating (staff 200, anon redirected).",
-      "status": "pending"
-    },
-    {
-      "id": "seed-db-cmd",
-      "group": "G07",
-      "title": "seed_db command over the factory registry",
-      "endGoal": "manage.py seed_db populates a local database through the registry (guarded against production); seeded data is browsable in admin.",
-      "dependsOn": [
-        "factories-registry"
-      ],
       "status": "pending"
     },
     {
@@ -171,7 +134,8 @@
       "title": "USER REVIEW: factories topic (factory_boy + Faker)",
       "endGoal": "Omar has investigated factory_boy (DjangoModelFactory, Sequence, django_get_or_create, skip_postgeneration_save, post_generation) and Faker providers against the implemented factories + registry, and signed off or requested changes (recorded here).",
       "tips": [
-        "Review targets: apps/users/tests/factories.py (UserFactory draft), the registry in apps/common/tests/ (G07), seed_db over the registry, and the factory-coverage gate."
+        "IMPLEMENTED 2026-07-11 (user-approved design): factory_boy structure + mimesis values (Locale.AR_SA / EN via apps/common/tests/fake.py - the only value source). Review targets: apps/users/tests/factories.py (UserFactory: Sequence email get-or-create, weighted ar/en language, locale-matched name, password='!', verified-EmailAddress post_generation, staff Trait), apps/common/tests/factories_registry.py (explicit dict, loud LookupError), apps/common/tests/test_factory_coverage.py (gate), apps/common/management/commands/seed_db.py (--scale 0..1 log curve to 1M, build_batch + chunked bulk_create, fan_out(per_parent) for child ratios, @seed.example.com marker, --wipe/--seed, local-only guard).",
+        "Runtime evidence: 10k users + 10k verified EmailAddresses in 1.0s (~21k rows/s => scale 1.0 ~ 2min); seeded user code-login pends on login_by_code (not verify_email) with Arabic code email in Mailpit; wipe removed exactly the seeded rows. CLAUDE.md 'Factories & seed data' section is the standing rule."
       ],
       "status": "pending"
     }

@@ -157,6 +157,7 @@ dev = [
     { name = "factory-boy" },
     { name = "import-linter" },
     { name = "ipdb" },
+    { name = "mimesis" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -206,6 +207,7 @@ dev = [
     { name = "factory-boy", specifier = ">=3.3.3" },
     { name = "import-linter", specifier = ">=2.13" },
     { name = "ipdb", specifier = ">=0.13.13" },
+    { name = "mimesis", specifier = ">=19" },
     { name = "mypy", specifier = ">=2.1" },
     { name = "pre-commit", specifier = ">=4.6" },
     { name = "pytest", specifier = ">=9.1" },
@@ -1155,6 +1157,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "mimesis"
+version = "19.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/12/bf/1612e48b9eea7fa39e27600e94b9b267b37da749fcdf019e5e6a892ba2ec/mimesis-19.1.0.tar.gz", hash = "sha256:af4f14852a97657c5dbfad860be90c0efe97bf3758809e034b6581a45b13814b", size = 18252875, upload-time = "2026-01-11T09:14:58.969Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/40/f2/39da33ad3c10956d9ee7cdea3c3ee92e98c529b2994ed7c36a208b497603/mimesis-19.1.0-py3-none-any.whl", hash = "sha256:cf2ea4674819eaf386a2b8d28ded450968f1770fcb23f6c6ef884f61727bb4e6", size = 4464087, upload-time = "2026-01-11T09:14:55.738Z" },
 ]
 
 [[package]]
