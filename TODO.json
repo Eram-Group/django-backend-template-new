@@ -243,9 +243,11 @@
         "Receiver stays thin - one call into the service; the import-linter layer contract includes signals in the top layer.",
         "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
         "Implemented: signals.py user_signed_up receiver -> services.user_post_signup -> transaction.on_commit enqueue of tasks/emails.send_welcome_email (renders in user.language via translation.override); wired in apps.py ready(); receiver connection verified at setup().",
-        "USER DECISION (2026-07-11, no signals unless necessary): signals.py DELETED - AccountAdapter.save_user (commit=True) now calls services.user_post_signup. Social path: the social adapter (G04) must call user_post_signup after ITS save, because it invokes the account adapter with commit=False (user has no pk yet)."
+        "USER DECISION (2026-07-11, no signals unless necessary): signals.py DELETED - AccountAdapter.save_user (commit=True) now calls services.user_post_signup. Social path: the social adapter (G04) must call user_post_signup after ITS save, because it invokes the account adapter with commit=False (user has no pk yet).",
+        "DONE via observed evidence: G08 compose smoke saw signup -> adapter save_user -> service -> on_commit -> DB queue -> worker -> Mailpit 'Welcome!' + SUCCESSFUL row in django_tasks_database_dbtaskresult.",
+        "HONESTY NOTE: send_welcome_email wraps translation.override(user.language), but no Arabic .po strings exist yet - body text falls back to English until translations land (allauth's own emails ARE Arabic already)."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "worker-e2e",
@@ -255,7 +257,11 @@
       "dependsOn": [
         "signup-signal-welcome-task"
       ],
-      "status": "pending"
+      "status": "done",
+      "tips": [
+        "DONE: queue drained to Mailpit in compose (G08); SIGTERM observed -> 'Received Terminated - shutting down gracefully' and healthy restart.",
+        "RUNBOOK (for README): worker = same image, command python manage.py db_worker; local drain-and-exit = just worker --batch; SIGTERM = graceful finish of in-flight task, so set ECS stopTimeout >= max expected task duration (default 30s is tight for long emails/jobs); scale by running more worker tasks."
+      ]
     },
     {
       "id": "ops-commands",
@@ -267,9 +273,11 @@
         "RESOLVED (verified 2026-07-11 from django-tasks-db 0.12.0): it ships prune_db_task_results with retention-policy options - do not write one. Bonus: the backend supports OPTIONS id_function (incl. db expressions on Django 6) if we want uuidv7 task ids.",
         "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
         "Implemented: management/commands/sample_scheduled_job.py (thin wrapper over selectors). Prune command NOT needed (django-tasks-db ships prune_db_task_results).",
-        "This platform is the SCHEDULER too: recurring jobs = EventBridge Scheduler cron -> ECS run-task invoking management commands (no in-process beat); one-off/async work = django.tasks queue drained by db_worker."
+        "This platform is the SCHEDULER too: recurring jobs = EventBridge Scheduler cron -> ECS run-task invoking management commands (no in-process beat); one-off/async work = django.tasks queue drained by db_worker.",
+        "DONE: sample_scheduled_job ran clean (thin wrapper over selectors); prune_db_task_results ran clean (upstream command, retention via --min-age-days - we correctly wrote none ourselves).",
+        "EVENTBRIDGE RECIPE (for README): three Scheduler crons -> ECS run-task on the same image: clearsessions (daily), prune_db_task_results --min-age-days 30 (daily), sample_scheduled_job (as needed template)."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "unfold-config",
