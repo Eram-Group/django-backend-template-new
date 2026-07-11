@@ -1,1 +1,3 @@
-"""Background tasks (send_welcome_email) - populated in G04/G05."""
+from apps.users.tasks.emails import send_welcome_email
+
+__all__ = ["send_welcome_email"]

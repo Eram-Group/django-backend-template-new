@@ -358,7 +358,9 @@
       "endGoal": "GET and PATCH /api/v1/users/me work end to end through the layered path: schemas (UserSummary, UserDetail(Summary), UserUpdateIn all-optional PATCH via exclude_unset), selector fetches only what it serializes, service validates with full_clean before save, thin router mounted in v1.",
       "tips": [
         "This is THE exemplar app - every future app copies its shape; no business logic in the router.",
-        "No signup route here - signup belongs to allauth."
+        "No signup route here - signup belongs to allauth.",
+        "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
+        "Implemented: schemas/users.py (UserSummary/Detail/UpdateIn), selectors/users.py (user_get/user_list), services/users.py (user_update with USER_UPDATABLE_FIELDS whitelist + full_clean), apis/users.py (/me GET+PATCH via AuthedRequest typing) aggregated by apis/router.py."
       ],
       "status": "pending"
     },
@@ -368,7 +370,9 @@
       "title": "Signup signal -> service -> welcome-email task",
       "endGoal": "user_signed_up receiver in apps/users/signals.py (wired in apps.py ready()) calls services.user_post_signup, which enqueues tasks/emails.send_welcome_email via transaction.on_commit; the email renders in user.language; a queued task row exists after signup.",
       "tips": [
-        "Receiver stays thin - one call into the service; the import-linter layer contract includes signals in the top layer."
+        "Receiver stays thin - one call into the service; the import-linter layer contract includes signals in the top layer.",
+        "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
+        "Implemented: signals.py user_signed_up receiver -> services.user_post_signup -> transaction.on_commit enqueue of tasks/emails.send_welcome_email (renders in user.language via translation.override); wired in apps.py ready(); receiver connection verified at setup()."
       ],
       "status": "pending"
     },
@@ -389,7 +393,9 @@
       "endGoal": "apps/users/management/commands/sample_scheduled_job.py (thin wrapper over a service) runs clean; a prune path for old task results exists and runs; the EventBridge cron recipe (clearsessions + prune + sample) is noted for README.",
       "tips": [
         "Check whether django-tasks-db ships a prune management command before writing one.",
-        "RESOLVED (verified 2026-07-11 from django-tasks-db 0.12.0): it ships prune_db_task_results with retention-policy options - do not write one. Bonus: the backend supports OPTIONS id_function (incl. db expressions on Django 6) if we want uuidv7 task ids."
+        "RESOLVED (verified 2026-07-11 from django-tasks-db 0.12.0): it ships prune_db_task_results with retention-policy options - do not write one. Bonus: the backend supports OPTIONS id_function (incl. db expressions on Django 6) if we want uuidv7 task ids.",
+        "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
+        "Implemented: management/commands/sample_scheduled_job.py (thin wrapper over selectors). Prune command NOT needed (django-tasks-db ships prune_db_task_results)."
       ],
       "status": "pending"
     },
@@ -447,7 +453,11 @@
       "group": "G07",
       "title": "Factories + explicit registry",
       "endGoal": "apps/users/tests/factories.py (email get-or-create, skip_postgeneration_save) plus an explicit per-app factory registry in apps/common/tests/ that fails loudly on unregistered entries - no auto-discovery, no swallowed exceptions.",
-      "status": "pending"
+      "status": "pending",
+      "tips": [
+        "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
+        "UserFactory written early in apps/users/tests/factories.py (email get-or-create, skip_postgeneration_save, DjangoModelFactory[User] - runtime subscript verified). The registry itself (apps/common/tests/) is still G07 work."
+      ]
     },
     {
       "id": "factory-coverage-gate",

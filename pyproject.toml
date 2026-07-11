@@ -104,6 +104,8 @@ overrides = [
   { module = [ "allauth.*", "health_check.*" ], ignore_missing_imports = true },
   # Adapters subclass allauth's untyped base classes:
   { module = "apps.*.adapters", disallow_subclassing_any = false },
+  # factory-boy declarations are typed but its callables are not:
+  { module = "apps.*.tests.factories", disallow_untyped_calls = false },
 ]
 
 [tool.django-stubs]
