@@ -77,7 +77,6 @@ class Env(BaseSettings):
     EMAIL_PORT: int
 
     # AWS (S3 static/media, SES email) - production settings consume these
-    # directly, so a deployed container missing them still fails at boot.
     AWS_STORAGE_BUCKET_NAME: str | None = None
     AWS_S3_REGION_NAME: str | None = None
     AWS_S3_CUSTOM_DOMAIN: str | None = None  # CloudFront domain

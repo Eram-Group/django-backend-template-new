@@ -86,9 +86,14 @@
         "Drop the old ACCOUNT_FORMS/SOCIALACCOUNT_FORMS string refs to sample_project.users.forms.",
         "django.contrib.sites leaves too: remove SITE_ID and the MIGRATION_MODULES sites override; verify allauth 65.x boots without sites.",
         "TASKS wiring (resolved in G01): INSTALLED_APPS += django_tasks_db; TASKS = {default: {BACKEND: django_tasks_db.DatabaseBackend}}; worker command = manage.py db_worker; the django-tasks backport is only a transitive dep - never declare or import it.",
-        "config/settings/{__init__,test}.py currently exist as a minimal mypy stub (G01/G02) - replace them fully; keep mypy green after the rewrite."
+        "config/settings/{__init__,test}.py currently exist as a minimal mypy stub (G01/G02) - replace them fully; keep mypy green after the rewrite.",
+        "RESOLVED: LANGUAGE_CODE='ar' (user decision 2026-07-11) - admin UI + no-header fallback are Arabic; MODELTRANSLATION_FALLBACK_LANGUAGES=('ar','en').",
+        "RESOLVED: Django 6 native CSP verified - django.middleware.csp.ContentSecurityPolicyMiddleware + SECURE_CSP dict + django.utils.csp.CSP constants; style-src allows unsafe-inline for admin widgets, scripts nonce-gated - re-tighten after the admin smoke.",
+        "RESOLVED: django-health-check 4.x is a rewrite (dataclass checks, no plugin apps/CheckMixin) - NO health_check.* INSTALLED_APPS entries; apps/common/health.py readyz runs Database/Cache/Storage checks directly as a library.",
+        "RESOLVED: axes 8.x - AxesStandaloneBackend first in AUTHENTICATION_BACKENDS; lockout = (username, ip) combination, 5 failures, 1h cooloff.",
+        "Verified with: DJANGO_SETTINGS_MODULE=config.settings.base manage.py check -> 0 issues; ruff+mypy strict green."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "settings-envs",
