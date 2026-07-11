@@ -100,12 +100,16 @@
       "endGoal": "docker compose up --build brings up web (develop: watch:, .env), worker (same image, db_worker command), official postgres:18 (healthchecked, correct volume), mailpit; compose sets DATABASE_URL/DJANGO_SETTINGS_MODULE explicitly so .env stays host-oriented.",
       "tips": [
         "postgres:18 moved its data dir - mount /var/lib/postgresql/18/docker or persistence silently breaks.",
-        "depends_on with condition: service_healthy replaces wait-for-it scripts."
+        "depends_on with condition: service_healthy replaces wait-for-it scripts.",
+        "VERIFIED: up --build -> web/worker/postgres:18/mailpit all healthy; healthz+readyz 200 in-container; signup against container -> code email + welcome email drained by the WORKER via the DB queue (TASKS_IMMEDIATE=false); task row SUCCESSFUL in django_tasks_database_dbtaskresult; non-root uid 999.",
+        "DESIGN: containers run config.settings.production with ENVIRONMENT=local - deployment-only behaviors (SSL redirect, __Secure- cookies, S3, SES) gate on _DEPLOYED; verified both modes (compose smoke + deployed-mode assert script).",
+        "Release-step analog for fresh volumes: docker compose run --rm web python manage.py migrate && createcachetable (worker exits(1) until tables exist - by design, no boot-time migrate).",
+        "FIXED during smoke: /app itself was root-owned (COPY --chown covers contents only) -> mkdir /app/media + chown in runtime stage; readyz storage check green after."
       ],
       "dependsOn": [
         "dockerfile-multistage"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "delete-docker-cruft",
@@ -115,7 +119,10 @@
       "dependsOn": [
         "compose-rewrite"
       ],
-      "status": "pending"
+      "status": "done",
+      "tips": [
+        "docker-compose.local.yml deleted; single Dockerfile + compose.yaml remain."
+      ]
     },
     {
       "id": "conftest-root",

@@ -1,0 +1,77 @@
+# Local dev + CI smoke stack. Containers run the production settings module
+# with ENVIRONMENT=local (prod code paths, http + Mailpit). The release-step
+# analog (migrate + createcachetable) runs as a one-off:
+#   docker compose run --rm web python manage.py migrate
+#   docker compose run --rm web python manage.py createcachetable
+
+volumes:
+  postgres_data: {}
+
+x-app: &app
+  build: .
+  image: backend:local
+  env_file: .env
+  environment:
+    DJANGO_SETTINGS_MODULE: config.settings.production
+    # Container-network overrides; .env stays host-oriented.
+    DATABASE_URL: postgres://postgres:postgres@postgres:5432/backend
+    EMAIL_HOST: mailpit
+    TASKS_IMMEDIATE: "false"  # real queue: the worker service drains it
+  depends_on:
+    postgres:
+      condition: service_healthy
+    mailpit:
+      condition: service_started
+
+services:
+  web:
+    <<: *app
+    ports:
+      - '8000:8000'
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    develop:
+      watch:
+        - action: sync+restart
+          path: .
+          target: /app
+
+  worker:
+    <<: *app
+    command: ['python', 'manage.py', 'db_worker']
+    healthcheck:
+      test: ['CMD', 'python', '-c', 'import sys; sys.exit(0)']  # process-alive
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  postgres:
+    image: postgres:18
+    volumes:
+      # PG18 image moved its data dir - mount the versioned path
+      - postgres_data:/var/lib/postgresql/18/docker
+    environment:
+      POSTGRES_DB: backend
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d backend']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailpit:
+    image: docker.io/axllent/mailpit:latest
+    ports:
+      - '1025:1025'
+      - '8025:8025'

@@ -44,6 +44,8 @@ RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 
 WORKDIR /app
 COPY --from=builder --chown=app:app /app /app
+# COPY --chown covers contents only; /app itself must be writable (media dir).
+RUN mkdir -p /app/media && chown app:app /app /app/media
 
 USER app
 EXPOSE 8000
