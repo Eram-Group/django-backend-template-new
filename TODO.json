@@ -105,9 +105,12 @@
         "__Secure- cookie names are production-only (they require the Secure flag and break http://localhost).",
         "CSRF_COOKIE_HTTPONLY=False is deliberate - the SPA must read the CSRF cookie (PLAN Notes).",
         "createcachetable is NOT run by migrate - test settings must use LocMem cache or the suite fails on first cache hit.",
-        "USER DECISION (2026-07-11): env.py has NO required-in-prod validator - all fields are required with values from .env; optional X|None fields toggle features. production.py must therefore consume env.AWS_* / SENTRY_DSN directly in required settings so a misconfigured deployed container still fails at boot naturally."
+        "USER DECISION (2026-07-11): env.py has NO required-in-prod validator - all fields are required with values from .env; optional X|None fields toggle features. production.py must therefore consume env.AWS_* / SENTRY_DSN directly in required settings so a misconfigured deployed container still fails at boot naturally.",
+        "RESOLVED: tasks toggle = required env field TASKS_IMMEDIATE (env.py + .env.example + .env updated together per the rules); local.py swaps to django.tasks.backends.immediate.ImmediateBackend when true. G05 worker-e2e flips it to false.",
+        "RESOLVED: local.py sets SECURE_CSP={} (disables the header) because debug-toolbar injects inline scripts; CSP is a deployed-env concern.",
+        "VERIFIED: manage.py check passes under local/production/test; production log output confirmed JSON (structlog renderer swap observed); test settings boot django-stubs for mypy (82 files strict-green); pytest collects clean ('no tests ran') after scoping testpaths to apps+config (the gitignored Gawdat reference copy was being collected)."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "config-api-v1",

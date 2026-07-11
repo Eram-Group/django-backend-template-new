@@ -1,14 +1,32 @@
-"""Minimal stub so mypy's django-stubs plugin can boot Django (G01/G02).
+"""Test settings: fast, isolated, everything in memory.
 
-Rewritten from scratch in G03 (settings-base / settings-envs).
+Also the settings django-stubs boots for mypy (pyproject django_settings_module).
+Run with --no-migrations (pytest-django) when migration history slows suites.
 """
 
-SECRET_KEY = "insecure-g01-toolcfg-stub"  # noqa: S105
-USE_TZ = True
-INSTALLED_APPS = [
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "apps.common",
-    "apps.users",
-]
-AUTH_USER_MODEL = "users.User"
+from config.settings.base import *
+
+DEBUG = False
+
+# Fast hashers - password strength is irrelevant in tests.
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+# In-memory email and cache: createcachetable never runs in test databases,
+# so the DatabaseCache default would fail on first hit.
+EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "test-default",
+    },
+    "ratelimit": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "test-ratelimit",
+    },
+}
+
+# Tasks run inline so assertions see their effects immediately.
+TASKS = {"default": {"BACKEND": "django.tasks.backends.immediate.ImmediateBackend"}}
+
+# Lockout middleware would flake repeated-login tests.
+AXES_ENABLED = False

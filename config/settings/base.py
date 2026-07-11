@@ -6,6 +6,7 @@ singleton - never from ``os.environ`` directly.
 
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 import dj_database_url
 import structlog
@@ -206,7 +207,7 @@ structlog.configure(
     logger_factory=structlog.stdlib.LoggerFactory(),
     cache_logger_on_first_use=True,
 )
-LOGGING = {
+LOGGING: dict[str, Any] = {
     "version": 1,
     "disable_existing_loggers": False,
     "formatters": {

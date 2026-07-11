@@ -50,6 +50,9 @@ class Env(BaseSettings):
     DB_POOL_MAX_LIFETIME: float
     DB_POOL_MAX_IDLE: float
 
+    # Tasks: true = run inline (local dev, no worker); false = DB queue + db_worker
+    TASKS_IMMEDIATE: bool
+
     # Superuser bootstrap (createsuperuser --noinput)
     DJANGO_SUPERUSER_EMAIL: str
     DJANGO_SUPERUSER_PASSWORD: SecretStr
@@ -99,4 +102,6 @@ class Env(BaseSettings):
         return value
 
 
+# pydantic-settings fills the required fields from .env / the process environment.
+# noinspection PyArgumentList
 env = Env()
