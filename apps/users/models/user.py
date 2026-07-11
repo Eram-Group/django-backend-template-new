@@ -85,3 +85,11 @@ class User(BaseModel, AbstractUser):
 
     def __str__(self) -> str:
         return self.email
+
+    # AbstractUser builds these from first_name/last_name, which are removed
+    # above - inherited versions would render the literal string "None None".
+    def get_full_name(self) -> str:
+        return self.name
+
+    def get_short_name(self) -> str:
+        return self.name

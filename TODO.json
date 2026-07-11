@@ -70,7 +70,8 @@
       "endGoal": "The generic suite from PLAN's 'Admin basics gate' section passes in apps/common/tests/admin/: index/changelists, search, every filter applied, per-column sorting both directions, add/change/delete/history pages, unchanged-save round-trip, export CSV with rows, autocomplete endpoints, data coverage, unfold sidebar links resolve - permission-aware, session-auto-seeded, raise_request_exception=True.",
       "tips": [
         "The save round-trip must GET the form and re-POST it unchanged (the legacy version that only POSTs _continue passes on validation failures).",
-        "ADOPT from Gawdat tests (v2 review): add the sidebar-consistency check - every UNFOLD sidebar item's permission string must match its link's app/model view permission (their test_unfold_sidebar.py concept). Our gate remains a superset otherwise (filters APPLIED + full-form save round-trip vs their _continue-only POST)."
+        "ADOPT from Gawdat tests (v2 review): add the sidebar-consistency check - every UNFOLD sidebar item's permission string must match its link's app/model view permission (their test_unfold_sidebar.py concept). Our gate remains a superset otherwise (filters APPLIED + full-form save round-trip vs their _continue-only POST).",
+        "ADOPT from admin v2 correctness review (2026-07-11): add a hidden-field tamper check - for any admin whose field_permissions has hidden_when rules, POST the change form with a value for the hidden field and assert it is NOT persisted (BaseModelAdmin.get_form strips hidden declared fields; the gate proves it stays that way)."
       ],
       "dependsOn": [
         "factories-registry"
