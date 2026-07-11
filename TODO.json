@@ -171,12 +171,14 @@
       "title": "Rewrite .pre-commit-config.yaml",
       "endGoal": "pre-commit run --all-files green with: ruff-check/ruff-format (official mirror), django-upgrade --target-version 6.0, gitleaks, uv lock --check, hygiene hooks (trailing-whitespace, end-of-file, check-yaml/toml/json, check-added-large-files, merge-conflict, debug-statements, detect-private-key), lint-imports; pre-push stage runs branch-behind-main check + makemigrations --check; djlint and pyproject-fmt hooks removed (done early in G0C).",
       "tips": [
-        "The exclude: line still references deleted paths (^docs/, devcontainer.json) - set the final exclude (migrations only) in this rewrite."
+        "The exclude: line still references deleted paths (^docs/, devcontainer.json) - set the final exclude (migrations only) in this rewrite.",
+        "VERIFIED: pre-commit stage 15 hooks green (hygiene set, django-upgrade, ruff mirror, gitleaks v8.30, uv-lock 0.11.28, lint-imports local hook); pre-push stage green (makemigrations --check + branch-behind-main, which exits 0 gracefully while no origin exists).",
+        "Revisions pinned via pre-commit autoupdate (real latest tags, not guesses); stale exclude paths fixed - only /migrations/ excluded now."
       ],
       "dependsOn": [
         "import-linter-contracts"
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "ci-workflow-rewrite",

@@ -1,6 +1,9 @@
-exclude: '^docs/|/migrations/|devcontainer.json'
+# One lint source: CI runs exactly these hooks (pre-commit/action, G10).
+# Push-time gates (branch sync, migrations) live in the pre-push stage.
+
+exclude: '/migrations/'
 default_stages: [pre-commit]
-minimum_pre_commit_version: "3.2.0"
+minimum_pre_commit_version: '3.2.0'
 
 default_language_version:
   python: python3.14
@@ -13,13 +16,10 @@ repos:
       - id: end-of-file-fixer
       - id: check-json
       - id: check-toml
-      - id: check-xml
       - id: check-yaml
-      - id: debug-statements
-      - id: check-builtin-literals
-      - id: check-case-conflict
+      - id: check-added-large-files
       - id: check-merge-conflict
-      - id: check-docstring-first
+      - id: debug-statements
       - id: detect-private-key
 
   - repo: https://github.com/adamchainz/django-upgrade
@@ -28,18 +28,47 @@ repos:
       - id: django-upgrade
         args: ['--target-version', '6.0']
 
-  # Run the Ruff linter.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.21
     hooks:
-      # Linter
       - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
-      # Formatter
       - id: ruff-format
 
-# sets up .pre-commit-ci.yaml to ensure pre-commit dependencies stay up to date
-ci:
-  autoupdate_schedule: weekly
-  skip: []
-  submodules: false
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.0
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.11.28
+    hooks:
+      - id: uv-lock
+
+  - repo: local
+    hooks:
+      - id: lint-imports
+        name: import-linter architecture contracts
+        entry: uv run lint-imports
+        language: system
+        pass_filenames: false
+        types_or: [python, toml]
+
+      - id: makemigrations-check
+        name: model changes have migrations (pre-push)
+        entry: uv run manage.py makemigrations --check --dry-run
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: branch-behind-main
+        name: branch not behind origin/main (pre-push)
+        entry: >
+          bash -c '
+          git fetch origin main --quiet 2>/dev/null || exit 0;
+          git rev-parse --verify origin/main >/dev/null 2>&1 || exit 0;
+          git merge-base --is-ancestor origin/main HEAD
+          || { echo "Branch is behind origin/main - rebase or merge first."; exit 1; }'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
