@@ -118,9 +118,13 @@
       "title": "Create config/api/v1.py + exception handlers",
       "endGoal": "/api/v1/docs renders (staff-gated, open in local via env/DEBUG) with zero routers mounted; config/api/exception_handlers.py maps ApplicationError, validation errors and 404 to {\"message\": ..., \"extra\": {\"fields\": ...}}.",
       "tips": [
-        "Port the cookiecutter openapi-tests idea later in G07 (docs 200 for staff, anon redirected)."
+        "Port the cookiecutter openapi-tests idea later in G07 (docs 200 for staff, anon redirected).",
+        "RESOLVED: unified envelope implemented as 6 handlers in config/api/exception_handlers.py (register_exception_handlers). Key insight from ninja source: AuthenticationError/AuthorizationError/Throttled all subclass HttpError -> one handler covers 401/403/429. Ratelimited (PermissionDenied subclass) handled explicitly -> 429.",
+        "RESOLVED: generic Exception handler deliberately NOT overridden - ninja re-raises when DEBUG=False so Django + Sentry own real 500s; overriding would break Sentry capture.",
+        "RESOLVED: ApplicationError gained status_code=400 class attr (subclasses override, e.g. 404).",
+        "VERIFIED at runtime (test client probe): app 400+extra, subclass 404, full_clean 400 fields, 401, 429, Http404 404, payload 422 dotted-fields; /api/v1/docs + openapi.json 200 in local. Docs staff-gating verification for non-local happens in G07 users-tests (openapi gating test)."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "urls-entrypoints",
