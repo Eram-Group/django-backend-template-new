@@ -1,4 +1,4 @@
-"""Production/staging settings: hardened, S3, SES, Sentry, JSON logs.
+"""Production/dev settings: hardened, S3, SES, Sentry, JSON logs.
 
 The local compose stack runs THIS module with ENVIRONMENT=local (the image
 carries no dev deps, so local.py is impossible in containers): deployment-only
@@ -80,6 +80,7 @@ if env.SENTRY_DSN:
     sentry_sdk.init(
         dsn=env.SENTRY_DSN,
         environment=env.ENVIRONMENT,
+        release=env.SENTRY_RELEASE,
         traces_sample_rate=env.SENTRY_TRACES_SAMPLE_RATE,
         send_default_pii=False,
     )

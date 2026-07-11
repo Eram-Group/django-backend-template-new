@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     # Third-party
+    "ninja",  # registers export_openapi_schema (the Apidog sync artifact)
     "corsheaders",
     "allauth",
     "allauth.account",

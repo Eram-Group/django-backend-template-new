@@ -1,0 +1,203 @@
+# Manual promotion: retag the main-built image (no rebuild), release-task +
+# roll both production ECS services, then cut the git tag + GitHub Release
+# for the exact deployed sha. No graceful skip here - a deliberate dispatch
+# against missing infra must fail loudly, not no-op.
+
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      sha:
+        description: Full commit sha to promote (default = dispatched HEAD of main)
+        required: false
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  # Contract: outputs {version, sha}. Swap the body (release-please, ...)
+  # without touching promote/deploy/release.
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.next.outputs.version }}
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      # Tags must point into main history - fail red, not silent-skip.
+      - name: Must be dispatched from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::dispatch from main (got ${{ github.ref }})"
+          exit 1
+
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # full history for tags + the ancestry check
+
+      - name: Resolve sha
+        id: sha
+        run: |
+          SHA="${{ inputs.sha || github.sha }}"
+          git cat-file -e "${SHA}^{commit}" \
+            || { echo "::error::unknown commit $SHA"; exit 1; }
+          git merge-base --is-ancestor "$SHA" origin/main \
+            || { echo "::error::$SHA is not on main - refusing to promote"; exit 1; }
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next version
+        id: next
+        run: |
+          LATEST=$(git tag --list 'v*' --sort=-v:refname | head -1)
+          IFS=. read -r MA MI PA <<< "${LATEST:-v0.0.0}"
+          MA=${MA#v}
+          case "${{ inputs.bump }}" in
+            major) MA=$((MA + 1)); MI=0; PA=0 ;;
+            minor) MI=$((MI + 1)); PA=0 ;;
+            patch) PA=$((PA + 1)) ;;
+          esac
+          V="v${MA}.${MI}.${PA}"
+          if git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
+            echo "::error::tag $V already exists"
+            exit 1
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+
+  # Build-once-promote: manifest-level retag in ECR. imagetools copies the
+  # whole OCI index (buildx pushes an index incl. provenance) without pulling
+  # layers - the promoted image is bit-identical to what dev ran.
+  promote:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      image: ${{ steps.ecr.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:${{ needs.version.outputs.version }}
+    steps:
+      - name: Assume deploy role via OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Preflight + retag
+        env:
+          REPO: ${{ vars.AWS_ECR_REPOSITORY }}
+          REG: ${{ steps.ecr.outputs.registry }}
+          SHA: ${{ needs.version.outputs.sha }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          DIGEST=$(aws ecr describe-images --repository-name "$REPO" \
+            --image-ids imageTag="$SHA" \
+            --query 'imageDetails[0].imageDigest' --output text 2>/dev/null) \
+            || { echo "::error::no image for $SHA in ECR - did deploy-dev build it?"; exit 1; }
+          # Idempotent re-runs: same digest already tagged -> done;
+          # different digest -> version collision, hard fail.
+          EXISTING=$(aws ecr describe-images --repository-name "$REPO" \
+            --image-ids imageTag="$VERSION" \
+            --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            if [ "$EXISTING" = "$DIGEST" ]; then
+              echo "image already promoted as $VERSION"
+              exit 0
+            fi
+            echo "::error::$VERSION already exists with a different digest"
+            exit 1
+          fi
+          docker buildx imagetools create -t "$REG/$REPO:$VERSION" "$REG/$REPO:$SHA"
+
+  deploy:
+    needs: [version, promote]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production  # optional required-reviewer approval gates here
+    steps:
+      - name: Assume deploy role via OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Same shape as the dev deploy job - see deploy-dev.yml for the WHYs
+      # (task defs live in AWS, container "app", release task piggyback,
+      # SENTRY_RELEASE = sha so dev and prod share one release per commit).
+      - name: Render web task definition
+        id: render-web
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-family: ${{ vars.ECS_FAMILY_WEB }}
+          container-name: app
+          image: ${{ needs.promote.outputs.image }}
+          environment-variables: SENTRY_RELEASE=${{ needs.version.outputs.sha }}
+
+      - name: Release task + roll web
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-web.outputs.task-definition }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          service: ${{ vars.ECS_SERVICE_WEB }}
+          run-task: true
+          run-task-container-overrides: >
+            [{"name": "app", "command": ["sh", "-c",
+            "python manage.py migrate --noinput &&
+            python manage.py createcachetable &&
+            python manage.py collectstatic --noinput"]}]
+          run-task-subnets: ${{ vars.ECS_SUBNETS }}
+          run-task-security-groups: ${{ vars.ECS_SECURITY_GROUPS }}
+          run-task-assign-public-IP: ${{ vars.ECS_ASSIGN_PUBLIC_IP }}
+          wait-for-task-stopped: true
+          wait-for-service-stability: true
+          wait-for-minutes: 12
+
+      - name: Render worker task definition
+        id: render-worker
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-family: ${{ vars.ECS_FAMILY_WORKER }}
+          container-name: app
+          image: ${{ needs.promote.outputs.image }}
+          environment-variables: SENTRY_RELEASE=${{ needs.version.outputs.sha }}
+
+      - name: Roll worker
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-worker.outputs.task-definition }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          service: ${{ vars.ECS_SERVICE_WORKER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 12
+
+  # Runs last: a tag/release only ever exists for a fully deployed sha, and a
+  # failed run re-dispatches to the same version (the tag was never consumed).
+  release:
+    needs: [version, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write  # create tag + release
+    steps:
+      - uses: actions/checkout@v7
+
+      # --generate-notes builds notes from merged PR titles (conventional
+      # commits deferred per PLAN.md).
+      - name: Tag + GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ needs.version.outputs.version }}" \
+            --target "${{ needs.version.outputs.sha }}" \
+            --generate-notes

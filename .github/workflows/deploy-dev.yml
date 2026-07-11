@@ -1,0 +1,161 @@
+# Merge to main: build the deploy artifact, release-task + roll both dev ECS
+# services, then sync the OpenAPI spec to Apidog. Each stage skips gracefully
+# until its variables exist (AWS_ECR_REPOSITORY / DEV_DEPLOY_ENABLED /
+# APIDOG_PROJECT_ID) - the repo stays green with zero infra provisioned.
+
+name: Deploy dev
+
+on:
+  push:
+    branches: ['main']
+
+permissions:
+  id-token: write
+  contents: read
+
+# Never cancel a mid-flight ECS rollout; GitHub queues one pending run per
+# group and supersedes the rest, so the newest sha always deploys next.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: vars.AWS_ECR_REPOSITORY != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image: ${{ steps.ecr.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assume deploy role via OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.ecr.outputs.registry }}/${{ vars.AWS_ECR_REPOSITORY }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    # Repo-level sentinel, not the env-scoped cluster var: environment-scoped
+    # vars resolve only after a job starts, so they can't gate a job-level if.
+    if: vars.DEV_DEPLOY_ENABLED != ''
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dev
+    steps:
+      - name: Assume deploy role via OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      # Task definitions live in AWS (manual runbook, no IaC): download the
+      # latest ACTIVE revision and swap in the new image. Container name "app"
+      # is the runbook convention for both families. SENTRY_RELEASE = sha, not
+      # version: one Sentry release per commit, shared by dev and production.
+      - name: Render web task definition
+        id: render-web
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-family: ${{ vars.ECS_FAMILY_WEB }}
+          container-name: app
+          image: ${{ needs.build.outputs.image }}
+          environment-variables: SENTRY_RELEASE=${{ github.sha }}
+
+      # Release task (migrate + createcachetable + collectstatic) runs from
+      # this exact new revision - same image AND env as what goes live - and
+      # the service only rolls after it exits 0. Fargate run-task does not
+      # inherit the service's network config, hence the subnet/SG vars.
+      - name: Release task + roll web
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-web.outputs.task-definition }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          service: ${{ vars.ECS_SERVICE_WEB }}
+          run-task: true
+          run-task-container-overrides: >
+            [{"name": "app", "command": ["sh", "-c",
+            "python manage.py migrate --noinput &&
+            python manage.py createcachetable &&
+            python manage.py collectstatic --noinput"]}]
+          run-task-subnets: ${{ vars.ECS_SUBNETS }}
+          run-task-security-groups: ${{ vars.ECS_SECURITY_GROUPS }}
+          run-task-assign-public-IP: ${{ vars.ECS_ASSIGN_PUBLIC_IP }}
+          wait-for-task-stopped: true
+          wait-for-service-stability: true
+          wait-for-minutes: 12
+
+      # Worker rolls only after web stabilized - ALB health checks + the
+      # deployment circuit breaker validate the image before the worker moves.
+      - name: Render worker task definition
+        id: render-worker
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition-family: ${{ vars.ECS_FAMILY_WORKER }}
+          container-name: app
+          image: ${{ needs.build.outputs.image }}
+          environment-variables: SENTRY_RELEASE=${{ github.sha }}
+
+      - name: Roll worker
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-worker.outputs.task-definition }}
+          cluster: ${{ vars.ECS_CLUSTER }}
+          service: ${{ vars.ECS_SERVICE_WORKER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 12
+
+  # Apidog mirrors what runs in dev: sync after a successful deploy. Still
+  # runs while deploy is *skipped* pre-infra, never after a failed build or
+  # deploy.
+  apidog:
+    if: ${{ !failure() && !cancelled() && vars.APIDOG_PROJECT_ID != '' }}
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v8
+        with:
+          enable-cache: true
+
+      - name: Install environment
+        run: uv sync --locked
+
+      # Env has no code defaults by design - the example IS the CI config.
+      - name: Bootstrap env file
+        run: cp .env.example .env
+
+      - name: Export OpenAPI schema
+        # --api is required: the instance mounts at /api/v1/, not /api/.
+        run: uv run manage.py export_openapi_schema --api config.api.v1.api --output openapi.json
+
+      # Code is the source of truth - matching Apidog endpoints get overwritten.
+      - name: Sync to Apidog
+        env:
+          APIDOG_ACCESS_TOKEN: ${{ secrets.APIDOG_ACCESS_TOKEN }}
+        run: |
+          jq -n --rawfile spec openapi.json \
+            '{input: $spec, options: {endpointOverwriteBehavior: "OVERWRITE_EXISTING"}}' \
+          | curl -fsS "https://api.apidog.com/v1/projects/${{ vars.APIDOG_PROJECT_ID }}/import-openapi" \
+              -H "Authorization: Bearer ${APIDOG_ACCESS_TOKEN}" \
+              -H "X-Apidog-Api-Version: 2024-03-28" \
+              -H "Content-Type: application/json" \
+              --data @-

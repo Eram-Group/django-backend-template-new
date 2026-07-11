@@ -36,7 +36,7 @@ class Env(BaseSettings):
     )
 
     # Core
-    ENVIRONMENT: Literal["local", "staging", "production"]
+    ENVIRONMENT: Literal["local", "dev", "production"]
     SECRET_KEY: SecretStr
     SECRET_KEY_FALLBACKS: CommaSeparated[SecretStr] = Field(default_factory=list)
     ALLOWED_HOSTS: CommaSeparated[str]
@@ -87,6 +87,7 @@ class Env(BaseSettings):
 
     # Observability (absent DSN = Sentry disabled)
     SENTRY_DSN: str | None = None
+    SENTRY_RELEASE: str | None = None  # git sha, injected by CD at render time
     SENTRY_TRACES_SAMPLE_RATE: float
 
     @field_validator(

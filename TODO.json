@@ -43,7 +43,7 @@
       "id": "readme-rewrite",
       "group": "G11",
       "title": "Rewrite README",
-      "endGoal": "A newcomer can go from clone to running stack using README alone: quickstart, command table, AWS runbook (two ECS services from one image, release task = migrate + createcachetable + collectstatic, RDS PG18, S3+CloudFront, Secrets Manager injection, staging/production env vars, EventBridge cron recipe).",
+      "endGoal": "A newcomer can go from clone to running stack using README alone: quickstart, command table, AWS runbook (two ECS services from one image, release task = migrate + createcachetable + collectstatic, RDS PG18, S3+CloudFront, Secrets Manager injection, dev/production env vars, EventBridge cron recipe, CI/CD setup per PLAN step 11: task-def families + container 'app', circuit breaker, OIDC role perms, GitHub environments, deploy/Apidog vars).",
       "status": "pending"
     },
     {
