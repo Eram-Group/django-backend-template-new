@@ -264,16 +264,9 @@ Session.vim
 # Auto-generated tag files
 tags
 
-# Redis dump file
-dump.rdb
-
-### Project template
-sample_project/media/
-
 .pytest_cache/
 .ipython/
 .env
-.envs/*
 
 # IDE
 .idea/

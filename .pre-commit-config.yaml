@@ -38,17 +38,6 @@ repos:
       # Formatter
       - id: ruff-format
 
-  - repo: https://github.com/tox-dev/pyproject-fmt
-    rev: v2.25.1
-    hooks:
-      - id: pyproject-fmt
-
-  - repo: https://github.com/djlint/djLint
-    rev: v1.40.4
-    hooks:
-      - id: djlint-reformat-django
-      - id: djlint-django
-
 # sets up .pre-commit-ci.yaml to ensure pre-commit dependencies stay up to date
 ci:
   autoupdate_schedule: weekly

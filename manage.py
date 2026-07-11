@@ -3,7 +3,6 @@
 
 import os
 import sys
-from pathlib import Path
 
 
 def main():
@@ -18,11 +17,6 @@ def main():
             "available on your PYTHONPATH environment variable? Did you "
             "forget to activate a virtual environment?",
         ) from exc
-
-    # This allows easy placement of apps within the interior
-    # sample_project directory.
-    current_path = Path(__file__).parent.resolve()
-    sys.path.append(str(current_path / "sample_project"))
 
     execute_from_command_line(sys.argv)
 

@@ -23,7 +23,7 @@
       "id": "G0C",
       "title": "Aggressive cleanup (delete old app + cruft)",
       "rationale": "User decision (2026-07-11): front-load the cleanup instead of deferring deletions to G03/G08 - delete everything that does not match PLAN.md, including sample_project itself. Accepted trade-off: the repo intentionally does NOT boot or run tests from here until G03 builds the new settings; G01/G02 do not need a booting app.",
-      "checkpoint": "grep -ri sample_project (excluding .git/.venv/.idea, including uv.lock) returns nothing; uv sync clean + uv lock --check; docker compose -f docker-compose.local.yml up -d brings postgres:18 + mailpit healthy; pre-commit run --all-files green; commit."
+      "checkpoint": "grep -ri sample_project (excluding .git/.venv/.idea and this file's own prose) returns nothing; uv sync clean + uv lock --check; docker compose -f docker-compose.local.yml up -d brings postgres:18 + mailpit healthy; pre-commit run --all-files green; commit."
     },
     {
       "id": "G01",
@@ -122,7 +122,7 @@
         "MOVED from G03 (was wave-1 deletion) per user decision to front-load cleanup; compose/ and .envs/ deletions absorbed from the old G08 wave-3 task.",
         ".envs/.production contains generated secrets - gitignored, so disk-only deletion; nothing enters history."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "cleanup-old-app",
@@ -134,19 +134,21 @@
         "G03's settings/urls tasks are now build-from-scratch (git history keeps the old files as reference)."
       ],
       "dependsOn": ["delete-mpa-cruft"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "deps-prune",
       "group": "G0C",
       "title": "Prune now-unused dependencies + dead tool config",
-      "endGoal": "uv remove: collectfasta, crispy-bootstrap5, django-crispy-forms, django-environ, django-model-utils, django-redis, hiredis, pillow, python-slugify, redis, uvicorn, uvicorn-worker; dev group: django-coverage-plugin, django-extensions, djlint, ipdb, pytest-sugar, sphinx, sphinx-autobuild, watchfiles, werkzeug; [project].name renamed sample_project -> backend; [tool.djlint] + [tool.pyproject-fmt] sections and their pre-commit hooks removed; coverage include points at apps/** + config/**; uv sync clean.",
+      "endGoal": "uv remove: collectfasta, crispy-bootstrap5, django-crispy-forms, django-environ, django-model-utils, django-redis, hiredis, pillow, python-slugify, redis, uvicorn, uvicorn-worker; dev group: django-coverage-plugin, djlint, sphinx, sphinx-autobuild, watchfiles; [project].name renamed sample_project -> backend; [tool.djlint] + [tool.pyproject-fmt] sections and their pre-commit hooks removed; coverage include points at apps/** + config/**; uv sync clean.",
       "tips": [
         "MOVED from G03 per user decision; the old app is gone so nothing imports the pruned packages.",
-        "Survivors match PLAN's keep-list; allauth extras swap [mfa] -> [headless-spec,socialaccount] stays in G01 deps-add-runtime."
+        "Survivors match PLAN's keep-list; allauth extras swap [mfa] -> [headless-spec,socialaccount] stays in G01 deps-add-runtime.",
+        "RESOLVED (user decision 2026-07-11): dev-QoL tools are KEPT - ipdb, pytest-sugar, django-extensions, werkzeug[watchdog] (runserver_plus) stay in the dev group; watchfiles stays pruned (its only consumer was uvicorn's reloader). django_extensions must be added to local settings INSTALLED_APPS in G03 settings-envs.",
+        "RESOLVED: also purged stale .gitignore entries (sample_project/media/, .envs/*, redis dump.rdb)."
       ],
       "dependsOn": ["cleanup-old-app"],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "deps-add-runtime",
@@ -246,7 +248,7 @@
       "id": "settings-envs",
       "group": "G03",
       "title": "Rewrite local.py, production.py, test.py",
-      "endGoal": "All four settings modules import cleanly: local (DEBUG, Mailpit SMTP, debug toolbar + Docker INTERNAL_IPS trick, ImmediateBackend toggle), production (security block, __Secure- cookie names, psycopg pool from env + CONN_MAX_AGE=0, S3 manifest static + S3 media, SES via Anymail, Sentry, JSON logs, DisallowedHost logger silenced), test (fast hashers, ImmediateBackend, locmem email AND locmem cache, no-migrations option).",
+      "endGoal": "All four settings modules import cleanly: local (DEBUG, Mailpit SMTP, debug toolbar + Docker INTERNAL_IPS trick, django_extensions installed, ImmediateBackend toggle), production (security block, __Secure- cookie names, psycopg pool from env + CONN_MAX_AGE=0, S3 manifest static + S3 media, SES via Anymail, Sentry, JSON logs, DisallowedHost logger silenced), test (fast hashers, ImmediateBackend, locmem email AND locmem cache, no-migrations option).",
       "tips": [
         "Pool OPTIONS pair with CONN_MAX_AGE=0 (production only) and NO CONN_HEALTH_CHECKS; local/test use plain connections.",
         "__Secure- cookie names are production-only (they require the Secure flag and break http://localhost).",
@@ -509,7 +511,10 @@
       "id": "precommit-rewrite",
       "group": "G09",
       "title": "Rewrite .pre-commit-config.yaml",
-      "endGoal": "pre-commit run --all-files green with: ruff-check/ruff-format (official mirror), django-upgrade --target-version 6.0, gitleaks, uv lock --check, hygiene hooks (trailing-whitespace, end-of-file, check-yaml/toml/json, check-added-large-files, merge-conflict, debug-statements, detect-private-key), lint-imports; pre-push stage runs branch-behind-main check + makemigrations --check; djlint and pyproject-fmt hooks removed.",
+      "endGoal": "pre-commit run --all-files green with: ruff-check/ruff-format (official mirror), django-upgrade --target-version 6.0, gitleaks, uv lock --check, hygiene hooks (trailing-whitespace, end-of-file, check-yaml/toml/json, check-added-large-files, merge-conflict, debug-statements, detect-private-key), lint-imports; pre-push stage runs branch-behind-main check + makemigrations --check; djlint and pyproject-fmt hooks removed (done early in G0C).",
+      "tips": [
+        "The exclude: line still references deleted paths (^docs/, devcontainer.json) - set the final exclude (migrations only) in this rewrite."
+      ],
       "dependsOn": ["import-linter-contracts", "toolcfg-rewrite"],
       "status": "pending"
     },
