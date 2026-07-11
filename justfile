@@ -2,6 +2,9 @@
 # debug toolbar); postgres+mailpit run in compose. `just up` brings the full
 # prod-parity stack (web+worker containers on production settings).
 
+# Recipes see .env values (createsuperuser reads DJANGO_SUPERUSER_* from env).
+set dotenv-load := true
+
 # Default: list all recipes.
 default:
     @just --list
@@ -70,6 +73,17 @@ shell *args:
 # Drain the DB task queue on the host (`just worker --batch` = drain & exit).
 worker *args:
     TASKS_IMMEDIATE=false uv run manage.py db_worker {{ args }}
+
+# Idempotent superuser from DJANGO_SUPERUSER_* (.env locally, Secrets in AWS).
+superuser:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    exists=$(uv run manage.py shell -c "import os; from apps.users.models import User; print(User.objects.filter(email=os.environ['DJANGO_SUPERUSER_EMAIL'], is_superuser=True).exists())" | tail -1)
+    if [ "$exists" = "True" ]; then
+        echo "Superuser already exists - nothing to do."
+    else
+        uv run manage.py createsuperuser --noinput
+    fi
 
 # Placeholder until seed_db lands (G07; factories under user review).
 seed:

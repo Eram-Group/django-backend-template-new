@@ -326,7 +326,11 @@
       "group": "G06",
       "title": "Idempotent superuser bootstrap",
       "endGoal": "A repeatable flow (native createsuperuser --noinput reading DJANGO_SUPERUSER_* env, wrapped idempotently in just) yields a working staff login on a fresh database.",
-      "status": "pending"
+      "status": "done",
+      "tips": [
+        "VERIFIED: just superuser -> 'Superuser created successfully'; second run -> 'already exists - nothing to do'; argon2 hash, is_staff+is_superuser, exactly 1 superuser; password check_password True.",
+        "justfile gained `set dotenv-load := true` so DJANGO_SUPERUSER_* reach createsuperuser's process env (pydantic reads .env itself, subprocesses don't)."
+      ]
     },
     {
       "id": "users-me-api",
