@@ -41,6 +41,7 @@ API-only Django backend (+ Django admin) for web SPA + mobile clients, deployed 
 - **Packages from day one:** every layer is a package split by entity; `__init__.py` re-exports = the app's public interface. Leaf modules (`admin.py`, `constants.py`, `exceptions.py`) start flat, promoted when they grow.
 - **BaseModel** (`apps.common`): UUIDv7 pk (`UUIDField(primary_key=True, db_default=Func(function="uuidv7"))`) + `created_at` (indexed) + `updated_at`. All models inherit it, including custom `User` (email login; no username; single `name` field — no first/last; `language` ar/en driving user-facing emails/notifications).
 - **Pagination:** cursor-based, defined once in `apps/common/pagination.py`, ordered by UUIDv7 pk; every list endpoint declares it.
+- **No signals:** services call services — first-party code never communicates through Django signals. At a third-party boundary, prefer the library's adapter/hook surface (e.g. allauth adapters' `save_user` → `user_post_signup`); a signal receiver is a last resort reserved for libraries that offer no better hook.
 - **Errors:** services raise `ApplicationError` (from `apps.common.exceptions`); `config/api/exception_handlers.py` maps all errors to `{"message": ..., "extra": {"fields": ...}}`.
 - **Validation:** `full_clean()` in services before save; cross-field/relational rules in services.
 - **Bounded contexts:** one app = one domain; cross-app access only via the other app's services/selectors; `apps.common` = primitives only, imports from no domain app.
@@ -60,7 +61,7 @@ root_package = "apps"
 [[tool.importlinter.contracts]]        # layer direction inside every app
 name = "Layered app internals"
 type = "layers"
-layers = ["apis | admin | management | signals", "services | tasks", "selectors", "models"]
+layers = ["apis | admin | management", "services | tasks", "selectors", "models"]
 containers = ["apps.users"]            # append each new app
 
 [[tool.importlinter.contracts]]        # apps stay independent
@@ -116,7 +117,7 @@ PythonProject/
     │   ├── tests/              # cross-app gates: factory coverage + admin basics gate
     │   └── health.py           # healthz/readyz
     └── users/                  # THE template every future app copies
-        ├── apps.py  ├── constants.py  ├── exceptions.py  ├── adapters.py  ├── signals.py
+        ├── apps.py  ├── constants.py  ├── exceptions.py  ├── adapters.py
         ├── admin/       user/ {admin,list_view,change_view,display,permissions,resource}.py
         ├── models/      __init__.py + user.py
         ├── migrations/
@@ -138,7 +139,7 @@ PythonProject/
 3. `config/env.py`: typed `Env(BaseSettings)` — `SecretStr` secrets, `Literal` environment, DB pool sizes, `DJANGO_SUPERUSER_*` bootstrap creds, `COOKIE_DOMAIN`, `FRONTEND_ALLOWED_ORIGINS`, Google/Apple OAuth creds; `.env` loading, safe local defaults, required-in-prod fields.
 4. Settings package: base (unfold + modeltranslation ordered before `contrib.admin`; middleware guid→security→session→locale→…→axes; `LANGUAGES` ar/en, `TIME_ZONE="UTC"`, `LOCALE_PATHS`; DATABASES via dj-database-url + env pool knobs + `conn_health_checks`; DatabaseCache + LocMem `ratelimit` alias; TASKS db backend; DB sessions; STORAGES; structlog; CSP; `ATOMIC_REQUESTS=True`; Argon2 `PASSWORD_HASHERS`; `EMAIL_TIMEOUT=5`; passwordless allauth block; `CSRF_TRUSTED_ORIGINS` = CORS origins; `ACCOUNT_ALLOW_REGISTRATION` toggle), local (DEBUG, Mailpit email, toolbar + Docker `INTERNAL_IPS` trick, django-extensions, ImmediateBackend toggle), production (security block, `__Secure-` cookie names, pool + `CONN_MAX_AGE=0`, S3, SES, Sentry, JSON logs), test (fast hashers, ImmediateBackend, in-memory email, no-migrations option). `config/api/`, `urls.py`; `manage.py` → local; mypy/pytest → test.
 5. `apps.common`: BaseModel, ApplicationError, cursor pagination, health endpoints; admin framework (unfold `BaseModelAdmin` with abstract `can_*`, `FieldPermissions`, `AdminContext`, base inlines); `generate_dashboard` scaffolder; `seed_db` command; superuser bootstrap via Django-native `createsuperuser --noinput` (`DJANGO_SUPERUSER_*` env) behind an idempotent just recipe; factory-coverage + admin basics test gates.
-6. `apps.users`: full template app per tree — `admin/user/` package via `generate_dashboard`, passwordless adapter (6-digit codes, skip-OTP-for-social, `is_open_for_signup`). Signup happens via allauth: thin `user_signed_up` receiver in `signals.py` calls the service, which enqueues the welcome-email task via `on_commit`. Users API = `/me` endpoints (GET/PATCH) — no duplicate signup route.
+6. `apps.users`: full template app per tree — `admin/user/` package via `generate_dashboard`, passwordless adapter (6-digit codes, skip-OTP-for-social, `is_open_for_signup`). Signup happens via allauth: the adapters' `save_user` hooks (account + social) call the service, which enqueues the welcome-email task via `on_commit` — no signals. Users API = `/me` endpoints (GET/PATCH) — no duplicate signup route.
 7. Auth: allauth headless, passwordless — login/verification by 6-digit email code + Google/Apple social from env creds; browser + app clients; Ninja auth class validating cookie or `X-Session-Token`; CORS + `CSRF_TRUSTED_ORIGINS` from env; `HEADLESS_ONLY`, `HEADLESS_FRONTEND_URLS`, usersessions; optional env-gated `secure_admin_login`.
 8. Tooling: ruff/mypy/pytest/coverage/import-linter config in `pyproject.toml`; pre-commit; justfile (bootstrap [uv sync + copy `.env.example`→`.env` + pre-commit install incl. pre-push + migrate], up, stop, logs [service], manage [passthrough], test, lint, fmt, typecheck, migrate [+createcachetable], makemigrations, shell, worker, seed, db-reset [warned], bash, clean, check-deploy).
 9. Docker: multi-stage Dockerfile (CMD gunicorn; worker overrides command); `.dockerignore`; compose (web watch, worker, postgres:18 with PG18 volume path, mailpit). Release step = `migrate` + `createcachetable` + `collectstatic`.

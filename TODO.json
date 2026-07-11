@@ -337,7 +337,8 @@
       "title": "Google + Apple social login from env",
       "endGoal": "Settings-based SOCIALACCOUNT_PROVIDERS built from env creds with verified-email auto-connect; absent creds degrade gracefully in local (no crash, provider simply unavailable).",
       "tips": [
-        "Apple's secret is a multiline PEM - pass it base64-encoded through a SecretStr env field and decode in settings."
+        "Apple's secret is a multiline PEM - pass it base64-encoded through a SecretStr env field and decode in settings.",
+        "Must override the social adapter's save_user to call services.user_post_signup after the user is saved (no-signals rule; account adapter sees commit=False on this path)."
       ],
       "status": "pending"
     },
@@ -367,12 +368,13 @@
     {
       "id": "signup-signal-welcome-task",
       "group": "G04",
-      "title": "Signup signal -> service -> welcome-email task",
-      "endGoal": "user_signed_up receiver in apps/users/signals.py (wired in apps.py ready()) calls services.user_post_signup, which enqueues tasks/emails.send_welcome_email via transaction.on_commit; the email renders in user.language; a queued task row exists after signup.",
+      "title": "Signup hook (adapter save_user) -> service -> welcome-email task",
+      "endGoal": "AccountAdapter.save_user (and the social adapter after G04) calls services.user_post_signup, which enqueues tasks/emails.send_welcome_email via transaction.on_commit; the email renders in user.language; a queued task row exists after signup. No signals anywhere.",
       "tips": [
         "Receiver stays thin - one call into the service; the import-linter layer contract includes signals in the top layer.",
         "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
-        "Implemented: signals.py user_signed_up receiver -> services.user_post_signup -> transaction.on_commit enqueue of tasks/emails.send_welcome_email (renders in user.language via translation.override); wired in apps.py ready(); receiver connection verified at setup()."
+        "Implemented: signals.py user_signed_up receiver -> services.user_post_signup -> transaction.on_commit enqueue of tasks/emails.send_welcome_email (renders in user.language via translation.override); wired in apps.py ready(); receiver connection verified at setup().",
+        "USER DECISION (2026-07-11, no signals unless necessary): signals.py DELETED - AccountAdapter.save_user (commit=True) now calls services.user_post_signup. Social path: the social adapter (G04) must call user_post_signup after ITS save, because it invokes the account adapter with commit=False (user has no pk yet)."
       ],
       "status": "pending"
     },
@@ -516,7 +518,7 @@
       "id": "import-linter-contracts",
       "group": "G07",
       "title": "Import-linter contracts enforced",
-      "endGoal": "[tool.importlinter] contracts from PLAN (layers incl. signals, domain-app independence, common-imports-no-domain-app) pass via lint-imports; suite green; coverage >= 80%; mypy strict green repo-wide.",
+      "endGoal": "[tool.importlinter] contracts from PLAN (layers - no signals layer per the no-signals rule, domain-app independence, common-imports-no-domain-app) pass via lint-imports; suite green; coverage >= 80%; mypy strict green repo-wide.",
       "dependsOn": [
         "delete-mpa-cruft"
       ],
