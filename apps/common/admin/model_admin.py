@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import Any
 from typing import ClassVar
 
@@ -41,6 +42,7 @@ class BaseModelAdmin(ModelAdmin):
     # Declare `abstract_admin = True` in an intermediate's own body to skip
     # the can_* enforcement; the flag deliberately does NOT inherit.
     abstract_admin: ClassVar[bool] = False
+    filter_horizontal: Sequence[str] = ()
 
     # unfold/django quality-of-life defaults
     empty_value_display = "-"
