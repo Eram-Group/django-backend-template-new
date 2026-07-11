@@ -1,80 +1,100 @@
 name: CI
 
-# Enable Buildkit and let compose use it to speed up image building
-env:
-  DOCKER_BUILDKIT: 1
-  COMPOSE_DOCKER_CLI_BUILD: 1
-
 on:
   pull_request:
     branches: ['main']
-    paths-ignore: ['docs/**']
-
   push:
     branches: ['main']
-    paths-ignore: ['docs/**']
 
 concurrency:
   group: ${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  linter:
+  # Everything host-runnable, mirroring the local gates exactly.
+  fast:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: backend
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d backend"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
-      - name: Checkout Code Repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: astral-sh/setup-uv@v8
         with:
-          python-version-file: '.python-version'
-      # Consider using pre-commit.ci for open source project
-      - name: Run pre-commit
-        uses: pre-commit/action@v3.0.1
+          enable-cache: true
 
-  # With no caching at all the entire ci process takes 3m to complete!
-  pytest:
+      - name: Install environment
+        run: uv sync --locked
+
+      # Env has no code defaults by design - the example IS the CI config.
+      - name: Bootstrap env file
+        run: cp .env.example .env
+
+      - name: Lint (pre-commit - the single lint source)
+        run: uv run pre-commit run --all-files --show-diff-on-failure
+
+      - name: Type check (mypy strict)
+        run: uv run mypy
+
+      - name: Lockfile is current
+        run: uv lock --check
+
+      - name: Model changes have migrations
+        run: uv run manage.py makemigrations --check --dry-run
+
+      - name: Tests
+        # Coverage gate stays informational until G07 fills the suite.
+        run: |
+          uv run manage.py createcachetable
+          uv run pytest -n auto --cov --cov-fail-under=0
+
+  # Prod-image build + the same smokes the local compose stack passes.
+  image:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 20
     steps:
-      - name: Checkout Code Repository
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Build and cache local backend
-        uses: docker/bake-action@v6
+      - name: Build image (GHA layer cache)
+        uses: docker/build-push-action@v7
         with:
-          push: false
+          context: .
           load: true
-          files: docker-compose.local.yml
-          targets: django
-          set: |
-            django.cache-from=type=gha,scope=django-cached-tests
-            django.cache-to=type=gha,scope=django-cached-tests,mode=max
-            postgres.cache-from=type=gha,scope=postgres-cached-tests
-            postgres.cache-to=type=gha,scope=postgres-cached-tests,mode=max
+          tags: backend:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Build and cache docs
-        uses: docker/bake-action@v6
-        with:
-          push: false
-          load: true
-          files: docker-compose.docs.yml
-          set: |
-            docs.cache-from=type=gha,scope=cached-docs
-            docs.cache-to=type=gha,scope=cached-docs,mode=max
+      - name: Bootstrap env file
+        run: cp .env.example .env
 
-      - name: Check DB Migrations
-        run: docker compose -f docker-compose.local.yml run --rm django python manage.py makemigrations --check
+      - name: Boot stack (release step before web/worker)
+        run: |
+          docker compose up -d --wait postgres mailpit
+          docker compose run --rm --no-build web python manage.py migrate
+          docker compose run --rm --no-build web python manage.py createcachetable
+          docker compose up -d --wait --no-build
 
-      - name: Run DB Migrations
-        run: docker compose -f docker-compose.local.yml run --rm django python manage.py migrate
+      - name: Smoke
+        run: |
+          curl -fsS http://localhost:8000/healthz
+          curl -fsS http://localhost:8000/readyz
+          curl -fsS -o /dev/null http://localhost:8000/_allauth/openapi.json
+          echo "smoke OK"
 
-      - name: Run Django Tests
-        run: docker compose -f docker-compose.local.yml run django pytest
-
-      - name: Tear down the Stack
-        run: docker compose -f docker-compose.local.yml down
+      - name: Stack logs
+        if: failure()
+        run: docker compose logs

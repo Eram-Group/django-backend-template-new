@@ -189,10 +189,12 @@
         "precommit-rewrite",
         "compose-rewrite"
       ],
-      "status": "pending",
+      "status": "done",
       "tips": [
         "Env has no code defaults, so any step importing settings (mypy plugin via real test.py, pytest, manage.py) needs `cp .env.example .env` (or explicit env vars) first - add it as an early CI step.",
-        "Outside-in note: at CI-creation time the suite has only the trivial conftest test - the pytest gate strengthens automatically as G07 fills the suite."
+        "Outside-in note: at CI-creation time the suite has only the trivial conftest test - the pytest gate strengthens automatically as G07 fills the suite.",
+        "Hybrid pipeline: fast job (uv, .env from example, pre-commit as THE lint source via uv run, mypy, lock check, migrations check, pytest vs postgres:18 service w/ createcachetable; coverage informational until G07) + image job (buildx GHA cache, release-step-then-up ordering because worker crashes pre-migrate by design, smoke healthz/readyz/auth-openapi).",
+        "Local verification done (actionlint clean / renovate-config-validator passed); the green-on-GitHub half of the checkpoint waits for the remote Omar hasn't created yet."
       ]
     },
     {
@@ -201,9 +203,11 @@
       "title": "Secret-scan workflow",
       "endGoal": "TruffleHog full-history scan (fetch-depth: 0) runs on push/PR as its own workflow.",
       "tips": [
-        "History is clean from the baseline commit onward - keep it that way; the scan is unforgiving once pushed."
+        "History is clean from the baseline commit onward - keep it that way; the scan is unforgiving once pushed.",
+        "TruffleHog v3 pinned, fetch-depth 0, base:'' = full branch history (Gawdat pattern), results=verified,unknown.",
+        "Local verification done (actionlint clean / renovate-config-validator passed); the green-on-GitHub half of the checkpoint waits for the remote Omar hasn't created yet."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "ecr-push-workflow",
@@ -213,14 +217,22 @@
       "dependsOn": [
         "dockerfile-multistage"
       ],
-      "status": "pending"
+      "status": "done",
+      "tips": [
+        "Gated on vars.AWS_ECR_REPOSITORY - skips gracefully until AWS repo vars exist (AWS_OIDC_ROLE_ARN, AWS_REGION, AWS_ECR_REPOSITORY); OIDC only, sha tag.",
+        "Local verification done (actionlint clean / renovate-config-validator passed); the green-on-GitHub half of the checkpoint waits for the remote Omar hasn't created yet."
+      ]
     },
     {
       "id": "renovate-config",
       "group": "G10",
       "title": "Renovate replaces Dependabot",
       "endGoal": "renovate.json validates (uv lockfile, github-actions and docker managers, sensible grouping); .github/dependabot.yml was already deleted in G0C.",
-      "status": "pending"
+      "status": "done",
+      "tips": [
+        "Validated with renovate-config-validator. Managers: pep621(uv)+lockFileMaintenance, github-actions, dockerfile, docker-compose, pre-commit; grouped non-major python/actions/docker PRs; django capped <6.1.",
+        "Local verification done (actionlint clean / renovate-config-validator passed); the green-on-GitHub half of the checkpoint waits for the remote Omar hasn't created yet."
+      ]
     },
     {
       "id": "signup-signal-welcome-task",
