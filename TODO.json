@@ -14,12 +14,6 @@
   ],
   "groups": [
     {
-      "id": "G06",
-      "title": "Admin: unfold + framework",
-      "rationale": "Needs the User model and auth to exist; lands before the test group so the admin-basics gate has a real admin to run against.",
-      "checkpoint": "Admin themed by unfold; users admin fully works (list/search/filter/edit/export) with explicit can_* permissions; generate_dashboard scaffolds a valid package; superuser bootstrap is repeatable; commit."
-    },
-    {
       "id": "G07",
       "title": "Inner depth: users API + tests + gates",
       "rationale": "The in-depth inside work (user decision: outside-in): mount+verify the /me exemplar endpoint, then the test suite and the cross-app gates that protect everything.",
@@ -45,48 +39,6 @@
     }
   ],
   "tasks": [
-    {
-      "id": "unfold-config",
-      "group": "G06",
-      "title": "Unfold configuration (theme + sidebar)",
-      "endGoal": "Admin is unfold-themed on every default page; UNFOLD dict has site title and sidebar navigation (users, task results) with all links built via reverse; optional env-gated secure_admin_login documented but off by default.",
-      "status": "pending"
-    },
-    {
-      "id": "admin-framework",
-      "group": "G06",
-      "title": "BaseModelAdmin framework in apps/common/admin/",
-      "endGoal": "Clean re-implementation importable and strict-mypy green: unfold-based BaseModelAdmin forcing explicit can_add/can_change/can_delete, FieldPermissions + AdminContext for field-level visibility/editability, base Tabular/Stacked inlines (hidden on add view), import-export resource base.",
-      "tips": [
-        "Concepts from the Gawdat template, none of its legacy code: no compat aliases, no deprecated helpers, no metaclass gymnastics beyond what ABC genuinely requires.",
-        "Multi-file skeleton created early (user request 2026-07-11): apps/common/admin/ {model_admin, field_permissions, context, inlines, resources}.py - fill these, then re-export the public interface from __init__."
-      ],
-      "status": "pending"
-    },
-    {
-      "id": "generate-dashboard-cmd",
-      "group": "G06",
-      "title": "generate_dashboard scaffolder command",
-      "endGoal": "manage.py generate_dashboard <app> <Model> emits a valid admin/<entity>/ package (admin, list_view, change_view, display, permissions, resource + CHECKLIST.md) that imports clean against the framework.",
-      "status": "pending",
-      "tips": [
-        "The stub admin/user/ files already exist - the scaffolder needs an --overwrite/skip strategy for pre-existing files."
-      ]
-    },
-    {
-      "id": "users-admin-package",
-      "group": "G06",
-      "title": "Users admin package (dogfood the scaffolder)",
-      "endGoal": "admin/user/ generated then fleshed out: search, filters, readonly rules, export resource, explicit can_* decisions; User fully manageable in admin.",
-      "dependsOn": [
-        "admin-framework",
-        "generate-dashboard-cmd"
-      ],
-      "status": "pending",
-      "tips": [
-        "Multi-file skeleton created early (user request 2026-07-11): apps/users/admin/user/ {admin, list_view, change_view, display, permissions, resource}.py + CHECKLIST.md - generate_dashboard must tolerate/overwrite existing stub files."
-      ]
-    },
     {
       "id": "factories-registry",
       "group": "G07",
@@ -120,8 +72,7 @@
         "The save round-trip must GET the form and re-POST it unchanged (the legacy version that only POSTs _continue passes on validation failures)."
       ],
       "dependsOn": [
-        "factories-registry",
-        "users-admin-package"
+        "factories-registry"
       ],
       "status": "pending"
     },

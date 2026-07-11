@@ -10,6 +10,7 @@ from typing import Any
 
 import dj_database_url
 import structlog
+from django.urls import reverse_lazy
 from django.utils.csp import CSP
 from django.utils.translation import gettext_lazy as _
 
@@ -179,6 +180,59 @@ USE_TZ = True
 LOCALE_PATHS = [BASE_DIR / "locale"]
 MODELTRANSLATION_DEFAULT_LANGUAGE = "ar"
 MODELTRANSLATION_FALLBACK_LANGUAGES = ("ar", "en")
+
+# --- Admin (unfold) ----------------------------------------------------------
+# SECURE_ADMIN_LOGIN env flag (off by default) swaps the admin's password
+# login for allauth's email-code flow - wired in config/urls.py.
+UNFOLD = {
+    "SITE_TITLE": "Backend Admin",
+    "SITE_HEADER": "Backend",
+    "SIDEBAR": {
+        "show_search": True,
+        "show_all_applications": True,
+        "navigation": [
+            {
+                "title": _("Users"),
+                "items": [
+                    {
+                        "title": _("Users"),
+                        "icon": "person",
+                        "link": reverse_lazy("admin:users_user_changelist"),
+                    },
+                    {
+                        "title": _("Email addresses"),
+                        "icon": "mail",
+                        "link": reverse_lazy("admin:account_emailaddress_changelist"),
+                    },
+                    {
+                        "title": _("Sessions"),
+                        "icon": "devices",
+                        "link": reverse_lazy(
+                            "admin:usersessions_usersession_changelist"
+                        ),
+                    },
+                ],
+            },
+            {
+                "title": _("Operations"),
+                "items": [
+                    {
+                        "title": _("Task results"),
+                        "icon": "task_alt",
+                        "link": reverse_lazy(
+                            "admin:django_tasks_database_dbtaskresult_changelist"
+                        ),
+                    },
+                    {
+                        "title": _("Login attempts"),
+                        "icon": "lock",
+                        "link": reverse_lazy("admin:axes_accessattempt_changelist"),
+                    },
+                ],
+            },
+        ],
+    },
+}
 
 # --- Static / media (S3 via django-storages in production.py) --------------
 STATIC_URL = "static/"

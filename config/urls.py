@@ -30,6 +30,13 @@ def handle_404(
 
 handler404 = "config.urls.handle_404"
 
+if env.SECURE_ADMIN_LOGIN:
+    # Admin authenticates via allauth's email-code flow instead of passwords.
+    from allauth.account.decorators import secure_admin_login
+
+    admin.autodiscover()
+    admin.site.login = secure_admin_login(admin.site.login)  # type: ignore[method-assign]
+
 urlpatterns = [
     path(env.ADMIN_URL, admin.site.urls),
     path("api/v1/", api.urls),
