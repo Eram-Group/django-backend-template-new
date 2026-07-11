@@ -75,8 +75,8 @@
     },
     {
       "id": "G13",
-      "title": "User investigations & sign-off reviews (deliberately last)",
-      "rationale": "User decision (2026-07-11): investigations and not-sure items must NOT block the build - implementation proceeds on PLAN defaults; Omar reviews in depth at the end. Review outcomes may change code: re-run the affected group checkpoints and the G12 sweep after each review.",
+      "title": "Deferred items + user reviews (deliberately last)",
+      "rationale": "User decisions (2026-07-11): investigations, not-sure items, and social-login integration must NOT block the build - implementation proceeds on PLAN defaults; deferred/review work happens at the end. Review outcomes may change code: re-run affected group checkpoints and the G12 sweep afterwards.",
       "checkpoint": "Every review task done with decisions recorded in tips; any resulting changes re-verified (affected checkpoints + G12 sweep); final commit."
     }
   ],
@@ -182,17 +182,6 @@
         "Adapter overrides kept minimal: is_open_for_signup, generate_login_code, generate_email_verification_code, save_user - nothing else."
       ],
       "status": "done"
-    },
-    {
-      "id": "social-providers",
-      "group": "G04",
-      "title": "Google + Apple social login from env",
-      "endGoal": "Settings-based SOCIALACCOUNT_PROVIDERS built from env creds with verified-email auto-connect; absent creds degrade gracefully in local (no crash, provider simply unavailable).",
-      "tips": [
-        "Apple's secret is a multiline PEM - pass it base64-encoded through a SecretStr env field and decode in settings.",
-        "Must override the social adapter's save_user to call services.user_post_signup after the user is saved (no-signals rule; account adapter sees commit=False on this path)."
-      ],
-      "status": "pending"
     },
     {
       "id": "ninja-auth-class",
@@ -518,6 +507,18 @@
       "group": "G12",
       "title": "Production posture verification (PLAN verification 6, 7)",
       "endGoal": "check --deploy with production settings reports zero warnings; docker compose up --build passes the same smokes with a non-root container; final commit marks the transformation complete.",
+      "status": "pending"
+    },
+    {
+      "id": "social-providers",
+      "group": "G13",
+      "title": "Google + Apple social login from env",
+      "endGoal": "Settings-based SOCIALACCOUNT_PROVIDERS built from env creds with verified-email auto-connect; absent creds degrade gracefully in local (no crash, provider simply unavailable).",
+      "tips": [
+        "Apple's secret is a multiline PEM - pass it base64-encoded through a SecretStr env field and decode in settings.",
+        "Must override the social adapter's save_user to call services.user_post_signup after the user is saved (no-signals rule; account adapter sees commit=False on this path).",
+        "MOVED to end (user decision 2026-07-11): social login needs external Google/Apple OAuth credentials that do not exist yet - build it when they do. The prerequisites already in place: allauth[socialaccount] extra installed, headless mounts socialaccount endpoints automatically once the app is installed, skip-OTP method-list configured. Do this BEFORE the auth-investigation review so the review covers social."
+      ],
       "status": "pending"
     },
     {
