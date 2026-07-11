@@ -51,8 +51,8 @@
     },
     {
       "id": "G05",
-      "title": "Tasks platform",
-      "rationale": "Proves the db_worker path that the welcome email already uses; small group with its own checkpoint because it validates infrastructure, not code volume.",
+      "title": "Tasks platform (background worker + scheduler)",
+      "rationale": "Proves the db_worker path that the welcome email already uses AND the scheduler story: recurring jobs run as EventBridge Scheduler cron -> ECS run-task management commands (sample_scheduled_job is the template), while async work flows through the django.tasks DB queue. Small group with its own checkpoint because it validates infrastructure, not code volume.",
       "checkpoint": "Signup enqueues welcome email after commit; manage.py db_worker drains it to Mailpit; task result row visible in admin (or shell); sample_scheduled_job and the prune command run clean; commit."
     },
     {
@@ -395,7 +395,8 @@
         "Check whether django-tasks-db ships a prune management command before writing one.",
         "RESOLVED (verified 2026-07-11 from django-tasks-db 0.12.0): it ships prune_db_task_results with retention-policy options - do not write one. Bonus: the backend supports OPTIONS id_function (incl. db expressions on Django 6) if we want uuidv7 task ids.",
         "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
-        "Implemented: management/commands/sample_scheduled_job.py (thin wrapper over selectors). Prune command NOT needed (django-tasks-db ships prune_db_task_results)."
+        "Implemented: management/commands/sample_scheduled_job.py (thin wrapper over selectors). Prune command NOT needed (django-tasks-db ships prune_db_task_results).",
+        "This platform is the SCHEDULER too: recurring jobs = EventBridge Scheduler cron -> ECS run-task invoking management commands (no in-process beat); one-off/async work = django.tasks queue drained by db_worker."
       ],
       "status": "pending"
     },
@@ -456,7 +457,8 @@
       "status": "pending",
       "tips": [
         "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
-        "UserFactory written early in apps/users/tests/factories.py (email get-or-create, skip_postgeneration_save, DjangoModelFactory[User] - runtime subscript verified). The registry itself (apps/common/tests/) is still G07 work."
+        "UserFactory written early in apps/users/tests/factories.py (email get-or-create, skip_postgeneration_save, DjangoModelFactory[User] - runtime subscript verified). The registry itself (apps/common/tests/) is still G07 work.",
+        "USER INVESTIGATION PENDING (2026-07-11): Omar wants to investigate the factories topic himself - factory_boy (DjangoModelFactory, Sequence, django_get_or_create, skip_postgeneration_save) and Faker providers - before this is finalized. Treat apps/users/tests/factories.py as a DRAFT; do not implement the registry or mark this done without his review."
       ]
     },
     {
@@ -467,7 +469,10 @@
       "dependsOn": [
         "factories-registry"
       ],
-      "status": "pending"
+      "status": "pending",
+      "tips": [
+        "Blocked on the factories investigation hold recorded in factories-registry."
+      ]
     },
     {
       "id": "admin-basics-gate",
