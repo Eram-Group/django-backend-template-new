@@ -1,6 +1,7 @@
 """User factories - factory_boy structure, mimesis values (apps.common.tests.fake)."""
 
 import random
+import uuid
 from typing import Any
 
 from allauth.account.models import EmailAddress
@@ -18,6 +19,11 @@ from apps.users.models import User
 # Arabic-first site: most generated users default to Arabic.
 _LANGUAGES = (Language.ARABIC, Language.ARABIC, Language.ARABIC, Language.ENGLISH)
 
+# Sequences restart at 0 in every process, but --reuse-db keeps rows that
+# session fixtures committed in earlier runs - without a per-process tag,
+# get_or_create would silently return those stale users.
+_RUN_TAG = uuid.uuid4().hex[:6]
+
 
 class UserFactory(DjangoModelFactory[User]):
     class Meta:
@@ -25,7 +31,7 @@ class UserFactory(DjangoModelFactory[User]):
         django_get_or_create = ["email"]
         skip_postgeneration_save = True
 
-    email = Sequence(lambda n: f"user{n}@example.com")
+    email = Sequence(lambda n: f"user{n}.{_RUN_TAG}@example.com")
     language = LazyFunction(lambda: random.choice(_LANGUAGES))  # noqa: S311
     name = LazyAttribute(lambda user: fake.full_name(user.language))
     password = "!"  # noqa: S105 - unusable marker: regular users are passwordless

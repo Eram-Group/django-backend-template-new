@@ -32,6 +32,9 @@ transitive dependency of factory_boy — never import it.
   (passwordless invariant), locale-matched `name`, weighted `language`.
 - `post_generation` hooks must no-op when `create` is False —
   `Factory.build()` must never touch the database.
+- Call factories as `UserFactory.create(...)` / `.build(...)` — never
+  `UserFactory(...)`. Explicit reads better and mypy (no factory_boy stubs)
+  types the dunder-call as a factory instance, not the model.
 - Register the factory in
   `apps/common/tests/factories_registry.py::FACTORIES` in the SAME change
   that adds the model — the coverage gate

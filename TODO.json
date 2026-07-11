@@ -40,16 +40,6 @@
   ],
   "tasks": [
     {
-      "id": "users-tests",
-      "group": "G07",
-      "title": "Users app tests (services/selectors/apis + auth flow)",
-      "endGoal": "Meaningful tests for the exemplar app: service validation paths, selector shapes, /me API round-trips, the headless code-login flow (request code -> confirm -> session), adapter behavior (kill-switch, 6-digit codes), and the openapi docs gating (staff 200, anon redirected).",
-      "status": "pending",
-      "tips": [
-        "Admin basics gate landed 2026-07-11 (apps/common/tests/admin/): 52 tests, registry-driven over admin.site._registry, session-seeded via FACTORIES. Live catch on first run: allauth UserSessionAdmin searched user__username (FieldError on our email-only User) - re-registered in apps/users/admin/user_session.py with user__email. users-tests now only needs the users-app unit/API tests; coverage fail_under=80 already configured."
-      ]
-    },
-    {
       "id": "readme-rewrite",
       "group": "G11",
       "title": "Rewrite README",

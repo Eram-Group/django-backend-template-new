@@ -55,10 +55,10 @@ jobs:
         run: uv run manage.py makemigrations --check --dry-run
 
       - name: Tests
-        # Coverage gate stays informational until G07 fills the suite.
+        # fail_under=80 comes from [tool.coverage.report] in pyproject.toml.
         run: |
           uv run manage.py createcachetable
-          uv run pytest -n auto --cov --cov-fail-under=0
+          uv run pytest -n auto --cov
 
   # Prod-image build + the same smokes the local compose stack passes.
   image:
