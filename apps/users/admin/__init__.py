@@ -1,1 +1,1 @@
-"""Per-entity admin packages (admin/user/) - generated in G06 (users-admin-package)."""
+"""Per-entity admin packages; admin/user/ is scaffolded by generate_dashboard (G06)."""

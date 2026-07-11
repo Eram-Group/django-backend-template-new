@@ -413,7 +413,8 @@
       "title": "BaseModelAdmin framework in apps/common/admin/",
       "endGoal": "Clean re-implementation importable and strict-mypy green: unfold-based BaseModelAdmin forcing explicit can_add/can_change/can_delete, FieldPermissions + AdminContext for field-level visibility/editability, base Tabular/Stacked inlines (hidden on add view), import-export resource base.",
       "tips": [
-        "Concepts from the Gawdat template, none of its legacy code: no compat aliases, no deprecated helpers, no metaclass gymnastics beyond what ABC genuinely requires."
+        "Concepts from the Gawdat template, none of its legacy code: no compat aliases, no deprecated helpers, no metaclass gymnastics beyond what ABC genuinely requires.",
+        "Multi-file skeleton created early (user request 2026-07-11): apps/common/admin/ {model_admin, field_permissions, context, inlines, resources}.py - fill these, then re-export the public interface from __init__."
       ],
       "status": "pending"
     },
@@ -422,7 +423,10 @@
       "group": "G06",
       "title": "generate_dashboard scaffolder command",
       "endGoal": "manage.py generate_dashboard <app> <Model> emits a valid admin/<entity>/ package (admin, list_view, change_view, display, permissions, resource + CHECKLIST.md) that imports clean against the framework.",
-      "status": "pending"
+      "status": "pending",
+      "tips": [
+        "The stub admin/user/ files already exist - the scaffolder needs an --overwrite/skip strategy for pre-existing files."
+      ]
     },
     {
       "id": "users-admin-package",
@@ -433,7 +437,10 @@
         "admin-framework",
         "generate-dashboard-cmd"
       ],
-      "status": "pending"
+      "status": "pending",
+      "tips": [
+        "Multi-file skeleton created early (user request 2026-07-11): apps/users/admin/user/ {admin, list_view, change_view, display, permissions, resource}.py + CHECKLIST.md - generate_dashboard must tolerate/overwrite existing stub files."
+      ]
     },
     {
       "id": "superuser-bootstrap",
