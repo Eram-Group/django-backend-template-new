@@ -191,7 +191,11 @@
       "dependsOn": [
         "config-api-v1"
       ],
-      "status": "pending"
+      "status": "done",
+      "tips": [
+        "VERIFIED (probe with temp endpoint): no creds -> 401 {message,extra}; session cookie (force_login) -> 200; REAL X-Session-Token from an in-process code login -> 200; garbage token -> 401 envelope.",
+        "Implementation: config/api/auth.py - api_auth = [ninja django_auth (cookie+CSRF), SessionTokenAuth(APIKeyHeader)] using allauth headless.internal.sessionkit.authenticate_by_x_session_token (internal module - pin with a test in G07 so upgrades fail loudly)."
+      ]
     },
     {
       "id": "users-me-api",
@@ -308,7 +312,8 @@
       "tips": [
         "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
         "UserFactory written early in apps/users/tests/factories.py (email get-or-create, skip_postgeneration_save, DjangoModelFactory[User] - runtime subscript verified). The registry itself (apps/common/tests/) is still G07 work.",
-        "UNBLOCKED (user decision 2026-07-11): implement with the draft approach (UserFactory as written: factory_boy DjangoModelFactory, Sequence email get-or-create, skip_postgeneration_save, Faker for names). Omar's factory_boy/Faker deep-dive moved to G13 factories-review - adjust afterwards if his review decides differently."
+        "UNBLOCKED (user decision 2026-07-11): implement with the draft approach (UserFactory as written: factory_boy DjangoModelFactory, Sequence email get-or-create, skip_postgeneration_save, Faker for names). Omar's factory_boy/Faker deep-dive moved to G13 factories-review - adjust afterwards if his review decides differently.",
+        "Auth probe finding: ACCOUNT_EMAIL_VERIFICATION=mandatory means code-login only completes for users with a verified EmailAddress row - UserFactory must create one (post_generation or RelatedFactory) or logins in tests/seeded envs will pend on verify_email."
       ]
     },
     {
