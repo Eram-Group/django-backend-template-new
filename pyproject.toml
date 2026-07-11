@@ -138,6 +138,13 @@ python_files = [
   "tests.py",
   "test_*.py",
 ]
+filterwarnings = [
+  # Warnings are errors - deprecations must be dealt with, not scrolled past.
+  "error",
+  # Upstream django-guid still calls asyncio.iscoroutinefunction (removed in
+  # py3.16); drop this ignore once a fixed release ships.
+  "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:django_guid",
+]
 
 [tool.coverage]
 # ==== Coverage ====
