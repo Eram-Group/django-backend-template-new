@@ -1,14 +1,41 @@
-.editorconfig
-.gitattributes
+# Build context allowlist-by-exclusion: keep the context minimal so stray
+# local files never change image content.
+
+# VCS / IDE / CI meta
+.git
 .github
 .gitignore
-.gitlab-ci.yml
+.gitattributes
+.editorconfig
 .idea
 .pre-commit-config.yaml
-.readthedocs.yml
-.travis.yml
-venv
-.git
-.envs/
-.venv/
-**/__pycache__/
+
+# Environments & secrets (env vars come from ECS/compose, never the image)
+.env
+.env.*
+.venv
+
+# Python / test / tool caches
+**/__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Local infra & docs (not part of the image)
+docker-compose*.yml
+compose.yaml
+Dockerfile
+justfile
+README.md
+PLAN.md
+TODO.json
+docs
+
+# Reference material (never ship)
+Gawdat_Django_Template
+
+# Local runtime artifacts (produced by release step / runserver)
+staticfiles
+media

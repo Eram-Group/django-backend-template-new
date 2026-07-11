@@ -76,16 +76,22 @@
       "endGoal": "docker build succeeds from the pruned lock: uv builder image -> python:3.14-slim runtime, two-phase uv sync --locked --no-dev with BuildKit cache mounts + bind-mounted lock/pyproject, UV_COMPILE_BYTECODE=1 + UV_PYTHON_DOWNLOADS=0, compilemessages baked in (gettext in build stage), non-root user, CMD gunicorn honoring WEB_CONCURRENCY with --max-requests + jitter; NO collectstatic at build or boot.",
       "tips": [
         "The image is the single ECS artifact - the worker service overrides the command (manage.py db_worker).",
-        "Release step (migrate + createcachetable + collectstatic) is a one-off ECS task, never the entrypoint."
+        "Release step (migrate + createcachetable + collectstatic) is a one-off ECS task, never the entrypoint.",
+        "VERIFIED: build clean; container uid=999(app) non-root; debug_toolbar ModuleNotFoundError (dev group absent); gunicorn boots on production settings with --env-file .env, healthz answers 301 (SSL redirect = app alive). 445MB.",
+        "compilemessages is conditional on .po existence (locale/ is still skeletons) - it activates automatically once translations land.",
+        "WEB_CONCURRENCY honored natively by gunicorn (no flag needed); worker service overrides CMD with manage.py db_worker."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "dockerignore-rewrite",
       "group": "G08",
       "title": "Rewrite .dockerignore",
       "endGoal": "Build context is minimal: .git, .venv, caches, tests artifacts, .env*, docs excluded; image content unchanged by stray local files.",
-      "status": "pending"
+      "status": "done",
+      "tips": [
+        "Done together with the Dockerfile (correct context is a build precondition): excludes .git/.venv/.env*/caches/compose files/docs/Gawdat_Django_Template/staticfiles/media."
+      ]
     },
     {
       "id": "compose-rewrite",

@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1
+# The single ECS artifact: web (this CMD) and worker (command: manage.py
+# db_worker) run the same image. The release step (migrate + createcachetable
+# + collectstatic) is a one-off ECS task - NEVER the entrypoint, NEVER here.
+
+# --- Build stage: resolve the locked, prod-only environment -------------------
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder
+
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=0
+
+# gettext: compile .po -> .mo at build time (runtime stays gettext-free)
+RUN apt-get update && apt-get install -y --no-install-recommends gettext \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Phase 1: dependencies only - cached until uv.lock/pyproject.toml change
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    uv sync --locked --no-dev --no-install-project
+
+# Phase 2: project source
+COPY . /app
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-dev
+
+# Bake translations when any exist (locale/ starts as empty skeletons)
+RUN if [ -n "$(find locale -name '*.po' -print -quit 2>/dev/null)" ]; then \
+        .venv/bin/django-admin compilemessages --ignore .venv; \
+    else \
+        echo "no .po files - skipping compilemessages"; \
+    fi
+
+# --- Runtime stage: slim, non-root -------------------------------------------
+FROM python:3.14-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+RUN groupadd --system app && useradd --system --gid app --home-dir /app app
+
+WORKDIR /app
+COPY --from=builder --chown=app:app /app /app
+
+USER app
+EXPOSE 8000
+
+# Workers scale via gunicorn-native WEB_CONCURRENCY; recycled workers guard
+# against slow leaks.
+CMD ["gunicorn", "config.wsgi:application", \
+     "--bind", "0.0.0.0:8000", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "100", \
+     "--access-logfile", "-"]
