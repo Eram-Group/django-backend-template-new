@@ -30,7 +30,7 @@ class SessionTokenAuth(APIKeyHeader):
         result = authenticate_by_x_session_token(key)
         if result is None:
             return None
-        user, _session = result
+        user: AbstractBaseUser = result[0]  # (user, session) tuple, untyped upstream
         return user
 
 
