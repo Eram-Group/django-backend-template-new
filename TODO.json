@@ -72,6 +72,12 @@
       "title": "Final verification",
       "rationale": "PLAN.md's 7 verification steps as the closing sweep.",
       "checkpoint": "All three verify tasks done; final commit marks the transformation complete."
+    },
+    {
+      "id": "G13",
+      "title": "User investigations & sign-off reviews (deliberately last)",
+      "rationale": "User decision (2026-07-11): investigations and not-sure items must NOT block the build - implementation proceeds on PLAN defaults; Omar reviews in depth at the end. Review outcomes may change code: re-run the affected group checkpoints and the G12 sweep after each review.",
+      "checkpoint": "Every review task done with decisions recorded in tips; any resulting changes re-verified (affected checkpoints + G12 sweep); final commit."
     }
   ],
   "tasks": [
@@ -152,18 +158,6 @@
       "status": "in_progress"
     },
     {
-      "id": "auth-investigation",
-      "group": "G04",
-      "title": "USER: deep-dive into the authentication design",
-      "endGoal": "Omar has investigated the auth stack in detail and signed off; decisions and answers appended here as tips. Scope: allauth headless passwordless email-code flow (request -> confirm), browser client (session cookie + CSRF + CORS) vs app client (X-Session-Token) and when each applies, HEADLESS_ONLY + HEADLESS_FRONTEND_URLS + the served auth OpenAPI spec, adapter hooks (save_user post-signup, generate_login_code, is_login_by_code_required, skip-OTP-for-social), Google/Apple social login + verified-email auto-connect, allauth.usersessions (list/revoke), signup kill-switch, and the security posture (axes lockouts, ratelimit, optional secure_admin_login email-OTP for admin).",
-      "tips": [
-        "USER INVESTIGATION (requested 2026-07-11): Omar leads this; agent supports with research/prototypes on request. G04 implementation must not be finalized before sign-off.",
-        "References: allauth headless docs (openapi spec + client types), Gawdat_Django_Template config/helpers/account_adapter.py (6-digit codes, skip-OTP-for-social) and allauth_adapter.py (headless user payload), PLAN.md Auth row.",
-        "Already decided (context): passwordless (no user passwords; staff keep Argon2), no JWT, no signals - adapters call services (signup hook = save_user; social adapter must trigger user_post_signup itself due to commit=False pass-through)."
-      ],
-      "status": "pending"
-    },
-    {
       "id": "allauth-headless-settings",
       "group": "G04",
       "title": "Full passwordless allauth headless configuration",
@@ -171,10 +165,7 @@
       "tips": [
         "No password fields anywhere in signup; staff/superusers still keep passwords for admin login (Argon2)."
       ],
-      "status": "pending",
-      "dependsOn": [
-        "auth-investigation"
-      ]
+      "status": "pending"
     },
     {
       "id": "adapters-passwordless",
@@ -322,7 +313,7 @@
       "tips": [
         "CODE WRITTEN EARLY (2026-07-11, user request to fill apps/users): statically verified (ruff+mypy strict green; app-registry boot + layer imports + router mount inspected) but the endGoal is RUNTIME-verified - do that at this group's checkpoint before marking done.",
         "UserFactory written early in apps/users/tests/factories.py (email get-or-create, skip_postgeneration_save, DjangoModelFactory[User] - runtime subscript verified). The registry itself (apps/common/tests/) is still G07 work.",
-        "USER INVESTIGATION PENDING (2026-07-11): Omar wants to investigate the factories topic himself - factory_boy (DjangoModelFactory, Sequence, django_get_or_create, skip_postgeneration_save) and Faker providers - before this is finalized. Treat apps/users/tests/factories.py as a DRAFT; do not implement the registry or mark this done without his review."
+        "UNBLOCKED (user decision 2026-07-11): implement with the draft approach (UserFactory as written: factory_boy DjangoModelFactory, Sequence email get-or-create, skip_postgeneration_save, Faker for names). Omar's factory_boy/Faker deep-dive moved to G13 factories-review - adjust afterwards if his review decides differently."
       ]
     },
     {
@@ -334,9 +325,7 @@
         "factories-registry"
       ],
       "status": "pending",
-      "tips": [
-        "Blocked on the factories investigation hold recorded in factories-registry."
-      ]
+      "tips": []
     },
     {
       "id": "admin-basics-gate",
@@ -523,6 +512,29 @@
       "group": "G12",
       "title": "Production posture verification (PLAN verification 6, 7)",
       "endGoal": "check --deploy with production settings reports zero warnings; docker compose up --build passes the same smokes with a non-root container; final commit marks the transformation complete.",
+      "status": "pending"
+    },
+    {
+      "id": "auth-investigation",
+      "group": "G13",
+      "title": "USER REVIEW: deep-dive into the implemented authentication",
+      "endGoal": "Omar has reviewed the IMPLEMENTED auth stack in detail and signed off; decisions/changes recorded here. Scope unchanged: passwordless email-code flow, browser vs X-Session-Token clients, HEADLESS_ONLY + frontend URLs + served auth spec, adapter hooks, Google/Apple social + auto-connect, usersessions, kill-switch, axes/ratelimit posture, optional secure_admin_login.",
+      "tips": [
+        "USER INVESTIGATION (requested 2026-07-11): Omar leads this; agent supports with research/prototypes on request. G04 implementation must not be finalized before sign-off.",
+        "References: allauth headless docs (openapi spec + client types), Gawdat_Django_Template config/helpers/account_adapter.py (6-digit codes, skip-OTP-for-social) and allauth_adapter.py (headless user payload), PLAN.md Auth row.",
+        "Already decided (context): passwordless (no user passwords; staff keep Argon2), no JWT, no signals - adapters call services (signup hook = save_user; social adapter must trigger user_post_signup itself due to commit=False pass-through).",
+        "MOVED to end (user decision 2026-07-11): no longer gates G04 - implementation proceeds on PLAN defaults; this became a sign-off review of working code (easier to evaluate than docs)."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "factories-review",
+      "group": "G13",
+      "title": "USER REVIEW: factories topic (factory_boy + Faker)",
+      "endGoal": "Omar has investigated factory_boy (DjangoModelFactory, Sequence, django_get_or_create, skip_postgeneration_save, post_generation) and Faker providers against the implemented factories + registry, and signed off or requested changes (recorded here).",
+      "tips": [
+        "Review targets: apps/users/tests/factories.py (UserFactory draft), the registry in apps/common/tests/ (G07), seed_db over the registry, and the factory-coverage gate."
+      ],
       "status": "pending"
     }
   ]
