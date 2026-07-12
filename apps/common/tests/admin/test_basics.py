@@ -21,6 +21,7 @@ from import_export.admin import ExportMixin
 
 from apps.common.admin import AdminContext
 from apps.common.admin import BaseModelAdmin
+from apps.common.admin import expand_translation_shadows
 from apps.common.tests.admin.support import admin_for
 from apps.common.tests.admin.support import form_post_data
 from apps.common.tests.admin.support import is_local
@@ -219,6 +220,29 @@ def test_local_admins_use_the_framework(model: type[Model]) -> None:
     )
 
 
+@parametrize_local
+def test_list_editable_cannot_bypass_field_rules(model: type[Model]) -> None:
+    """Changelist bulk-editing ignores per-request field rules, so a ruled
+    field (or its translation shadow) must never be list_editable."""
+    model_admin = admin_for(model)
+    if not isinstance(model_admin, BaseModelAdmin):
+        pytest.skip("not a framework admin")
+    ruled = tuple(
+        set(model_admin.field_permissions.readonly_when)
+        | set(model_admin.field_permissions.hidden_when)
+    )
+    expanded = set(
+        expand_translation_shadows(
+            ruled, {field.name for field in model._meta.get_fields()}
+        )
+    )
+    overlap = expanded & set(model_admin.list_editable or ())
+    assert not overlap, (
+        f"{model._meta.label}: {sorted(overlap)} in list_editable would bypass "
+        "field_permissions on the changelist."
+    )
+
+
 def test_sidebar_permission_consistency(
     su_client: Client,
     staff_client: Client,
@@ -243,9 +267,22 @@ def test_sidebar_permission_consistency(
         )
 
 
-def test_hidden_fields_cannot_be_posted(su_client: Client, superuser: Any) -> None:
+def _field_value(obj: Model, field: str) -> Any:
+    value = getattr(obj, field)
+    if hasattr(value, "values_list"):  # M2M manager
+        return set(value.values_list("pk", flat=True))
+    return value
+
+
+def test_hidden_fields_cannot_be_posted(
+    su_client: Client,
+    superuser: Any,
+    priv_staff_client: Client,
+    priv_staff: Any,
+) -> None:
     """Tamper check (admin v2 review): a value POSTed for a hidden_when
-    field must never persist."""
+    field must never persist - proven for the superuser AND for a fully
+    permissioned non-superuser staff (the privilege-escalation case)."""
     targets = [
         (model, model_admin)
         for model in LOCAL_MODELS
@@ -254,15 +291,26 @@ def test_hidden_fields_cannot_be_posted(su_client: Client, superuser: Any) -> No
     ]
     if not targets:
         pytest.skip("no admin declares hidden_when rules yet")
+    tampered = 0
     for model, model_admin in targets:
-        obj = _first(model)
-        assert obj is not None
-        context = AdminContext(request=_request(superuser), obj=obj)
-        url = page_url(model, "change", quote(obj.pk))
-        data = form_post_data(su_client.get(url))
-        for field in model_admin.field_permissions.hidden_fields(context):
-            data[field] = "TAMPERED"
-        assert su_client.post(url, data | {"_continue": "1"}).status_code == 302
-        obj.refresh_from_db()
-        for field in model_admin.field_permissions.hidden_fields(context):
-            assert getattr(obj, field) != "TAMPERED", (model, field)
+        for client, user in ((su_client, superuser), (priv_staff_client, priv_staff)):
+            request = _request(user)
+            obj = model_admin.get_queryset(request).first()
+            if obj is None or not model_admin.has_change_permission(request, obj):
+                continue
+            hidden = model_admin.hidden_rule_fields(
+                AdminContext(request=request, obj=obj)
+            )
+            if not hidden:
+                continue
+            url = page_url(model, "change", quote(obj.pk))
+            before = {field: _field_value(obj, field) for field in hidden}
+            data = form_post_data(client.get(url))
+            for field in hidden:
+                data[field] = "TAMPERED"
+            assert client.post(url, data | {"_continue": "1"}).status_code == 302
+            obj.refresh_from_db()
+            for field in hidden:
+                assert _field_value(obj, field) == before[field], (model, field)
+            tampered += 1
+    assert tampered, "hidden_when rules exist but no tamper POST was exercised"

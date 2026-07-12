@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.db.models import QuerySet
+from django.http import HttpRequest
 
 from apps.common.admin import ExportableModelAdmin
 from apps.users.admin.user import change_view
@@ -25,3 +27,11 @@ class UserAdmin(ExportableModelAdmin):
     fieldsets = change_view.FIELDSETS
     readonly_fields = change_view.READONLY_FIELDS
     filter_horizontal = ("groups",)
+
+    def get_queryset(self, request: HttpRequest) -> QuerySet[User]:
+        """Superuser accounts are managed only by superusers - to everyone
+        else they don't exist (no change page, no changelist row)."""
+        queryset: QuerySet[User] = super().get_queryset(request)
+        if not getattr(request.user, "is_superuser", False):
+            queryset = queryset.filter(is_superuser=False)
+        return queryset

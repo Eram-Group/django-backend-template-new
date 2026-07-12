@@ -1,9 +1,28 @@
 from collections.abc import Callable
+from collections.abc import Collection
 from collections.abc import Mapping
+
+from django.conf import settings
 
 from apps.common.admin.context import AdminContext
 
 FieldRule = Callable[[AdminContext], bool]
+
+
+def expand_translation_shadows(
+    fields: tuple[str, ...], model_field_names: Collection[str]
+) -> tuple[str, ...]:
+    """modeltranslation shadow columns (``name`` -> ``name_ar``/``name_en``)
+    are separate model fields, so a rule keyed on the base field would leak
+    through them; every rule lookup expands to the shadows that exist."""
+    expanded: dict[str, None] = {}
+    for field in fields:
+        expanded.setdefault(field, None)
+        for code, _label in settings.LANGUAGES:
+            shadow = f"{field}_{code.replace('-', '_')}"
+            if shadow in model_field_names:
+                expanded.setdefault(shadow, None)
+    return tuple(expanded)
 
 
 def always(context: AdminContext) -> bool:

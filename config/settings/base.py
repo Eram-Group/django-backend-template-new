@@ -278,6 +278,9 @@ SECURE_CSP = {
 # --- Cross-origin (browser SPA clients) ----------------------------------------
 CORS_ALLOWED_ORIGINS = env.FRONTEND_ALLOWED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
+# Only the API surfaces are cross-origin; the admin (and anything else) must
+# never carry credentialed CORS headers for the frontend origins.
+CORS_URLS_REGEX = r"^/(api|_allauth)/"
 CSRF_TRUSTED_ORIGINS = env.FRONTEND_ALLOWED_ORIGINS
 CSRF_COOKIE_HTTPONLY = False  # deliberate: the SPA must read the CSRF cookie
 if env.COOKIE_DOMAIN:

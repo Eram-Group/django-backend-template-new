@@ -14,6 +14,7 @@ from unfold.contrib.import_export.forms import ExportForm
 
 from apps.common.admin.context import AdminContext
 from apps.common.admin.field_permissions import FieldPermissions
+from apps.common.admin.field_permissions import expand_translation_shadows
 
 _REQUIRED_FLAGS = ("can_add", "can_change", "can_delete")
 
@@ -67,6 +68,19 @@ class BaseModelAdmin(ModelAdmin):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
+        # Django's changelist formset reads self.list_editable directly and
+        # never consults per-request readonly/hidden rules, so a ruled field
+        # in list_editable would be bulk-editable from the changelist.
+        permissions = getattr(cls, "field_permissions", FieldPermissions())
+        ruled = set(permissions.readonly_when) | set(permissions.hidden_when)
+        bypassed = sorted(ruled & set(cls.list_editable or ()))
+        if bypassed:
+            msg = (
+                f"{cls.__name__}: {', '.join(bypassed)} cannot be in "
+                "list_editable - the changelist formset ignores "
+                "field_permissions rules."
+            )
+            raise ImproperlyConfigured(msg)
         if cls.__dict__.get("abstract_admin", False):
             return
         missing = [flag for flag in _REQUIRED_FLAGS if not hasattr(cls, flag)]
@@ -92,13 +106,26 @@ class BaseModelAdmin(ModelAdmin):
         return self.can_delete and bool(super().has_delete_permission(request, obj))
 
     # --- field-level rules ----------------------------------------------------
+    def readonly_rule_fields(self, context: AdminContext) -> tuple[str, ...]:
+        return expand_translation_shadows(
+            self.field_permissions.readonly_fields(context), self._model_field_names()
+        )
+
+    def hidden_rule_fields(self, context: AdminContext) -> tuple[str, ...]:
+        return expand_translation_shadows(
+            self.field_permissions.hidden_fields(context), self._model_field_names()
+        )
+
+    def _model_field_names(self) -> frozenset[str]:
+        return frozenset(field.name for field in self.model._meta.get_fields())
+
     def get_readonly_fields(
         self, request: HttpRequest, obj: Any | None = None
     ) -> tuple[str, ...]:
         context = AdminContext(request=request, obj=obj)
         # dict keys: ordered + deduplicated
         readonly = dict.fromkeys(super().get_readonly_fields(request, obj))
-        readonly.update(dict.fromkeys(self.field_permissions.readonly_fields(context)))
+        readonly.update(dict.fromkeys(self.readonly_rule_fields(context)))
         model_fields = {field.name for field in self.model._meta.fields}
         for timestamp in ("created_at", "updated_at"):
             if timestamp in model_fields:
@@ -115,9 +142,7 @@ class BaseModelAdmin(ModelAdmin):
         context = AdminContext(request=request, obj=obj)
         excluded = list(super().get_exclude(request, obj) or ())
         excluded += [
-            field
-            for field in self.field_permissions.hidden_fields(context)
-            if field not in excluded
+            field for field in self.hidden_rule_fields(context) if field not in excluded
         ]
         return excluded or None
 
@@ -134,14 +159,14 @@ class BaseModelAdmin(ModelAdmin):
             request, obj, change=change, **kwargs
         )
         context = AdminContext(request=request, obj=obj)
-        for name in self.field_permissions.hidden_fields(context):
+        for name in self.hidden_rule_fields(context):
             form.base_fields.pop(name, None)
         return form
 
     def get_fieldsets(self, request: HttpRequest, obj: Any | None = None) -> _Fieldsets:
         """Filter hidden fields out of declared fieldsets; drop emptied ones."""
         context = AdminContext(request=request, obj=obj)
-        hidden = set(self.field_permissions.hidden_fields(context))
+        hidden = set(self.hidden_rule_fields(context))
         if not hidden:
             return list(super().get_fieldsets(request, obj))
         filtered: _Fieldsets = []
@@ -161,7 +186,7 @@ class BaseModelAdmin(ModelAdmin):
 
     def get_list_display(self, request: HttpRequest) -> list[Any]:
         context = AdminContext(request=request, obj=None)
-        hidden = set(self.field_permissions.hidden_fields(context))
+        hidden = set(self.hidden_rule_fields(context))
         return [
             column
             for column in super().get_list_display(request)

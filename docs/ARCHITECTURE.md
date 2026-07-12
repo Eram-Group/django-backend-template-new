@@ -153,6 +153,14 @@ Conventions (see `apps/users/tasks/emails.py`):
   columns. The API stays single-field (`name: str`): reading `obj.name`
   returns the active language's value with fallback per
   `MODELTRANSLATION_FALLBACK_LANGUAGES`; the admin edits both columns.
+- **modeltranslation edges** (from production use of the pattern):
+  must-translate models set `required_languages = ("ar", "en")` in their
+  `TranslationOptions` (fallback-only models omit it); translated admins mix
+  unfold's `TabbedTranslationAdmin` AFTER `BaseModelAdmin` in the MRO; shadow
+  columns are created `null=True` and inherit `unique` from the base field;
+  fixtures/factories must set the suffixed fields. `FieldPermissions` rules
+  on a base field automatically govern its `_ar`/`_en` shadows — the admin
+  framework expands them (`expand_translation_shadows`).
 - **Emails/notifications** render in `user.language`, not a request header.
 - `.po` catalogs under `locale/`; `makemessages` / `compilemessages`
   (compile happens at image build once catalogs exist).

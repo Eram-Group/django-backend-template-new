@@ -24,3 +24,7 @@ class AdminContext:
     @property
     def user(self) -> AbstractBaseUser | AnonymousUser:
         return self.request.user
+
+    @property
+    def is_superuser(self) -> bool:
+        return bool(getattr(self.request.user, "is_superuser", False))

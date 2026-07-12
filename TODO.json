@@ -32,6 +32,12 @@
       "checkpoint": "All three verify tasks done; final commit marks the transformation complete."
     },
     {
+      "id": "G14",
+      "title": "Template enhancement sweep adoptions (approved plan 2026-07-12)",
+      "rationale": "24-agent exhaustive re-read of Gawdat_Django_Template (99 findings, adversarially verified) produced 40 approved adopt/adapt items in 8 work packages. Full plan: ~/.claude/plans/toasty-snuggling-gosling.md. Decisions recorded there: allauth errors stay native (documented), ruff adds A+PTH+PERF only, no reset-migrations, sidebar badges docs-only, branch-sync via ruleset docs, no sentry smoke route.",
+      "checkpoint": "Each WP task commits on its own with gates green (ruff, mypy, pytest+coverage, lint-imports); after wp8: pre-commit all-files + full pytest sweep, then done."
+    },
+    {
       "id": "G13",
       "title": "Deferred items + user reviews (deliberately last)",
       "rationale": "User decisions (2026-07-11): investigations, not-sure items, and social-login integration must NOT block the build - implementation proceeds on PLAN defaults; deferred/review work happens at the end. Review outcomes may change code: re-run affected group checkpoints and the G12 sweep afterwards.",
@@ -39,6 +45,55 @@
     }
   ],
   "tasks": [
+    {
+      "id": "wp2-admin-framework",
+      "group": "G14",
+      "title": "Admin framework completion: inline capabilities, read-only inlines, Group admin, unfold filters, selectable export, actions pattern, sections, scaffolder upgrades",
+      "endGoal": "Inlines enforce can_* + field_permissions via __init_subclass__ and gate walks get_inlines(); ReadOnly inline variants exported; Group re-registered on BaseModelAdmin + sidebar; RangeDateFilter live with gate guard; SelectableFieldsExportForm + EXPORT_FORMATS [CSV, XLSX]; actions_detail pattern documented + gate-covered; one TableSection on UserAdmin; generate_dashboard emits inline.py, unfold display examples, resource column_name examples, SEARCH_HELP_TEXT, per-field permission stubs.",
+      "status": "pending"
+    },
+    {
+      "id": "wp3-unfold-polish",
+      "group": "G14",
+      "title": "Unfold config polish: SHOW_LANGUAGES + i18n urls, modeltranslation flags, colors, environment badge",
+      "endGoal": "Admin shows ar/en switcher (set_language wired), environment badge + title prefix from typed env.ENVIRONMENT, branding COLORS/BORDER_RADIUS block; verified in Chrome.",
+      "status": "pending"
+    },
+    {
+      "id": "wp4-api-auth-polish",
+      "group": "G14",
+      "title": "API & auth polish: error codes, DELETE /users/me, signup language capture, subject prefix, local media, script validators",
+      "endGoal": "Envelope carries extra['code'] (default snake_case class name); user_deactivate service + 204 route purging UserSessions; user.language set from Accept-Language at signup (welcome email locale test); ACCOUNT_EMAIL_SUBJECT_PREFIX set; media served under DEBUG; apps/common/validators.py ar/en script validators documented.",
+      "status": "pending"
+    },
+    {
+      "id": "wp5-email-story",
+      "group": "G14",
+      "title": "Email story: templated HTML email helper + branded ar/en auth-code templates",
+      "endGoal": "email_send helper (multipart + translation.override) powers an HTML welcome email; templates/ dir with parameterized-brand base layout; allauth *_message.html overrides render codes styled with RTL ar; expiry from ACCOUNT_LOGIN_CODE_TIMEOUT; test asserts HTML alternative contains the code; verified in Mailpit.",
+      "status": "pending"
+    },
+    {
+      "id": "wp6-openapi-docs",
+      "group": "G14",
+      "title": "OpenAPI/consumer docs: allauth spec merge into Apidog, Accept-Language param + servers, docs/AUTH_API.md, PR-time schema check",
+      "endGoal": "Merged spec (ninja + allauth with operationIds + Authentication tags) produced by a script the apidog job runs; global Accept-Language param + servers entry; consumer auth guide committed; ci.yml generates the schema at PR time.",
+      "status": "pending"
+    },
+    {
+      "id": "wp7-ops-dx",
+      "group": "G14",
+      "title": "Ops & DX: migration guard workflow, createsu, git-pr.sh + just recipes, pre-commit hooks, ruff A+PTH+PERF, seed timer, seed_db + admin index tests",
+      "endGoal": "guard-migrations.yml blocks edits/deletes of committed migrations (label escape hatch); createsu command replaces justfile pipeline + runbook note; just pr/branch/update/outdated/messages recipes + shellcheck hook; check-case-conflict + check-builtin-literals hooks; ruff select += A,PTH,PERF (PLAN.md updated) with codebase clean; seed steps print query counts; test_seed_db + test_admin_index green.",
+      "status": "pending"
+    },
+    {
+      "id": "wp8-docs-blueprints",
+      "group": "G14",
+      "title": "Docs corrections + blueprint map: split soft-delete row, profile-gating design, auth error-shape record, deferred-table blueprint pointers",
+      "endGoal": "ARCHITECTURE.md: deferred table splits audit-history vs recoverable-delete and carries Gawdat_Django_Template blueprint paths per deferred item; multi-persona row documents ninja-native profile gating (middleware rejected); Auth section records the native-error-shape decision; PLAN.md deferred note updated to match.",
+      "status": "pending"
+    },
     {
       "id": "social-providers",
       "group": "G13",
