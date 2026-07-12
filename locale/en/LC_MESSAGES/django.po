@@ -1,0 +1,467 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-07-12 20:33+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+#: apps/common/validators.py:20
+msgid "Use Arabic text only - Latin letters are not allowed."
+msgstr ""
+
+#: apps/common/validators.py:27
+msgid "Use English text only - Arabic letters are not allowed."
+msgstr ""
+
+#: apps/notifications/admin/device/list_view.py:9
+msgid "Search by user email or registration token."
+msgstr ""
+
+#: apps/notifications/admin/notification/list_view.py:20
+msgid "Search by recipient email."
+msgstr ""
+
+#: apps/notifications/catalog.py:36 apps/users/tasks/emails.py:16
+msgid "Welcome!"
+msgstr ""
+
+#: apps/notifications/catalog.py:37
+#, python-brace-format
+msgid "Welcome aboard, {name}!"
+msgstr ""
+
+#: apps/notifications/catalog.py:42 apps/notifications/constants.py:11
+msgid "Announcement"
+msgstr ""
+
+#: apps/notifications/catalog.py:48 apps/notifications/constants.py:12
+msgid "Payment received"
+msgstr ""
+
+#: apps/notifications/catalog.py:49
+#, python-brace-format
+msgid "Your payment of {amount} {currency} was received."
+msgstr ""
+
+#: apps/notifications/catalog.py:54 apps/notifications/constants.py:13
+msgid "Wallet credited"
+msgstr ""
+
+#: apps/notifications/catalog.py:55
+#, python-brace-format
+msgid "{amount} {currency} was added to your wallet. New balance: {balance}."
+msgstr ""
+
+#: apps/notifications/constants.py:10
+msgid "Welcome"
+msgstr ""
+
+#: apps/notifications/constants.py:24
+msgid "Android"
+msgstr ""
+
+#: apps/notifications/constants.py:25
+msgid "iOS"
+msgstr ""
+
+#: apps/notifications/constants.py:26
+msgid "Web"
+msgstr ""
+
+#: apps/notifications/models/device.py:21 apps/payments/models/payment.py:30
+#: apps/payments/models/wallet.py:23
+msgid "user"
+msgstr ""
+
+#: apps/notifications/models/device.py:23
+msgid "registration id"
+msgstr ""
+
+#: apps/notifications/models/device.py:24
+msgid "platform"
+msgstr ""
+
+#: apps/notifications/models/device.py:27
+msgid "device"
+msgstr ""
+
+#: apps/notifications/models/device.py:28
+msgid "devices"
+msgstr ""
+
+#: apps/notifications/models/notification.py:21
+msgid "recipient"
+msgstr ""
+
+#: apps/notifications/models/notification.py:23
+#: apps/payments/models/payment.py:32
+#: apps/payments/models/wallet_transaction.py:23
+msgid "kind"
+msgstr ""
+
+#: apps/notifications/models/notification.py:24
+msgid "context"
+msgstr ""
+
+#: apps/notifications/models/notification.py:25
+msgid "read at"
+msgstr ""
+
+#: apps/notifications/models/notification.py:26
+msgid "push sent at"
+msgstr ""
+
+#: apps/notifications/models/notification.py:27
+msgid "SMS sent at"
+msgstr ""
+
+#: apps/notifications/models/notification.py:30
+msgid "notification"
+msgstr ""
+
+#: apps/notifications/models/notification.py:31
+msgid "notifications"
+msgstr ""
+
+#: apps/notifications/selectors/notifications.py:21
+msgid "Notification not found."
+msgstr ""
+
+#: apps/payments/admin/payment/admin.py:59 apps/payments/constants.py:34
+msgid "Refund"
+msgstr ""
+
+#: apps/payments/admin/payment/admin.py:71
+msgid "Payment refunded."
+msgstr ""
+
+#: apps/payments/admin/payment/list_view.py:16
+msgid "Search by user email or gateway charge/transaction id."
+msgstr ""
+
+#: apps/payments/admin/wallet/list_view.py:9
+msgid "Search by user email."
+msgstr ""
+
+#: apps/payments/admin/wallettransaction/list_view.py:13
+msgid "Search by wallet owner email."
+msgstr ""
+
+#: apps/payments/apis/webhooks.py:35
+msgid "Unknown payment gateway."
+msgstr ""
+
+#: apps/payments/apis/webhooks.py:41
+msgid "Webhook verification failed."
+msgstr ""
+
+#: apps/payments/constants.py:6
+msgid "Saudi riyal"
+msgstr ""
+
+#: apps/payments/constants.py:7
+msgid "Egyptian pound"
+msgstr ""
+
+#: apps/payments/constants.py:11
+msgid "Wallet top-up"
+msgstr ""
+
+#: apps/payments/constants.py:12
+msgid "Other"
+msgstr ""
+
+#: apps/payments/constants.py:16
+msgid "Pending"
+msgstr ""
+
+#: apps/payments/constants.py:17
+msgid "Paid"
+msgstr ""
+
+#: apps/payments/constants.py:18
+msgid "Failed"
+msgstr ""
+
+#: apps/payments/constants.py:19
+msgid "Refunded"
+msgstr ""
+
+#: apps/payments/constants.py:29
+msgid "Fake (local)"
+msgstr ""
+
+#: apps/payments/constants.py:33
+msgid "Top-up"
+msgstr ""
+
+#: apps/payments/constants.py:35
+msgid "Manual adjustment"
+msgstr ""
+
+#: apps/payments/constants.py:36
+msgid "Payment"
+msgstr ""
+
+#: apps/payments/models/payment.py:33
+msgid "description"
+msgstr ""
+
+#: apps/payments/models/payment.py:35
+#: apps/payments/models/wallet_transaction.py:24
+msgid "amount"
+msgstr ""
+
+#: apps/payments/models/payment.py:40 apps/payments/models/wallet.py:32
+msgid "currency"
+msgstr ""
+
+#: apps/payments/models/payment.py:42
+msgid "status"
+msgstr ""
+
+#: apps/payments/models/payment.py:47
+msgid "gateway"
+msgstr ""
+
+#: apps/payments/models/payment.py:52
+msgid "idempotency key"
+msgstr ""
+
+#: apps/payments/models/payment.py:56
+msgid "gateway charge id"
+msgstr ""
+
+#: apps/payments/models/payment.py:61
+msgid "gateway transaction id"
+msgstr ""
+
+#: apps/payments/models/payment.py:63
+msgid "checkout URL"
+msgstr ""
+
+#: apps/payments/models/payment.py:65
+msgid "gateway response"
+msgstr ""
+
+#: apps/payments/models/payment.py:68
+msgid "gateway callback"
+msgstr ""
+
+#: apps/payments/models/payment.py:70
+msgid "paid at"
+msgstr ""
+
+#: apps/payments/models/payment.py:73
+#: apps/payments/models/wallet_transaction.py:32
+msgid "payment"
+msgstr ""
+
+#: apps/payments/models/payment.py:74
+msgid "payments"
+msgstr ""
+
+#: apps/payments/models/wallet.py:26
+msgid "balance"
+msgstr ""
+
+#: apps/payments/models/wallet.py:35
+#: apps/payments/models/wallet_transaction.py:21
+msgid "wallet"
+msgstr ""
+
+#: apps/payments/models/wallet.py:36
+msgid "wallets"
+msgstr ""
+
+#: apps/payments/models/wallet_transaction.py:26
+msgid "balance after"
+msgstr ""
+
+#: apps/payments/models/wallet_transaction.py:40
+msgid "actor"
+msgstr ""
+
+#: apps/payments/models/wallet_transaction.py:44
+msgid "note"
+msgstr ""
+
+#: apps/payments/models/wallet_transaction.py:47
+msgid "wallet transaction"
+msgstr ""
+
+#: apps/payments/models/wallet_transaction.py:48
+msgid "wallet transactions"
+msgstr ""
+
+#: apps/payments/selectors/payments.py:21
+#: apps/payments/services/payments.py:110
+msgid "Payment not found."
+msgstr ""
+
+#: apps/payments/services/payments.py:85 apps/payments/services/payments.py:182
+#: apps/payments/services/payments.py:216
+msgid "The payment provider is unavailable. Try again shortly."
+msgstr ""
+
+#: apps/payments/services/payments.py:174
+#: apps/payments/services/payments.py:207
+msgid "Payment gateway is not configured."
+msgstr ""
+
+#: apps/payments/services/payments.py:204
+msgid "Only paid payments can be refunded."
+msgstr ""
+
+#: apps/payments/services/payments.py:219
+msgid "The gateway rejected the refund."
+msgstr ""
+
+#: apps/payments/services/wallets.py:46
+msgid "Insufficient wallet balance."
+msgstr ""
+
+#: apps/users/admin/group.py:26
+msgid "Search by group name."
+msgstr ""
+
+#: apps/users/admin/user/list_view.py:16
+msgid "Search by email, full name, or phone number."
+msgstr ""
+
+#: apps/users/admin/user/sections.py:12
+msgid "Recent sessions"
+msgstr ""
+
+#: apps/users/constants.py:6 config/settings/base.py:184
+msgid "Arabic"
+msgstr ""
+
+#: apps/users/constants.py:7 config/settings/base.py:185
+msgid "English"
+msgstr ""
+
+#: apps/users/models/user.py:73
+msgid "email address"
+msgstr ""
+
+#: apps/users/models/user.py:74
+msgid "name"
+msgstr ""
+
+#: apps/users/models/user.py:78
+msgid "phone number"
+msgstr ""
+
+#: apps/users/models/user.py:80
+msgid "language"
+msgstr ""
+
+#: config/settings/base.py:272 config/settings/base.py:275
+msgid "Users"
+msgstr ""
+
+#: config/settings/base.py:283
+msgid "Email addresses"
+msgstr ""
+
+#: config/settings/base.py:291
+msgid "Sessions"
+msgstr ""
+
+#: config/settings/base.py:301
+msgid "Groups"
+msgstr ""
+
+#: config/settings/base.py:311 config/settings/base.py:314
+msgid "Notifications"
+msgstr ""
+
+#: config/settings/base.py:324
+msgid "Devices"
+msgstr ""
+
+#: config/settings/base.py:334 config/settings/base.py:337
+msgid "Payments"
+msgstr ""
+
+#: config/settings/base.py:345
+msgid "Wallets"
+msgstr ""
+
+#: config/settings/base.py:353
+msgid "Wallet transactions"
+msgstr ""
+
+#: config/settings/base.py:365
+msgid "Operations"
+msgstr ""
+
+#: config/settings/base.py:368
+msgid "Task results"
+msgstr ""
+
+#: config/settings/base.py:378
+msgid "Login attempts"
+msgstr ""
+
+#: templates/account/email/email_confirmation_message.html:4
+#: templates/account/email/email_confirmation_message.html:7
+msgid "Confirm your email address"
+msgstr ""
+
+#: templates/account/email/email_confirmation_message.html:9
+msgid "Enter this code to verify your email address:"
+msgstr ""
+
+#: templates/account/email/email_confirmation_message.html:12
+msgid "Use the button below to confirm your email address."
+msgstr ""
+
+#: templates/account/email/email_confirmation_message.html:14
+msgid "Confirm email"
+msgstr ""
+
+#: templates/account/email/email_confirmation_message.html:17
+#: templates/account/email/login_code_message.html:13
+msgid "This mail can be safely ignored if you did not initiate this action."
+msgstr ""
+
+#: templates/account/email/login_code_message.html:4
+#: templates/account/email/login_code_message.html:7
+msgid "Your sign-in code"
+msgstr ""
+
+#: templates/account/email/login_code_message.html:8
+msgid "Enter this code to continue signing in:"
+msgstr ""
+
+#: templates/account/email/login_code_message.html:11
+#, python-format
+msgid "This code expires in %(minutes)s minutes."
+msgstr ""
+
+#: templates/emails/welcome.html:4
+msgid "Welcome aboard!"
+msgstr ""
+
+#: templates/emails/welcome.html:7
+#, python-format
+msgid "Welcome aboard, %(name)s!"
+msgstr ""
+
+#: templates/emails/welcome.html:8
+msgid "Your account is ready. We're glad to have you with us."
+msgstr ""

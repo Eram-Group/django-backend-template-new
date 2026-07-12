@@ -2,8 +2,10 @@
 
 API-only Django backend: [django-ninja](https://django-ninja.dev) REST API +
 Django admin (unfold), passwordless auth (allauth headless, 6-digit email
-codes), Postgres-only infrastructure (cache, sessions, task queue), one
-Docker image deployed as two ECS services. Arabic-first (ar/en).
+codes), notifications (in-app inbox + FCM push + SMS), payments (Tap/Paymob
+gateways + wallet ledger), Postgres-only infrastructure (cache, sessions,
+task queue), one Docker image deployed as two ECS services. Arabic-first
+(ar/en).
 
 How the code is organized: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md);
 how clients authenticate: [docs/AUTH_API.md](docs/AUTH_API.md). The
@@ -101,6 +103,24 @@ Django 6 native `django.tasks` with the Postgres-backed queue — no broker.
 - Results are rows: prune with `manage.py prune_db_task_results
   --min-age-days 14` (scheduled below).
 
+## Outbound integrations (SMS, push, payments)
+
+Every external transport follows the email pattern: **real only when
+deployed, observable fakes locally, in-memory in tests** (details:
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) "Outbound clients").
+
+- **SMS** (OurSMS for SA numbers, SMSMisr for EG) and **push** (FCM) log to
+  the console locally — trigger any notification and watch the
+  `sms_console_send` / `push_console_send` structlog lines. Deployed, the
+  real providers activate only when their env creds are set.
+- **Payments** use a fake gateway locally: `POST /api/v1/payments/` returns
+  a fake checkout URL, then
+  `manage.py simulate_payment_webhook <payment-pk> [--fail]` delivers the
+  gateway event — the payment flips to paid, the wallet is credited, and
+  the notification fans out, exactly like production.
+- All provider credentials are optional `X | None` env fields (see
+  `.env.example`): absent = that provider is simply not configured.
+
 ## Configuration
 
 `config/env.py` is the only reader of `os.environ` — typed, and **every field
@@ -197,3 +217,12 @@ Migrations are append-only, enforced by `guard-migrations.yml`
   `SECRET_KEY_FALLBACKS`, drop it after sessions expire.
 - The admin lives at `ADMIN_URL` — randomize it outside local, and consider
   `SECURE_ADMIN_LOGIN=true` (email-code admin login).
+- Provider provisioning: **FCM** — create a Firebase service account, then
+  `base64 -i service-account.json` into `FIREBASE_CREDENTIALS_B64`.
+  **Tap** — dashboard secret key into `TAP_SECRET_KEY`; register the webhook
+  URL `…/api/v1/payments/webhooks/tap`. **Paymob** — secret/public keys +
+  the dashboard HMAC secret + checkout integration ids
+  (`PAYMOB_INTEGRATION_IDS`, comma-separated); webhook
+  `…/api/v1/payments/webhooks/paymob`. **SMS** — OurSMS API key + sender
+  name; SMSMisr username/password/sender (live mode activates only when
+  `ENVIRONMENT=production`).

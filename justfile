@@ -97,8 +97,8 @@ bash *args:
 # Extract + compile ar/en translation catalogs (compile = local verification
 # only; images compile at build once .po files exist).
 messages:
-    uv run manage.py makemessages -l ar -l en --ignore .venv --ignore staticfiles
-    uv run manage.py compilemessages --ignore .venv
+    uv run manage.py makemessages -l ar -l en --ignore .venv --ignore staticfiles --ignore Gawdat_Django_Template --ignore sample_project
+    uv run manage.py compilemessages --ignore .venv --ignore Gawdat_Django_Template --ignore sample_project
 
 # Push the current branch (or move stray commits off main) and open a PR.
 pr *flags:

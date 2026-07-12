@@ -21,7 +21,8 @@ one envelope (below).
 
 ## App layout and layering
 
-Every domain app (`apps/users` is the reference, `apps/example` the template)
+Every domain app (`apps/users` is the reference, `apps/notifications` and
+`apps/payments` the built-out examples, `apps/example` the copy-me template)
 is a set of packages, one module per entity inside each:
 
 ```
@@ -148,6 +149,78 @@ Conventions (see `apps/users/tasks/emails.py`):
   `prune_db_task_results --min-age-days 14`, plus app commands modeled on
   `sample_scheduled_job` (thin wrappers over services, safe to re-run).
 
+## Outbound clients (HTTP kernel, SMS, push, payments)
+
+Every call to an external service goes through **one kernel**,
+`apps/common/http.py::request_json` — explicit `httpx.Timeout(10, connect=5)`,
+a typed retry policy (stamina, 3 attempts, jittered backoff), structured
+logs (`outbound_request_ok/failed`; request bodies never logged), and an
+error taxonomy (`OutboundTransportError` / `OutboundStatusError`, body
+truncated). Retry policies are chosen per call semantics:
+
+| Policy | Retries | Use for |
+|---|---|---|
+| `transient` | transport errors + 429/5xx | idempotent-enough calls: SMS sends, status GETs (duplicate beats dropped) |
+| `connect-only` | only errors raised before the request hit the wire | non-idempotent POSTs: payment charge/refund creation |
+| `none` | nothing | everything else |
+
+A 2xx with an error body is the **caller's** job: each provider module owns
+an allowlist success predicate (OurSMS accepted/rejected counts, SMSMisr
+`code == "1901"`) — unknown shapes fail loudly, never pass silently.
+
+**Transport selection = the `EMAIL_BACKEND` pattern** (settings string,
+resolved per call): `SMS_BACKEND` / `PUSH_BACKEND` / `PAYMENT_GATEWAYS`
+(currency → gateway class). Base + local = console/fake (structlog lines,
+fake checkout URLs); `production.py` swaps in the real transports only when
+`_DEPLOYED`; `test.py` = locmem outboxes
+(`apps/notifications/clients/*/backends.py::outbox` — the `mail.outbox`
+analogue), so tests can never touch provider HTTP even with real creds in
+`.env`. Provider clients live in leaf packages
+(`apps/notifications/clients/`, `apps/payments/gateways/`) — unconstrained
+by the layer contract, called from services/tasks.
+
+Per-area notes:
+
+- **SMS** (OurSMS SA / SMSMisr EG): `RoutingSmsBackend` picks the provider
+  from the number's country (`PROVIDER_REGISTRY`); SMSMisr's `language` is
+  chosen per message body (Arabic codepoints → "2") and its live/test
+  `environment` comes from `ENVIRONMENT`. Adding a provider = one module
+  implementing `SmsBackend` + one registry entry.
+- **Push** (FCM via firebase-admin, HTTP v1): NOT fcm-django (hard DRF
+  dependency). Own `Device` model + `messaging.send_each` in 500-token
+  chunks; tokens Firebase reports unregistered come back in
+  `PushReport.invalid_tokens` and the delivery task deletes those rows.
+  Firebase init is lazy from `FIREBASE_CREDENTIALS_B64` (base64
+  service-account JSON). firebase-admin transports its own HTTP.
+- **Notifications**: per-recipient inbox rows store `(kind, context)`;
+  copy lives in the typed catalog (`apps/notifications/catalog.py`,
+  gettext) and renders at send/read time in the viewer's locale — never
+  stored pre-rendered. Delivery = `on_commit` tasks with `*_sent_at`
+  idempotency markers; a kind's channels are declared on its catalog entry
+  (`test_catalog` keeps `NotificationKind` ↔ `CATALOG` in lockstep).
+- **Payments** (Tap SAR / Paymob EGP): gateway Protocol + frozen DTOs in
+  `apps/payments/gateways/`. Money is Decimal end-to-end; the wire uses
+  integer minor units (`to_minor_units`). Charge creation plants
+  `Payment.idempotency_key` at the gateway (Tap `reference.transaction`,
+  Paymob `special_reference`) — webhooks echo it back and
+  `payment_apply_gateway_event` finds the row by it, under
+  `select_for_update`, never overwriting terminal statuses (replays ack
+  with 200 and cannot re-credit). Webhooks REALLY verify: Tap `hashstring`
+  HMAC-SHA256, Paymob `hmac` HMAC-SHA512 over its 20 documented fields,
+  constant-time compares. The webhook route
+  (`/api/v1/payments/webhooks/{gateway}`) is the API's one deliberate
+  `auth=None` surface — signature IS the authentication. Wallet balance
+  moves only through `wallet_apply` (Wallet row lock + append-only
+  `WalletTransaction` ledger with `balance_after`). Local flow:
+  `manage.py simulate_payment_webhook <pk> [--fail]` drives the same
+  transition service (Mailpit's role, for payments).
+
+**Cross-app decisions on record** (independence contract `ignore_imports`
+in `pyproject.toml`): notifications → users (rows belong to a User;
+delivery reads `user.phone`/`user.language`) and payments → users +
+payments → notifications (paid events call `notification_send`). Both are
+one-way; nothing imports payments.
+
 ## i18n and translated content
 
 - Site default Arabic (`LANGUAGE_CODE = "ar"`, `LANGUAGES = ar/en`), UTC
@@ -253,8 +326,6 @@ signals, services, strict mypy).
 | Multi-persona users | one `User` + OneToOne profile models (Customer/Provider). Gate incomplete profiles at the API layer: `is_profile_completed` computed in a selector and exposed on the persona Detail schema, plus a ninja auth class raising an ApplicationError whose envelope carries `action_required: "complete_profile"`. Never path-prefix middleware — exempt lists rot and it bypasses the envelope (the template's own middleware shipped stale and unwired). | `apps/users/` customer/provider models, selectors, setup flows + `tests/test_customer_signup_flow.py` |
 | Admin dashboards (index KPIs/charts) | unfold insights components on the index (`DASHBOARD_CALLBACK`) + per-changelist KPI cards | `common/insights/`, `assets/templates/admin/` (index + components), `assets/templates/admin/payment/*/change_list.html` |
 | Social login (G13) | settings-based `SOCIALACCOUNT_PROVIDERS` from env creds; social adapter calls `user_post_signup` | `config/settings/base.py` SOCIALACCOUNT block, `config/helpers/allauth_adapter.py` (headless `serialize_user` enrichment) |
-| Notifications (in-app inbox + push/SMS fan-out) | dedicated app: Notification model, per-user language delivery, FCM device lifecycle, SMS provider factory, bilingual message catalog — port signal-free (services call services) | `apps/channel/` (message catalog: `template_message.py`; SMS ABC+factory: `domain/utilities/sms_helpers/`; FCM: `domain/services/device.py`) |
-| Payments (gateway + wallet) | gateway adapter/factory behind a service; append-only wallet transaction ledger (fix the read-modify-write balance race with `select_for_update`/`F()`); authenticated idempotent callback endpoint | `apps/payment/domain/` (paymob/tap `Integrations` + `adapters` + `factory`), `models/wallet_transaction.py` |
 | Mobile content app (FAQ/banners/onboarding/contact) | content models with per-app `translation.py` + curated fixtures loaded by a `loadfixtures` command (+ fixtures-loading test) | `apps/appInfo/`, `assets/fixtures/`, `common/management/commands/loadfixtures.py`, `tests/test_fixtures_loading.py` |
 | Runtime-editable operational settings | django-constance with unfold widgets; singleton settings/legal-content models via django-solo | `config/integrations/unfold.py` constance block, `apps/appInfo/models/app_info.py` |
 | Country reference data | code-only Country model + library-derived metadata (dial codes, flags); customer address book with primary-address invariants | `apps/location/models/country.py`, `domain/utils/country_info.py`, `models/address.py` |
