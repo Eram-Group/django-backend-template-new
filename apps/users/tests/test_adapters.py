@@ -2,6 +2,7 @@ from typing import Any
 
 import pytest
 from django.core import mail
+from django.core.mail import EmailMultiAlternatives
 from django.test import Client
 
 from apps.users.adapters import AccountAdapter
@@ -31,6 +32,31 @@ def test_signup_kill_switch(client: Client, monkeypatch: pytest.MonkeyPatch) -> 
 
     assert response.status_code == 403
     assert not User.objects.filter(email="blocked@example.com").exists()
+
+
+def test_login_code_email_is_branded_html_with_real_expiry(client: Client) -> None:
+    """The OTP email (the product's first touchpoint) must be branded HTML;
+    the expiry line renders from ACCOUNT_LOGIN_BY_CODE_TIMEOUT, never
+    hardcoded copy (drift bug observed in the reference template)."""
+    import re
+
+    client.post(
+        "/_allauth/app/v1/auth/signup",
+        {"email": "html.code@example.com"},
+        content_type="application/json",
+    )
+
+    message = mail.outbox[-1]
+    assert message.subject.startswith("[Backend] ")
+    code_match = re.search(r"\b(\d{6})\b", str(message.body))
+    assert code_match, message.body
+    assert isinstance(message, EmailMultiAlternatives)
+    assert message.alternatives, "code email must carry an HTML alternative"
+    html_body = str(message.alternatives[0][0])
+    assert code_match.group(1) in html_body
+    # 180s default -> "3 minutes"; the number comes from the setting.
+    assert "3" in html_body
+    assert "minute" in html_body
 
 
 def test_signup_captures_language_and_welcome_email_uses_it(

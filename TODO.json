@@ -46,13 +46,6 @@
   ],
   "tasks": [
     {
-      "id": "wp5-email-story",
-      "group": "G14",
-      "title": "Email story: templated HTML email helper + branded ar/en auth-code templates",
-      "endGoal": "email_send helper (multipart + translation.override) powers an HTML welcome email; templates/ dir with parameterized-brand base layout; allauth *_message.html overrides render codes styled with RTL ar; expiry from ACCOUNT_LOGIN_CODE_TIMEOUT; test asserts HTML alternative contains the code; verified in Mailpit.",
-      "status": "pending"
-    },
-    {
       "id": "wp6-openapi-docs",
       "group": "G14",
       "title": "OpenAPI/consumer docs: allauth spec merge into Apidog, Accept-Language param + servers, docs/AUTH_API.md, PR-time schema check",

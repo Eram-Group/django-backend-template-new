@@ -1,0 +1,9 @@
+{% extends "emails/base.html" %}
+{% load i18n %}
+
+{% block preheader %}{% translate "Welcome aboard!" %}{% endblock %}
+
+{% block content %}
+  <h1 style="margin:0 0 16px; font-size:20px; color:#0f172a;">{% blocktranslate %}Welcome aboard, {{ name }}!{% endblocktranslate %}</h1>
+  <p style="margin:0;">{% translate "Your account is ready. We're glad to have you with us." %}</p>
+{% endblock content %}

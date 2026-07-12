@@ -11,6 +11,7 @@ uses allauth's method-list semantics in settings (verified in 65.18 source).
 
 from typing import Any
 
+from allauth.account import app_settings as account_settings
 from allauth.account.adapter import DefaultAccountAdapter
 from django.http import HttpRequest
 from django.utils.crypto import get_random_string
@@ -36,6 +37,16 @@ class AccountAdapter(DefaultAccountAdapter):
     def generate_email_verification_code(self) -> str:
         """6-digit numeric email verification codes."""
         return get_random_string(length=CODE_LENGTH, allowed_chars=CODE_ALPHABET)
+
+    def send_mail(self, template_prefix: str, email: str, context: Any) -> None:
+        """The login-code template renders its expiry from the real setting -
+        hardcoded copy drifts (learned from the reference template)."""
+        if template_prefix == "account/email/login_code":
+            context = {
+                **context,
+                "code_ttl_minutes": account_settings.LOGIN_BY_CODE_TIMEOUT // 60,
+            }
+        super().send_mail(template_prefix, email, context)
 
     def save_user(
         self,

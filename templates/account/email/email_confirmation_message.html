@@ -1,0 +1,18 @@
+{% extends "emails/base.html" %}
+{% load i18n %}
+
+{% block preheader %}{% translate "Confirm your email address" %}{% endblock %}
+
+{% block content %}
+  <h1 style="margin:0 0 16px; font-size:20px; color:#0f172a;">{% translate "Confirm your email address" %}</h1>
+  {% if code %}
+    <p style="margin:0 0 24px;">{% translate "Enter this code to verify your email address:" %}</p>
+    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:18px; text-align:center; font-size:32px; font-weight:700; letter-spacing:8px; color:#166534;" dir="ltr">{{ code }}</div>
+  {% else %}
+    <p style="margin:0 0 24px;">{% translate "Use the button below to confirm your email address." %}</p>
+    <p style="margin:0 0 24px; text-align:center;">
+      <a href="{{ activate_url }}" style="display:inline-block; background:#16a34a; color:#ffffff; text-decoration:none; padding:12px 28px; border-radius:8px; font-weight:700;">{% translate "Confirm email" %}</a>
+    </p>
+  {% endif %}
+  <p style="margin:24px 0 0; color:#94a3b8; font-size:13px;">{% translate "This mail can be safely ignored if you did not initiate this action." %}</p>
+{% endblock content %}
