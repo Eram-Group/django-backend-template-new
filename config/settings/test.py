@@ -14,6 +14,11 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 # In-memory email and cache: createcachetable never runs in test databases,
 # so the DatabaseCache default would fail on first hit.
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+
+# In-memory SMS/push outboxes (the mail.outbox analogue) - tests never touch
+# provider HTTP even when real creds sit in a developer's .env.
+SMS_BACKEND = "apps.notifications.clients.sms.backends.LocmemSmsBackend"
+PUSH_BACKEND = "apps.notifications.clients.push.backends.LocmemPushBackend"
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",

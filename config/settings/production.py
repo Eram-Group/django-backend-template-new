@@ -75,6 +75,13 @@ if _DEPLOYED:
         "AMAZON_SES_CLIENT_PARAMS": {"region_name": env.AWS_SES_REGION},
     }
 
+# --- SMS + push: real transports only when deployed (console otherwise) ---------
+if _DEPLOYED:
+    SMS_BACKEND = "apps.notifications.clients.sms.routing.RoutingSmsBackend"
+    PUSH_BACKEND = "apps.notifications.clients.push.fcm.FcmPushBackend"
+    # SMSMisr live mode only in production - dev traffic stays on its test API.
+    SMSMISR_LIVE = env.ENVIRONMENT == "production"
+
 # --- Sentry ------------------------------------------------------------------------
 if env.SENTRY_DSN:
     sentry_sdk.init(

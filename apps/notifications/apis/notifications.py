@@ -1,0 +1,51 @@
+"""Inbox endpoints."""
+
+import uuid
+
+from django.db.models import QuerySet
+from django.http import HttpRequest
+from ninja import Router
+from ninja.pagination import paginate
+
+from apps.common.pagination import CursorPagination
+from apps.notifications import selectors
+from apps.notifications import services
+from apps.notifications.models import Notification
+from apps.notifications.schemas import NotificationSummary
+from apps.notifications.schemas import ReadAllOut
+from apps.notifications.schemas import UnreadCountOut
+from apps.users.models import User
+
+
+class AuthedRequest(HttpRequest):
+    """Typing-only: ninja sets request.auth to the authenticated User."""
+
+    auth: User
+
+
+router = Router(tags=["notifications"])
+
+
+@router.get("", response=list[NotificationSummary], summary="My notifications")
+@paginate(CursorPagination)
+def notification_list(request: AuthedRequest) -> QuerySet[Notification]:
+    return selectors.notification_list(user=request.auth)
+
+
+@router.get("/unread-count", response=UnreadCountOut, summary="Unread count")
+def notification_unread_count(request: AuthedRequest) -> dict[str, int]:
+    return {"unread": selectors.notification_unread_count(user=request.auth)}
+
+
+@router.post("/read-all", response=ReadAllOut, summary="Mark all read")
+def notification_read_all(request: AuthedRequest) -> dict[str, int]:
+    return {"updated": services.notification_mark_all_read(user=request.auth)}
+
+
+@router.post(
+    "/{notification_id}/read", response=NotificationSummary, summary="Mark one read"
+)
+def notification_read(
+    request: AuthedRequest, notification_id: uuid.UUID
+) -> Notification:
+    return services.notification_mark_read(user=request.auth, pk=notification_id)

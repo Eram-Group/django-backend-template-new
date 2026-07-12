@@ -90,6 +90,15 @@ class Env(BaseSettings):
     SENTRY_RELEASE: str | None = None  # git sha, injected by CD at render time
     SENTRY_TRACES_SAMPLE_RATE: float
 
+    # Notifications: FCM push + SMS providers (absent creds = not configured;
+    # local/test use console/locmem backends regardless)
+    FIREBASE_CREDENTIALS_B64: SecretStr | None = None  # base64 service-account JSON
+    OURSMS_API_KEY: SecretStr | None = None
+    OURSMS_SENDER: str | None = None
+    SMSMISR_USERNAME: str | None = None
+    SMSMISR_PASSWORD: SecretStr | None = None
+    SMSMISR_SENDER: str | None = None
+
     @field_validator(
         "SECRET_KEY_FALLBACKS",
         "ALLOWED_HOSTS",
