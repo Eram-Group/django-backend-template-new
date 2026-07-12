@@ -63,7 +63,7 @@ def test_user_post_signup_sends_nothing_before_commit() -> None:
 
 
 def test_updatable_fields_are_a_safe_allowlist() -> None:
-    assert {"name", "language"} == USER_UPDATABLE_FIELDS
+    assert {"name", "phone", "language"} == USER_UPDATABLE_FIELDS
     forbidden = {"email", "is_staff", "is_superuser", "password"}
     assert not (USER_UPDATABLE_FIELDS & forbidden)
 

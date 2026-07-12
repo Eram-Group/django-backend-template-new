@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     "allauth.headless",
     "allauth.usersessions",
     "import_export",
+    "phonenumber_field",
     "django_tasks_db",
     "django_structlog",
     "django_guid",

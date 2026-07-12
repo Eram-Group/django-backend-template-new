@@ -7,7 +7,7 @@ from apps.users.models import User
 from apps.users.tasks import send_welcome_email
 
 # Fields a user may change about themselves (PATCH /users/me).
-USER_UPDATABLE_FIELDS = frozenset({"name", "language"})
+USER_UPDATABLE_FIELDS = frozenset({"name", "phone", "language"})
 
 
 def user_update(*, user: User, data: dict[str, Any]) -> User:

@@ -5,6 +5,7 @@ from django.contrib.auth.models import AbstractUser
 from django.contrib.auth.models import UserManager as DjangoUserManager
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from phonenumber_field.modelfields import PhoneNumberField
 
 from apps.common.models import BaseModel
 from apps.users.constants import Language
@@ -71,6 +72,10 @@ class User(BaseModel, AbstractUser):
 
     email = models.EmailField(_("email address"), unique=True)
     name = models.CharField(_("name"), max_length=255, blank=True)
+    # Optional and NOT unique - email is the login identity. Stored E164 with
+    # no default region: clients submit the country code (+966... / +20...).
+    # SMS delivery skips phone-less users; payments send it when present.
+    phone = PhoneNumberField(_("phone number"), blank=True)
     language = models.CharField(
         _("language"),
         max_length=2,

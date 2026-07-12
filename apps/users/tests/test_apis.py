@@ -71,6 +71,31 @@ def test_me_patch_invalid_language_returns_422_envelope(client: Client) -> None:
     assert all(isinstance(messages, list) for messages in fields.values())
 
 
+def test_me_patch_sets_phone_and_detail_echoes_it(client: Client) -> None:
+    user = UserFactory.create()
+    client.force_login(user)
+
+    response = client.patch(
+        ME, {"phone": "+966501234567"}, content_type="application/json"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["phone"] == "+966501234567"
+    user.refresh_from_db()
+    assert str(user.phone) == "+966501234567"
+
+
+def test_me_patch_invalid_phone_returns_400_envelope(client: Client) -> None:
+    user = UserFactory.create()
+    client.force_login(user)
+
+    # No country code -> not parseable (no default region is configured).
+    response = client.patch(ME, {"phone": "12345"}, content_type="application/json")
+
+    assert response.status_code == 400
+    assert "phone" in response.json()["extra"]["fields"]
+
+
 def test_me_patch_cannot_touch_protected_fields(client: Client) -> None:
     user = UserFactory.create()
     client.force_login(user)

@@ -12,7 +12,7 @@ LIST_FILTER = (
 )
 # Range filters are form-based: compose several filters, apply in one submit.
 LIST_FILTER_SUBMIT = True
-SEARCH_FIELDS = ("email", "name")
-SEARCH_HELP_TEXT = _("Search by email or full name.")
+SEARCH_FIELDS = ("email", "name", "phone")
+SEARCH_HELP_TEXT = _("Search by email, full name, or phone number.")
 ORDERING = ("-created_at",)
 LIST_PER_PAGE = 50

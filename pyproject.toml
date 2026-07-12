@@ -115,7 +115,7 @@ overrides = [
   # Django migrations should not produce any errors:
   { module = "*.migrations.*", ignore_errors = true },
   # Third-party packages without type stubs / py.typed:
-  { module = [ "allauth.*", "health_check.*", "django_ratelimit.*", "unfold.*", "import_export.*" ], ignore_missing_imports = true },
+  { module = [ "allauth.*", "health_check.*", "django_ratelimit.*", "unfold.*", "import_export.*", "phonenumber_field.*" ], ignore_missing_imports = true },
   # The framework wraps unfold/import-export (untyped) once; per-entity
   # admins subclass OUR typed classes and need no exemption:
   { module = "apps.common.admin.*", disallow_subclassing_any = false },
