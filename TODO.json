@@ -46,13 +46,6 @@
   ],
   "tasks": [
     {
-      "id": "wp2-admin-framework",
-      "group": "G14",
-      "title": "Admin framework completion: inline capabilities, read-only inlines, Group admin, unfold filters, selectable export, actions pattern, sections, scaffolder upgrades",
-      "endGoal": "Inlines enforce can_* + field_permissions via __init_subclass__ and gate walks get_inlines(); ReadOnly inline variants exported; Group re-registered on BaseModelAdmin + sidebar; RangeDateFilter live with gate guard; SelectableFieldsExportForm + EXPORT_FORMATS [CSV, XLSX]; actions_detail pattern documented + gate-covered; one TableSection on UserAdmin; generate_dashboard emits inline.py, unfold display examples, resource column_name examples, SEARCH_HELP_TEXT, per-field permission stubs.",
-      "status": "pending"
-    },
-    {
       "id": "wp3-unfold-polish",
       "group": "G14",
       "title": "Unfold config polish: SHOW_LANGUAGES + i18n urls, modeltranslation flags, colors, environment badge",

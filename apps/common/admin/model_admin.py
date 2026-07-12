@@ -10,18 +10,18 @@ from django.forms import ModelForm
 from django.http import HttpRequest
 from import_export.admin import ExportActionModelAdmin
 from unfold.admin import ModelAdmin
-from unfold.contrib.import_export.forms import ExportForm
+from unfold.contrib.import_export.forms import SelectableFieldsExportForm
 
 from apps.common.admin.context import AdminContext
 from apps.common.admin.field_permissions import FieldPermissions
-from apps.common.admin.field_permissions import expand_translation_shadows
+from apps.common.admin.field_permissions import FieldRuleLookups
+from apps.common.admin.field_permissions import Fieldsets
+from apps.common.admin.field_permissions import drop_hidden_from_fieldsets
 
 _REQUIRED_FLAGS = ("can_add", "can_change", "can_delete")
 
-_Fieldsets = list[tuple[str | None, dict[str, Any]]]
 
-
-class BaseModelAdmin(ModelAdmin):
+class BaseModelAdmin(FieldRuleLookups, ModelAdmin):
     """unfold ModelAdmin that forces every admin to state its capabilities.
 
     - can_add / can_change / can_delete MUST be declared on the class or an
@@ -40,7 +40,6 @@ class BaseModelAdmin(ModelAdmin):
     can_add: ClassVar[bool]
     can_change: ClassVar[bool]
     can_delete: ClassVar[bool]
-    field_permissions: ClassVar[FieldPermissions] = FieldPermissions()
     hide_inlines_on_add: ClassVar[bool] = True
     # Declare `abstract_admin = True` in an intermediate's own body to skip
     # the can_* enforcement; the flag deliberately does NOT inherit.
@@ -105,20 +104,7 @@ class BaseModelAdmin(ModelAdmin):
     ) -> bool:
         return self.can_delete and bool(super().has_delete_permission(request, obj))
 
-    # --- field-level rules ----------------------------------------------------
-    def readonly_rule_fields(self, context: AdminContext) -> tuple[str, ...]:
-        return expand_translation_shadows(
-            self.field_permissions.readonly_fields(context), self._model_field_names()
-        )
-
-    def hidden_rule_fields(self, context: AdminContext) -> tuple[str, ...]:
-        return expand_translation_shadows(
-            self.field_permissions.hidden_fields(context), self._model_field_names()
-        )
-
-    def _model_field_names(self) -> frozenset[str]:
-        return frozenset(field.name for field in self.model._meta.get_fields())
-
+    # --- field-level rules (lookups inherited from FieldRuleLookups) -----------
     def get_readonly_fields(
         self, request: HttpRequest, obj: Any | None = None
     ) -> tuple[str, ...]:
@@ -163,26 +149,14 @@ class BaseModelAdmin(ModelAdmin):
             form.base_fields.pop(name, None)
         return form
 
-    def get_fieldsets(self, request: HttpRequest, obj: Any | None = None) -> _Fieldsets:
+    def get_fieldsets(self, request: HttpRequest, obj: Any | None = None) -> Fieldsets:
         """Filter hidden fields out of declared fieldsets; drop emptied ones."""
         context = AdminContext(request=request, obj=obj)
         hidden = set(self.hidden_rule_fields(context))
+        fieldsets = list(super().get_fieldsets(request, obj))
         if not hidden:
-            return list(super().get_fieldsets(request, obj))
-        filtered: _Fieldsets = []
-        for title, options in super().get_fieldsets(request, obj):
-            fields: list[str | tuple[str, ...]] = []
-            for row in options.get("fields", ()):
-                if isinstance(row, str):
-                    if row not in hidden:
-                        fields.append(row)
-                    continue
-                kept = tuple(field for field in row if field not in hidden)
-                if kept:
-                    fields.append(kept)
-            if fields:
-                filtered.append((title, {**options, "fields": tuple(fields)}))
-        return filtered
+            return fieldsets
+        return drop_hidden_from_fieldsets(fieldsets, hidden)
 
     def get_list_display(self, request: HttpRequest) -> list[Any]:
         context = AdminContext(request=request, obj=None)
@@ -204,7 +178,12 @@ class BaseModelAdmin(ModelAdmin):
 
 
 class ExportableModelAdmin(BaseModelAdmin, ExportActionModelAdmin):
-    """BaseModelAdmin + import-export's export action, unfold-styled."""
+    """BaseModelAdmin + import-export's export action, unfold-styled.
+
+    The selectable-fields form lets the operator pick columns per run; the
+    resource's explicit Meta.fields stays the outer allowlist. Offered file
+    formats come from settings.EXPORT_FORMATS (CSV + XLSX).
+    """
 
     abstract_admin = True
-    export_form_class = ExportForm
+    export_form_class = SelectableFieldsExportForm

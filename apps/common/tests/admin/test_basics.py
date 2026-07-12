@@ -17,10 +17,13 @@ from django.contrib.admin.utils import quote
 from django.db.models import Model
 from django.test import Client
 from django.test import RequestFactory
+from django.urls import reverse
 from import_export.admin import ExportMixin
 
 from apps.common.admin import AdminContext
 from apps.common.admin import BaseModelAdmin
+from apps.common.admin import BaseStackedInline
+from apps.common.admin import BaseTabularInline
 from apps.common.admin import expand_translation_shadows
 from apps.common.tests.admin.support import admin_for
 from apps.common.tests.admin.support import form_post_data
@@ -92,9 +95,11 @@ def test_every_filter_applied(su_client: Client, model: type[Model]) -> None:
         pytest.skip("no list_filter")
     for spec in changelist.filter_specs:
         for choice in list(spec.choices(changelist))[:5]:
-            query = choice["query_string"]
-            if query in ("?", ""):
-                continue  # the "All" reset link
+            # unfold's form-based filters (e.g. RangeDateFilter) yield
+            # choices without query_string - they apply on submit instead.
+            query = choice.get("query_string")
+            if not query or query in ("?", ""):
+                continue  # form filter or the "All" reset link
             filtered = su_client.get(page_url(model, "changelist") + query)
             assert filtered.status_code == 200, (spec, query)
 
@@ -168,12 +173,42 @@ def test_history_page(su_client: Client, model: type[Model]) -> None:
 @parametrize_exportable
 def test_export_csv_has_rows(su_client: Client, model: type[Model]) -> None:
     url = page_url(model, "export")
-    assert su_client.get(url).status_code == 200
-    response = su_client.post(url, {"format": "0", "resource": "0"})
+    form_page = su_client.get(url)
+    assert form_page.status_code == 200
+    data: dict[str, str] = {"format": "0", "resource": "0"}
+    # SelectableFieldsExportForm: check every offered column checkbox.
+    for name, field in form_page.context["form"].fields.items():
+        if getattr(field, "is_selectable_field", False):
+            data[name] = "on"
+    response = su_client.post(url, data)
     assert response.status_code == 200
     assert "text/csv" in response["Content-Type"]
     lines = response.content.decode().strip().splitlines()
     assert len(lines) >= 2, "export produced headers but no rows"
+
+
+# --- custom detail actions --------------------------------------------------
+
+
+def test_detail_actions_resolve(su_client: Client, superuser: Any) -> None:
+    """Every actions_detail button a permitted user is offered must resolve
+    and respond - custom action URLs escape the standard page tests."""
+    targets = [
+        (model, model_admin)
+        for model in ALL_MODELS
+        if getattr(model_admin := admin_for(model), "actions_detail", None)
+    ]
+    if not targets:
+        pytest.skip("no admin declares actions_detail yet")
+    for model, model_admin in targets:
+        obj = _obj_or_skip(model)
+        actions = cast("Any", model_admin).get_actions_detail(
+            _request(superuser), obj.pk
+        )
+        for action in actions:
+            url = reverse(f"admin:{action.action_name}", args=[quote(obj.pk)])
+            response = su_client.get(url)
+            assert response.status_code in (200, 302), (model, action.action_name)
 
 
 # --- autocomplete -----------------------------------------------------------
@@ -218,6 +253,20 @@ def test_local_admins_use_the_framework(model: type[Model]) -> None:
     assert isinstance(admin_for(model), BaseModelAdmin), (
         f"{model._meta.label}'s admin must subclass apps.common.admin.BaseModelAdmin."
     )
+
+
+@parametrize_local
+def test_inlines_use_the_framework(model: type[Model]) -> None:
+    """Inline capability + field-permission discipline only holds if every
+    inline subclasses the framework bases (can_* enforced at import)."""
+    inlines = getattr(admin_for(model), "inlines", ())
+    if not inlines:
+        pytest.skip("no inlines declared")
+    for inline in inlines:
+        assert issubclass(inline, BaseTabularInline | BaseStackedInline), (
+            f"{model._meta.label}: {inline.__name__} must subclass "
+            "BaseTabularInline/BaseStackedInline (apps.common.admin)."
+        )
 
 
 @parametrize_local

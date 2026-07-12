@@ -172,16 +172,38 @@ docstrings; proven by the admin-basics gate):
 
 - Every admin **must declare** `can_add` / `can_change` / `can_delete` —
   missing flags fail at import. Intermediate base classes opt out with
-  `abstract_admin = True` in their own body.
+  `abstract_admin = True` in their own body. The same discipline applies to
+  inlines (`BaseTabularInline`/`BaseStackedInline`); `ReadOnly*Inline`
+  variants are the `can_* = False` preset for display-only child rows.
 - `FieldPermissions(readonly_when=…, hidden_when=…)` drives per-request
   field behavior through `AdminContext` (`ctx.is_add`, `ctx.is_change`,
-  `ctx.user`). Hidden is airtight: filtered from form, fieldsets,
-  list_display, AND stripped from POSTs.
+  `ctx.user`, `ctx.is_superuser`) — in admins AND inlines. Hidden is
+  airtight: filtered from form, fieldsets, list_display, AND stripped from
+  POSTs; rules auto-cover modeltranslation `_ar`/`_en` shadow columns.
+  `list_editable` may never name a ruled field (import-time failure — the
+  changelist formset ignores per-request rules).
 - `created_at`/`updated_at` auto-readonly; M2M fields get the horizontal
   widget automatically (custom-`through` fields excluded); inlines hide on
   the add view unless `show_on_add = True`.
 - Exports: `ExportableModelAdmin` + a `BaseModelResource` subclass whose
-  `Meta.fields` MUST be explicit.
+  `Meta.fields` MUST be explicit. Operators pick columns per run
+  (selectable-fields form); offered formats = `EXPORT_FORMATS` (CSV, XLSX).
+  Resources humanize output (`column_name=`, `DateTimeWidget`) — exports go
+  to non-engineers.
+- Changelists: `search_help_text` says what search matches; date ranges via
+  unfold's `RangeDateFilter` + `list_filter_submit = True`; expandable
+  per-row related-record previews via `list_sections` +
+  `apps.common.admin.LimitedTableSection` (ordering + row cap; see
+  `apps/users/admin/user/sections.py`).
+- State transitions in the admin = unfold detail actions: `actions_detail`
+  + `@action(permissions=["…"])` + a `has_<name>_permission` hook for
+  state-conditional visibility. The action body **calls a service**, never
+  `obj.save()` — pair with `can_change = False` for triage-inbox admins
+  where the action is the only write path. Covered by the basics gate.
+- Sidebar items live in `UNFOLD["SIDEBAR"]` with a permission callable per
+  item (gate-enforced consistency). unfold also supports live `badge`
+  callables (dotted path, `request -> str`, `""` hides) — use a selector
+  behind it and mind that it runs a query per admin page render.
 - New entity → `manage.py generate_dashboard <app> <Model>` scaffolds the
   8-file `admin/<entity>/` package + checklist.
 - Reads may use admin querysets; anything with business meaning calls the

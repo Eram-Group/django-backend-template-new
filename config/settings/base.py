@@ -13,6 +13,7 @@ import structlog
 from django.urls import reverse_lazy
 from django.utils.csp import CSP
 from django.utils.translation import gettext_lazy as _
+from import_export.formats import base_formats
 
 from config.env import env
 
@@ -31,6 +32,7 @@ INSTALLED_APPS = [
     # These MUST precede django.contrib.admin (load order is load-bearing).
     "modeltranslation",
     "unfold",
+    "unfold.contrib.filters",
     "unfold.contrib.import_export",
     # Django
     "django.contrib.admin",
@@ -223,6 +225,14 @@ UNFOLD = {
                             "usersessions.view_usersession"
                         ),
                     },
+                    {
+                        "title": _("Groups"),
+                        "icon": "group",
+                        "link": reverse_lazy("admin:auth_group_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "auth.view_group"
+                        ),
+                    },
                 ],
             },
             {
@@ -251,6 +261,12 @@ UNFOLD = {
         ],
     },
 }
+
+# --- Import-export -----------------------------------------------------------
+# Operators pick columns per export run (SelectableFieldsExportForm); the
+# offered file formats stay curated: CSV first (machines + the admin gate),
+# XLSX for business users. Other tablib formats are menu noise.
+EXPORT_FORMATS = [base_formats.CSV, base_formats.XLSX]
 
 # --- Static / media (S3 via django-storages in production.py) --------------
 STATIC_URL = "static/"

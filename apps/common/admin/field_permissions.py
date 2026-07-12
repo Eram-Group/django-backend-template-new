@@ -1,12 +1,16 @@
 from collections.abc import Callable
 from collections.abc import Collection
 from collections.abc import Mapping
+from typing import Any
+from typing import ClassVar
 
 from django.conf import settings
 
 from apps.common.admin.context import AdminContext
 
 FieldRule = Callable[[AdminContext], bool]
+
+Fieldsets = list[tuple[str | None, dict[str, Any]]]
 
 
 def expand_translation_shadows(
@@ -60,3 +64,48 @@ class FieldPermissions:
 
     def hidden_fields(self, context: AdminContext) -> tuple[str, ...]:
         return tuple(field for field, rule in self.hidden_when.items() if rule(context))
+
+
+class FieldRuleLookups:
+    """Rule evaluation shared by BaseModelAdmin and the inline bases.
+
+    Consumers provide ``model`` (set by Django on admins/inlines) and may
+    override ``field_permissions``. Every lookup expands to modeltranslation
+    shadow columns.
+    """
+
+    model: Any
+    field_permissions: ClassVar[FieldPermissions] = FieldPermissions()
+
+    def readonly_rule_fields(self, context: AdminContext) -> tuple[str, ...]:
+        return expand_translation_shadows(
+            self.field_permissions.readonly_fields(context), self._model_field_names()
+        )
+
+    def hidden_rule_fields(self, context: AdminContext) -> tuple[str, ...]:
+        return expand_translation_shadows(
+            self.field_permissions.hidden_fields(context), self._model_field_names()
+        )
+
+    def _model_field_names(self) -> frozenset[str]:
+        return frozenset(field.name for field in self.model._meta.get_fields())
+
+
+def drop_hidden_from_fieldsets(
+    fieldsets: Collection[tuple[Any, Any]], hidden: set[str]
+) -> Fieldsets:
+    """Filter hidden fields out of declared fieldsets; drop emptied ones."""
+    filtered: Fieldsets = []
+    for title, options in fieldsets:
+        fields: list[str | tuple[str, ...]] = []
+        for row in options.get("fields", ()):
+            if isinstance(row, str):
+                if row not in hidden:
+                    fields.append(row)
+                continue
+            kept = tuple(field for field in row if field not in hidden)
+            if kept:
+                fields.append(kept)
+        if fields:
+            filtered.append((title, {**options, "fields": tuple(fields)}))
+    return filtered
