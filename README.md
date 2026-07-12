@@ -5,7 +5,8 @@ Django admin (unfold), passwordless auth (allauth headless, 6-digit email
 codes), Postgres-only infrastructure (cache, sessions, task queue), one
 Docker image deployed as two ECS services. Arabic-first (ar/en).
 
-The authoritative design document is [PLAN.md](PLAN.md); the remaining build
+How the code is organized: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The
+authoritative design document is [PLAN.md](PLAN.md); the remaining build
 sequence lives in [TODO.json](TODO.json).
 
 | | |

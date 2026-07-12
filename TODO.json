@@ -40,13 +40,6 @@
   ],
   "tasks": [
     {
-      "id": "architecture-doc",
-      "group": "G11",
-      "title": "Write docs/ARCHITECTURE.md",
-      "endGoal": "The layering rules, error contract, schema/pagination conventions, task/command conventions (idempotency, on_commit, retry), translation.py pattern, admin framework usage, and the deferred/swap paths from PLAN Notes - matching implemented reality, not intent.",
-      "status": "pending"
-    },
-    {
       "id": "claude-md-env-audit",
       "group": "G11",
       "title": "CLAUDE.md + final .env.example audit",
