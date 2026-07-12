@@ -40,13 +40,6 @@
   ],
   "tasks": [
     {
-      "id": "claude-md-env-audit",
-      "group": "G11",
-      "title": "CLAUDE.md + final .env.example audit",
-      "endGoal": "Repo CLAUDE.md digests the architecture rules and daily commands for AI-assisted work; .env.example verified field-by-field against config/env.py (nothing missing, nothing stale).",
-      "status": "pending"
-    },
-    {
       "id": "verify-static-suite",
       "group": "G12",
       "title": "Static verification sweep (PLAN verification 1, 4, 5)",
