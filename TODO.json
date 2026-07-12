@@ -14,6 +14,12 @@
   ],
   "groups": [
     {
+      "id": "G15",
+      "title": "External service clients: SMS + payments + FCM (modern rewrite)",
+      "rationale": "User decision 2026-07-12: ship the client integrations (Tap+Paymob, OurSMS+SMSMisr, FCM) as full domain apps, modern stack (httpx+stamina+respx). Plan: ~/.claude/plans/toasty-snuggling-gosling.md.",
+      "checkpoint": "Per WP: ruff, mypy, pytest (cov>=80, warnings-as-errors), lint-imports all green; one commit per WP."
+    },
+    {
       "id": "G07",
       "title": "Inner depth: users API + tests + gates",
       "rationale": "The in-depth inside work (user decision: outside-in): mount+verify the /me exemplar endpoint, then the test suite and the cross-app gates that protect everything.",
@@ -39,6 +45,46 @@
     }
   ],
   "tasks": [
+    {
+      "id": "wp-a-http-kernel",
+      "group": "G15",
+      "title": "Deps (httpx/stamina/firebase-admin/phonenumber-field/respx) + shared HTTP kernel apps/common/http.py",
+      "endGoal": "request_json with typed retry policies + OutboundError taxonomy + structlog events; respx tests green; stamina test-mode fixture so the suite never sleeps.",
+      "tips": [],
+      "status": "pending"
+    },
+    {
+      "id": "wp-b-user-phone",
+      "group": "G15",
+      "title": "users.User.phone (PhoneNumberField, optional, not unique)",
+      "endGoal": "Field + migration + schemas/service allowlist/admin; independence-contract ignore_imports decisions recorded in pyproject comments.",
+      "tips": [],
+      "status": "pending"
+    },
+    {
+      "id": "wp-c-notifications",
+      "group": "G15",
+      "title": "apps/notifications: Device+Notification models, typed catalog, SMS (OurSMS/SMSMisr) + FCM clients, services/tasks/APIs/admin",
+      "endGoal": "notification_send fans out via on_commit tasks; per-recipient locale rendered at send time; console backends locally, locmem outbox in tests; all gates green.",
+      "tips": [],
+      "status": "pending"
+    },
+    {
+      "id": "wp-d-payments",
+      "group": "G15",
+      "title": "apps/payments: Payment/Wallet/WalletTransaction, Tap+Paymob gateways, signed webhooks, wallet race fix, refund/adjust admin actions",
+      "endGoal": "Checkout URL end-to-end with FakeGateway locally (simulate_payment_webhook); signature-verified idempotent webhook credits wallet exactly once; all gates green.",
+      "tips": [],
+      "status": "pending"
+    },
+    {
+      "id": "wp-e-docs-polish",
+      "group": "G15",
+      "title": "Docs (ARCHITECTURE outbound-clients section, README env/ops), PLAN.md, i18n catalogs, final sweep",
+      "endGoal": "Deferred-table rows for notifications/payments removed; pre-commit --all-files + full pytest green; final commit.",
+      "tips": [],
+      "status": "pending"
+    },
     {
       "id": "social-providers",
       "group": "G13",
