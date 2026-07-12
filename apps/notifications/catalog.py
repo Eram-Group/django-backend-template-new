@@ -44,6 +44,18 @@ CATALOG: Mapping[NotificationKind, MessageTemplate] = {
         channels=frozenset({Channel.PUSH, Channel.SMS}),
         context_keys=frozenset({"message"}),
     ),
+    NotificationKind.PAYMENT_PAID: MessageTemplate(
+        title=_("Payment received"),
+        body=_("Your payment of {amount} {currency} was received."),
+        channels=frozenset({Channel.PUSH}),
+        context_keys=frozenset({"amount", "currency"}),
+    ),
+    NotificationKind.WALLET_CREDITED: MessageTemplate(
+        title=_("Wallet credited"),
+        body=_("{amount} {currency} was added to your wallet. New balance: {balance}."),
+        channels=frozenset({Channel.PUSH}),
+        context_keys=frozenset({"amount", "currency", "balance"}),
+    ),
 }
 
 

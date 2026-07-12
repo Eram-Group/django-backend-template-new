@@ -120,8 +120,9 @@ overrides = [
   # admins subclass OUR typed classes and need no exemption:
   { module = "apps.common.admin.*", disallow_subclassing_any = false },
   # Adapters subclass allauth's untyped base classes; admin modules may
-  # re-register third-party admins whose bases are untyped:
-  { module = [ "apps.*.adapters", "apps.*.admin.*" ], disallow_subclassing_any = false },
+  # re-register third-party admins whose bases are untyped and use unfold's
+  # untyped @action decorator (detail actions):
+  { module = [ "apps.*.adapters", "apps.*.admin.*" ], disallow_subclassing_any = false, disallow_untyped_decorators = false },
   # factory-boy declarations are typed but its callables/decorators are not
   # (factories themselves + test modules that call them):
   { module = [ "apps.*.tests.*", "apps.*.tests.*.*" ], disallow_untyped_calls = false, disallow_untyped_decorators = false },
@@ -182,19 +183,24 @@ layers = [
   "selectors",
   "models",
 ]
-containers = [ "apps.users", "apps.notifications", "apps.example" ] # append each new app
+containers = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
 
 [[tool.importlinter.contracts]]
 # One app = one bounded context; cross-app access via services/selectors
 # re-exports only after an explicit decision - never silently.
 name = "Domain apps independent"
 type = "independence"
-modules = [ "apps.users", "apps.notifications", "apps.example" ] # append each new app
+modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
 ignore_imports = [
   # Explicit decision (2026-07-12): notifications addresses users - Device/
   # Notification rows belong to a User, delivery reads user.phone/.language.
   # One-way only; users never imports notifications.
   "apps.notifications.** -> apps.users.**",
+  # Explicit decision (2026-07-12): payments belongs to a User (payer,
+  # wallet owner) and announces outcomes through notifications' service
+  # re-exports. One-way only; neither app imports payments.
+  "apps.payments.** -> apps.users.**",
+  "apps.payments.** -> apps.notifications.**",
   # The shared fake-value helper is deliberately user-locale-aware; without
   # this, any app's tests importing fake form an indirect chain to users.
   "apps.common.tests.fake -> apps.users.constants",
@@ -207,13 +213,15 @@ ignore_imports = [
 name = "Common imports no domain app"
 type = "forbidden"
 source_modules = [ "apps.common" ]
-forbidden_modules = [ "apps.users", "apps.notifications", "apps.example" ] # append each new app
+forbidden_modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
 ignore_imports = [
   "apps.common.tests.** -> apps.users.**",
   "apps.common.tests.** -> apps.notifications.**",
+  "apps.common.tests.** -> apps.payments.**",
   "apps.common.tests.** -> apps.example.**",
   "apps.common.management.commands.seed_db -> apps.users.**",
   "apps.common.management.commands.seed_db -> apps.notifications.**",
+  "apps.common.management.commands.seed_db -> apps.payments.**",
   "apps.common.management.commands.seed_db -> apps.example.**",
   # createsu bootstraps the concrete User by design (portable ECS one-off).
   "apps.common.management.commands.createsu -> apps.users.**",

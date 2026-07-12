@@ -9,6 +9,8 @@ class NotificationKind(models.TextChoices):
 
     WELCOME = "welcome", _("Welcome")
     ANNOUNCEMENT = "announcement", _("Announcement")
+    PAYMENT_PAID = "payment_paid", _("Payment received")
+    WALLET_CREDITED = "wallet_credited", _("Wallet credited")
 
 
 class Channel(StrEnum):

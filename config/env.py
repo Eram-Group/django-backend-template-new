@@ -99,10 +99,19 @@ class Env(BaseSettings):
     SMSMISR_PASSWORD: SecretStr | None = None
     SMSMISR_SENDER: str | None = None
 
+    # Payments: Tap (SAR) / Paymob (EGP); local/test use the fake gateway
+    BACKEND_BASE_URL: str  # absolute base for gateway webhook URLs
+    TAP_SECRET_KEY: SecretStr | None = None
+    PAYMOB_SECRET_KEY: SecretStr | None = None
+    PAYMOB_PUBLIC_KEY: str | None = None
+    PAYMOB_HMAC_SECRET: SecretStr | None = None
+    PAYMOB_INTEGRATION_IDS: CommaSeparated[int] = Field(default_factory=list)
+
     @field_validator(
         "SECRET_KEY_FALLBACKS",
         "ALLOWED_HOSTS",
         "FRONTEND_ALLOWED_ORIGINS",
+        "PAYMOB_INTEGRATION_IDS",
         mode="before",
     )
     @classmethod

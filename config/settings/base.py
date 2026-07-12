@@ -58,6 +58,7 @@ INSTALLED_APPS = [
     "apps.common",
     "apps.users",
     "apps.notifications",
+    "apps.payments",
 ]
 
 # --- Middleware (guid first, axes last - order is load-bearing) ----------
@@ -330,6 +331,37 @@ UNFOLD = {
                 ],
             },
             {
+                "title": _("Payments"),
+                "items": [
+                    {
+                        "title": _("Payments"),
+                        "icon": "payments",
+                        "link": reverse_lazy("admin:payments_payment_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "payments.view_payment"
+                        ),
+                    },
+                    {
+                        "title": _("Wallets"),
+                        "icon": "account_balance_wallet",
+                        "link": reverse_lazy("admin:payments_wallet_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "payments.view_wallet"
+                        ),
+                    },
+                    {
+                        "title": _("Wallet transactions"),
+                        "icon": "receipt_long",
+                        "link": reverse_lazy(
+                            "admin:payments_wallettransaction_changelist"
+                        ),
+                        "permission": lambda request: request.user.has_perm(
+                            "payments.view_wallettransaction"
+                        ),
+                    },
+                ],
+            },
+            {
                 "title": _("Operations"),
                 "items": [
                     {
@@ -386,6 +418,19 @@ SMSMISR_PASSWORD = env.SMSMISR_PASSWORD
 SMSMISR_SENDER = env.SMSMISR_SENDER
 SMSMISR_LIVE = False  # "1" live vs "2" test API mode; production.py decides
 FIREBASE_CREDENTIALS_B64 = env.FIREBASE_CREDENTIALS_B64
+
+# --- Payments: currency -> gateway class (fake locally; production.py swaps) --
+PAYMENT_GATEWAYS = {
+    "SAR": "apps.payments.gateways.fake.FakeGateway",
+    "EGP": "apps.payments.gateways.fake.FakeGateway",
+}
+BACKEND_BASE_URL = env.BACKEND_BASE_URL
+FRONTEND_BASE_URL = env.FRONTEND_BASE_URL  # checkout return/redirect pages
+TAP_SECRET_KEY = env.TAP_SECRET_KEY
+PAYMOB_SECRET_KEY = env.PAYMOB_SECRET_KEY
+PAYMOB_PUBLIC_KEY = env.PAYMOB_PUBLIC_KEY
+PAYMOB_HMAC_SECRET = env.PAYMOB_HMAC_SECRET
+PAYMOB_INTEGRATION_IDS = env.PAYMOB_INTEGRATION_IDS
 
 # --- Security ----------------------------------------------------------------
 X_FRAME_OPTIONS = "DENY"

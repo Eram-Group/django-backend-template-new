@@ -82,6 +82,13 @@ if _DEPLOYED:
     # SMSMisr live mode only in production - dev traffic stays on its test API.
     SMSMISR_LIVE = env.ENVIRONMENT == "production"
 
+# --- Payments: real gateways only when deployed (fake otherwise) ----------------
+if _DEPLOYED:
+    PAYMENT_GATEWAYS = {
+        "SAR": "apps.payments.gateways.tap.TapGateway",
+        "EGP": "apps.payments.gateways.paymob.PaymobGateway",
+    }
+
 # --- Sentry ------------------------------------------------------------------------
 if env.SENTRY_DSN:
     sentry_sdk.init(
