@@ -40,30 +40,6 @@
   ],
   "tasks": [
     {
-      "id": "verify-static-suite",
-      "group": "G12",
-      "title": "Static verification sweep (PLAN verification 1, 4, 5)",
-      "endGoal": "uv sync clean; manage.py check OK; makemigrations --check clean; pytest green incl. both gates with coverage >= 80%; ruff check, ruff format --check, mypy, lint-imports, pre-commit run --all-files all green in one sitting.",
-      "status": "pending"
-    },
-    {
-      "id": "verify-runtime-flows",
-      "group": "G12",
-      "title": "Runtime flow verification (PLAN verification 2, 3)",
-      "endGoal": "Fresh DB -> release steps -> runserver: /api/v1/docs, /healthz, /readyz, admin all OK; full signup/login-by-code flow in both client modes; welcome email through db_worker into Mailpit; task row in admin; sample_scheduled_job runs; 401 error shape; 429 on ratelimit burst - every step observed, none assumed.",
-      "status": "pending"
-    },
-    {
-      "id": "verify-prod-posture",
-      "group": "G12",
-      "title": "Production posture verification (PLAN verification 6, 7)",
-      "endGoal": "check --deploy with production settings reports zero warnings; docker compose up --build passes the same smokes with a non-root container; final commit marks the transformation complete.",
-      "status": "pending",
-      "tips": [
-        "Early signal (2026-07-11): `just check-deploy` (production settings, dummy deployed env) already reports 0 warnings - re-confirm at G12 with the real setup."
-      ]
-    },
-    {
       "id": "social-providers",
       "group": "G13",
       "title": "Google + Apple social login from env",
@@ -84,7 +60,8 @@
         "USER INVESTIGATION (requested 2026-07-11): Omar leads this; agent supports with research/prototypes on request. G04 implementation must not be finalized before sign-off.",
         "References: allauth headless docs (openapi spec + client types), Gawdat_Django_Template config/helpers/account_adapter.py (6-digit codes, skip-OTP-for-social) and allauth_adapter.py (headless user payload), PLAN.md Auth row.",
         "Already decided (context): passwordless (no user passwords; staff keep Argon2), no JWT, no signals - adapters call services (signup hook = save_user; social adapter must trigger user_post_signup itself due to commit=False pass-through).",
-        "MOVED to end (user decision 2026-07-11): no longer gates G04 - implementation proceeds on PLAN defaults; this became a sign-off review of working code (easier to evaluate than docs)."
+        "MOVED to end (user decision 2026-07-11): no longer gates G04 - implementation proceeds on PLAN defaults; this became a sign-off review of working code (easier to evaluate than docs).",
+        "G12 runtime finding (2026-07-12): allauth's login-code rate limit trips after 3 requests per email but surfaces as HTTP 400 with error code 'too_many_login_attempts' (localized - Arabic body observed), NOT 429 - that is allauth's by-design form-error path, in both browser and app clients. django-ratelimit's 429 handler applies to OUR endpoints once any are decorated."
       ],
       "status": "pending"
     },
