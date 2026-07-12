@@ -60,6 +60,13 @@ jobs:
           uv run manage.py createcachetable
           uv run pytest -n auto --cov
 
+      # Schema breakage (bad annotation, duplicate operation id) used to
+      # surface only post-merge in the Apidog job - generate at PR time.
+      - name: OpenAPI schema generates (API + merged auth spec)
+        run: |
+          uv run manage.py export_openapi_schema --api config.api.v1.api --output openapi.json
+          uv run manage.py merge_auth_openapi --input openapi.json
+
   # Prod-image build + the same smokes the local compose stack passes.
   image:
     runs-on: ubuntu-latest

@@ -145,7 +145,12 @@ jobs:
 
       - name: Export OpenAPI schema
         # --api is required: the instance mounts at /api/v1/, not /api/.
-        run: uv run manage.py export_openapi_schema --api config.api.v1.api --output openapi.json
+        # The merge folds allauth's auth endpoints (operationIds added,
+        # "Authentication /" tags, global Accept-Language) into ONE spec -
+        # otherwise the auth API never reaches Apidog.
+        run: |
+          uv run manage.py export_openapi_schema --api config.api.v1.api --output openapi.json
+          uv run manage.py merge_auth_openapi --input openapi.json
 
       # Code is the source of truth - matching Apidog endpoints get overwritten.
       - name: Sync to Apidog

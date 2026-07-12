@@ -46,13 +46,6 @@
   ],
   "tasks": [
     {
-      "id": "wp6-openapi-docs",
-      "group": "G14",
-      "title": "OpenAPI/consumer docs: allauth spec merge into Apidog, Accept-Language param + servers, docs/AUTH_API.md, PR-time schema check",
-      "endGoal": "Merged spec (ninja + allauth with operationIds + Authentication tags) produced by a script the apidog job runs; global Accept-Language param + servers entry; consumer auth guide committed; ci.yml generates the schema at PR time.",
-      "status": "pending"
-    },
-    {
       "id": "wp7-ops-dx",
       "group": "G14",
       "title": "Ops & DX: migration guard workflow, createsu, git-pr.sh + just recipes, pre-commit hooks, ruff A+PTH+PERF, seed timer, seed_db + admin index tests",
