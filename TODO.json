@@ -46,13 +46,6 @@
   ],
   "tasks": [
     {
-      "id": "wp3-unfold-polish",
-      "group": "G14",
-      "title": "Unfold config polish: SHOW_LANGUAGES + i18n urls, modeltranslation flags, colors, environment badge",
-      "endGoal": "Admin shows ar/en switcher (set_language wired), environment badge + title prefix from typed env.ENVIRONMENT, branding COLORS/BORDER_RADIUS block; verified in Chrome.",
-      "status": "pending"
-    },
-    {
       "id": "wp4-api-auth-polish",
       "group": "G14",
       "title": "API & auth polish: error codes, DELETE /users/me, signup language capture, subject prefix, local media, script validators",

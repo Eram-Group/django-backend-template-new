@@ -41,6 +41,8 @@ urlpatterns = [
     path(env.ADMIN_URL, admin.site.urls),
     path("api/v1/", api.urls),
     path("_allauth/", include("allauth.headless.urls")),
+    # set_language for the admin's ar/en switcher (UNFOLD SHOW_LANGUAGES).
+    path("i18n/", include("django.conf.urls.i18n")),
     path("healthz", healthz, name="healthz"),
     path("readyz", readyz, name="readyz"),
 ]
