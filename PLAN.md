@@ -13,7 +13,7 @@ API-only Django backend (+ Django admin) for web SPA + mobile clients, deployed 
 | Framework | Django 6.0.x | 6.2 LTS lands ~Apr 2027 — plan the hop. |
 | Python | 3.14 | `requires-python = ">=3.14"`, `.python-version`. |
 | Packaging | uv | Dev deps in PEP 735 `[dependency-groups]`; commit `uv.lock`. |
-| Lint/format | ruff (both) | `E,W,F,I,UP,B,DJ,C4,PIE,SIM,RUF` + `DTZ,T20,PT,S` (`S101` allowed in tests); isort `force-single-line`; migrations excluded. |
+| Lint/format | ruff (both) | `E,W,F,I,UP,B,DJ,C4,PIE,SIM,RUF` + `DTZ,T20,PT,S` + `A,PTH,PERF` (added 2026-07-12, near-zero noise; `S101` allowed in tests); isort `force-single-line`; migrations excluded. |
 | Types | mypy `strict = true` + django-stubs + pydantic plugin | Only migrations exempted. |
 | Config | pydantic-settings `Env` in `config/env.py` + dj-database-url (parser only) | `Env` owns every `.env` field: typed (`SecretStr` secrets, `Literal` environment), fail-fast at startup, loads `.env`. All fields REQUIRED with no code defaults — local values live in `.env.example` (copied to `.env`); `X \| None` fields are feature toggles (OAuth/Sentry/S3/cookie domain), absence = feature off. dj-database-url only converts DB URL → `DATABASES` dict. Settings split: `config/settings/{base,local,production,test}.py` consume `env`. |
 | API | Django Ninja at `/api/v1/` | OpenAPI docs at `/api/v1/docs` — staff-gated (`docs_decorator`), open in local; assembled in `config/api/v1.py` from per-app routers. |

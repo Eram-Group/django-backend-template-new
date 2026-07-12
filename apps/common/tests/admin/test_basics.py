@@ -69,6 +69,16 @@ def _obj_or_skip(model: type[Model]) -> Model:
     return obj
 
 
+# --- index ----------------------------------------------------------------
+
+
+def test_admin_index(su_client: Client, staff_client: Client) -> None:
+    """The page every staff user lands on - and the coverage anchor for the
+    deferred unfold insights/KPI dashboard."""
+    assert su_client.get(reverse("admin:index")).status_code == 200
+    assert staff_client.get(reverse("admin:index")).status_code == 200
+
+
 # --- changelist ---------------------------------------------------------
 
 

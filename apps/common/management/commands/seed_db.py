@@ -23,9 +23,11 @@ from typing import Any
 
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
+from django.db import connection
 from django.db.models import F
 from django.db.models import Model
 from django.db.models.expressions import RawSQL
+from django.test.utils import CaptureQueriesContext
 
 from config.env import env
 
@@ -118,24 +120,35 @@ class Command(BaseCommand):
         started = time.monotonic()
         for chunk_start in range(0, count, CHUNK):
             size = min(CHUNK, count - chunk_start)
-            users = [
-                UserFactory.build(email=f"user{offset + chunk_start + i}@{SEED_DOMAIN}")
-                for i in range(size)
-            ]
-            created = User.objects.bulk_create(users, batch_size=BATCH)
-            addresses = fan_out(
-                created,
-                per_parent=(1, 1),  # exactly one verified address per user
-                build_child=lambda user: EmailAddress(
-                    user=user, email=user.email, primary=True, verified=True
-                ),
-                rng=rng,
-            )
-            EmailAddress.objects.bulk_create(addresses, batch_size=BATCH)
+            # Query counts make bulk-only violations visible instantly: a
+            # seeder step that slips into per-row saves shows up as a
+            # query-count explosion, not just unexplained slowness.
+            # (CaptureQueriesContext forces the cursor to record regardless
+            # of DEBUG.)
+            with CaptureQueriesContext(connection) as queries:
+                users = [
+                    UserFactory.build(
+                        email=f"user{offset + chunk_start + i}@{SEED_DOMAIN}"
+                    )
+                    for i in range(size)
+                ]
+                created = User.objects.bulk_create(users, batch_size=BATCH)
+                addresses = fan_out(
+                    created,
+                    per_parent=(1, 1),  # exactly one verified address per user
+                    build_child=lambda user: EmailAddress(
+                        user=user, email=user.email, primary=True, verified=True
+                    ),
+                    rng=rng,
+                )
+                EmailAddress.objects.bulk_create(addresses, batch_size=BATCH)
             users_done += len(created)
             emails_done += len(addresses)
             rate = users_done / max(time.monotonic() - started, 0.001)
-            self.stdout.write(f"  users {users_done:,}/{count:,} ({rate:,.0f}/s)")
+            self.stdout.write(
+                f"  users {users_done:,}/{count:,} "
+                f"({rate:,.0f}/s, {len(queries)} queries)"
+            )
 
         # Spread signup timestamps over the past year (all-identical
         # created_at is a giveaway); update() bypasses auto_now*. Second

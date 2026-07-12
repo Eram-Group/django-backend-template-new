@@ -83,6 +83,9 @@ lint.select = [
   "PT",  # flake8-pytest-style
   "S",   # flake8-bandit (security)
   "TID25", # flake8-tidy-imports banned-api (Faker ban below)
+  "A",   # flake8-builtins (no shadowing id/type/...)
+  "PTH", # flake8-use-pathlib
+  "PERF", # perflint (inefficient loops/copies)
 ]
 lint.ignore = [
   "RUF012", # ClassVar annotations conflict with Django's class-attr idiom (Meta, admin, etc.)
@@ -192,5 +195,7 @@ ignore_imports = [
   "apps.common.tests.** -> apps.example.**",
   "apps.common.management.commands.seed_db -> apps.users.**",
   "apps.common.management.commands.seed_db -> apps.example.**",
+  # createsu bootstraps the concrete User by design (portable ECS one-off).
+  "apps.common.management.commands.createsu -> apps.users.**",
 ]
 unmatched_ignore_imports_alerting = "none"

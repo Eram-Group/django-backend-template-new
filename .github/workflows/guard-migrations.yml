@@ -1,0 +1,34 @@
+# Committed migrations are append-only: the ECS release task runs
+# `migrate --noinput`, so an edited or deleted historical migration silently
+# never (re-)runs and deployed schemas diverge from the files. Deliberate
+# squashes: put the `allow-migration-edit` label on the PR.
+
+name: Guard migrations
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  immutable:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'allow-migration-edit') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            migrations:
+              - modified|deleted: 'apps/**/migrations/*.py'
+
+      - name: Fail on modified or deleted migrations
+        if: steps.changes.outputs.migrations == 'true'
+        run: |
+          echo "::error::Committed migration files were modified or deleted - migrations are append-only. For a deliberate squash, add the allow-migration-edit label."
+          exit 1

@@ -172,8 +172,22 @@ zero infra provisioned.
   roll web/worker → git tag + GitHub Release last, so a tag only ever points
   at a fully deployed sha.
 
+### Branch protection
+
+Add a ruleset on `main`: require a PR, require the `fast`, `image` and
+`trufflehog` status checks, and tick **"Require branches to be up to date
+before merging"** (the server-side twin of the local `branch-behind-main`
+pre-push hook — `deploy-dev` deploys main as-is and relies on this gate).
+Migrations are append-only, enforced by `guard-migrations.yml`
+(`allow-migration-edit` label = deliberate squash escape hatch).
+
 ### Operations notes
 
+- First superuser: run a one-off ECS task on the web family with command
+  `python manage.py createsu` (idempotent — reads `DJANGO_SUPERUSER_*`).
+- Verify Sentry wiring after provisioning: one-off ECS task with command
+  `python manage.py shell -c "1/0"` — the event must arrive with the
+  expected `environment` and `release` tags.
 - Logs are JSON (structlog) with a per-request `request_id`
   (`Correlation-ID`) — grep one id in CloudWatch to follow a request.
 - `django-axes` locks a (username, ip) pair for 1h after 5 failed admin

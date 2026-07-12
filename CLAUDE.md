@@ -42,7 +42,8 @@ docs/ARCHITECTURE.md explains the conventions in depth. Topic rules live in
   `uv run lint-imports`
 - `just manage <cmd>` · `just migrate` · `just makemigrations` ·
   `just seed [scale]` · `just worker` · `just superuser` ·
-  `just check-deploy`
+  `just check-deploy` · `just messages` (i18n catalogs) ·
+  `just pr` / `just branch <name>` (PR flow) · `just update` / `just outdated`
 - Before finishing any change, run the gates: `ruff check`, `mypy`,
   `pytest`, `lint-imports` — all must be green (coverage floor 80%,
   warnings are errors).

@@ -46,13 +46,6 @@
   ],
   "tasks": [
     {
-      "id": "wp7-ops-dx",
-      "group": "G14",
-      "title": "Ops & DX: migration guard workflow, createsu, git-pr.sh + just recipes, pre-commit hooks, ruff A+PTH+PERF, seed timer, seed_db + admin index tests",
-      "endGoal": "guard-migrations.yml blocks edits/deletes of committed migrations (label escape hatch); createsu command replaces justfile pipeline + runbook note; just pr/branch/update/outdated/messages recipes + shellcheck hook; check-case-conflict + check-builtin-literals hooks; ruff select += A,PTH,PERF (PLAN.md updated) with codebase clean; seed steps print query counts; test_seed_db + test_admin_index green.",
-      "status": "pending"
-    },
-    {
       "id": "wp8-docs-blueprints",
       "group": "G14",
       "title": "Docs corrections + blueprint map: split soft-delete row, profile-gating design, auth error-shape record, deferred-table blueprint pointers",

@@ -76,14 +76,7 @@ worker *args:
 
 # Idempotent superuser from DJANGO_SUPERUSER_* (.env locally, Secrets in AWS).
 superuser:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    exists=$(uv run manage.py shell -c "import os; from apps.users.models import User; print(User.objects.filter(email=os.environ['DJANGO_SUPERUSER_EMAIL'], is_superuser=True).exists())" | tail -1)
-    if [ "$exists" = "True" ]; then
-        echo "Superuser already exists - nothing to do."
-    else
-        uv run manage.py createsuperuser --noinput
-    fi
+    uv run manage.py createsu
 
 # Seed fake data: scale 0..1 is logarithmic (0 = 10 users, 1 = 1,000,000).
 seed scale="0.3":
@@ -100,6 +93,31 @@ db-reset:
 # Shell inside the production image, e.g. `just bash` or `just bash -c 'id'`.
 bash *args:
     docker compose run --rm web bash {{ args }}
+
+# Extract + compile ar/en translation catalogs (compile = local verification
+# only; images compile at build once .po files exist).
+messages:
+    uv run manage.py makemessages -l ar -l en --ignore .venv --ignore staticfiles
+    uv run manage.py compilemessages --ignore .venv
+
+# Push the current branch (or move stray commits off main) and open a PR.
+pr *flags:
+    ./scripts/git-pr.sh {{ flags }}
+
+# Start a fresh branch off up-to-date main.
+branch name:
+    git checkout main
+    git pull
+    git checkout -b {{ name }}
+
+# Bump the lockfile to the latest compatible versions (Renovate is the
+# scheduled path; this is the local escape hatch). Run `just test` after.
+update:
+    uv lock --upgrade
+
+# List dependencies with newer versions available.
+outdated:
+    uv tree --outdated --depth 1
 
 # Remove caches and local build artifacts.
 clean:
