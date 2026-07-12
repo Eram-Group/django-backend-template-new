@@ -4,7 +4,7 @@
   "created": "2026-07-11",
   "workflow": [
     "Groups run in array order; tasks run in array order within their group unless dependsOn says otherwise.",
-    "Completed work is removed from this file - done through the easy-sweep (2026-07-11): G00-G05, G08, G09, G10 (on-GitHub verification of workflows still pending the remote), superuser bootstrap, and the /users/me slice; every verification lives in the git checkpoint commits. Group ARRAY ORDER = execution order.",
+    "Completed work is removed from this file - done through the easy-sweep (2026-07-11): G00-G05, G08, G09, G10 (on-GitHub verification of workflows still pending the remote), superuser bootstrap, and the /users/me slice; G14 template-enhancement sweep fully adopted 2026-07-12 (wp1-wp8 commits; plan + decisions in ~/.claude/plans/toasty-snuggling-gosling.md). Group ARRAY ORDER = execution order.",
     "One task = one working session. Set status=in_progress before starting; set done only when the endGoal is observed, not assumed.",
     "Never start a task whose dependsOn are not all done.",
     "After the last task of a group: run the group's checkpoint, fix any fallout, then `git commit -m \"checkpoint(<groupId>): <group title>\"`.",
@@ -32,12 +32,6 @@
       "checkpoint": "All three verify tasks done; final commit marks the transformation complete."
     },
     {
-      "id": "G14",
-      "title": "Template enhancement sweep adoptions (approved plan 2026-07-12)",
-      "rationale": "24-agent exhaustive re-read of Gawdat_Django_Template (99 findings, adversarially verified) produced 40 approved adopt/adapt items in 8 work packages. Full plan: ~/.claude/plans/toasty-snuggling-gosling.md. Decisions recorded there: allauth errors stay native (documented), ruff adds A+PTH+PERF only, no reset-migrations, sidebar badges docs-only, branch-sync via ruleset docs, no sentry smoke route.",
-      "checkpoint": "Each WP task commits on its own with gates green (ruff, mypy, pytest+coverage, lint-imports); after wp8: pre-commit all-files + full pytest sweep, then done."
-    },
-    {
       "id": "G13",
       "title": "Deferred items + user reviews (deliberately last)",
       "rationale": "User decisions (2026-07-11): investigations, not-sure items, and social-login integration must NOT block the build - implementation proceeds on PLAN defaults; deferred/review work happens at the end. Review outcomes may change code: re-run affected group checkpoints and the G12 sweep afterwards.",
@@ -45,13 +39,6 @@
     }
   ],
   "tasks": [
-    {
-      "id": "wp8-docs-blueprints",
-      "group": "G14",
-      "title": "Docs corrections + blueprint map: split soft-delete row, profile-gating design, auth error-shape record, deferred-table blueprint pointers",
-      "endGoal": "ARCHITECTURE.md: deferred table splits audit-history vs recoverable-delete and carries Gawdat_Django_Template blueprint paths per deferred item; multi-persona row documents ninja-native profile gating (middleware rejected); Auth section records the native-error-shape decision; PLAN.md deferred note updated to match.",
-      "status": "pending"
-    },
     {
       "id": "social-providers",
       "group": "G13",

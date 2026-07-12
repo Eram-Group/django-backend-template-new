@@ -120,6 +120,12 @@ Every API error has ONE shape, produced in ONE place
 - Brute-force lockout: django-axes, 5 failures per (username, ip), 1h
   cooloff, disabled in tests. Rate limiting: django-ratelimit over a LocMem
   cache alias (per-container; Redis/WAF is the documented upgrade).
+- **Error-shape decision (2026-07-12)**: `/_allauth/` endpoints keep
+  allauth's **native** error format (`{status, errors[]}`) — rewriting
+  responses would fork the library's documented contract and its spec.
+  `/api/v1/` uses the project envelope. Clients handle both;
+  [docs/AUTH_API.md](AUTH_API.md) is the consumer guide that contrasts
+  them (including the 400 `too_many_login_attempts` rate-limit case).
 
 ## Background tasks and commands
 
@@ -228,17 +234,30 @@ docstrings; proven by the admin-basics gate):
 
 ## Deferred paths (decided, not built)
 
-Documented so they're added the intended way when needed:
+Documented so they're added the intended way when needed. The *Blueprint*
+column points into `Gawdat_Django_Template/` — a local, gitignored copy of
+a real production template audited file-by-file (2026-07-12); start future
+work from that proven code, ported to this repo's conventions (ninja, no
+signals, services, strict mypy).
 
-| Need | Path |
-|---|---|
-| Soft-delete / audit history | django-simple-history on the models that need it |
-| Direct-to-S3 uploads | presigned-URL endpoint in a service; client uploads, API stores the key |
-| Embedded mini-schemas | add the `Ref` tier per entity alongside Summary/Detail |
-| Real rate limiting | move the `ratelimit` cache alias to Redis, or push to WAF |
-| Slow release-step collectstatic | collectfasta |
-| Geo | postgis image + libgdal in Dockerfile + `django.contrib.gis` |
-| External-API fan-out | gunicorn gevent worker class for the web service |
-| Multi-persona users | keep one `User`, add OneToOne profile models (Customer/Provider) |
-| Admin dashboards | unfold insights/KPI components on the index |
-| Release notes discipline | commitizen + conventional-commit CI naming checks |
+| Need | Path | Blueprint (Gawdat_Django_Template/) |
+|---|---|---|
+| Audit history (who changed what) | django-simple-history on the models that need it | `apps/payment/models/` (registration), `apps/users/admin/*/admin.py` (SimpleHistoryAdmin MRO) |
+| Recoverable delete (user-facing rows kept for history, e.g. addresses referenced by orders) | `deleted_at` pattern or django-softdelete — a DIFFERENT need than audit history; decide the lib when first needed | `apps/location/models/address.py` |
+| Direct-to-S3 uploads | presigned-URL endpoint in a service; client uploads, API stores the key | — |
+| Embedded mini-schemas | add the `Ref` tier per entity alongside Summary/Detail | — |
+| Real rate limiting | move the `ratelimit` cache alias to Redis, or push to WAF | — |
+| Slow release-step collectstatic | collectfasta | — |
+| Geo (countries/regions/zones) | postgis image + libgdal in Dockerfile + `django.contrib.gis` | `apps/location/` — Region model, geojson loaders (`loadcountries`/`loadzones` + `assets/countries/`), point-in-region lookups |
+| External-API fan-out | gunicorn gevent worker class for the web service | — |
+| Multi-persona users | one `User` + OneToOne profile models (Customer/Provider). Gate incomplete profiles at the API layer: `is_profile_completed` computed in a selector and exposed on the persona Detail schema, plus a ninja auth class raising an ApplicationError whose envelope carries `action_required: "complete_profile"`. Never path-prefix middleware — exempt lists rot and it bypasses the envelope (the template's own middleware shipped stale and unwired). | `apps/users/` customer/provider models, selectors, setup flows + `tests/test_customer_signup_flow.py` |
+| Admin dashboards (index KPIs/charts) | unfold insights components on the index (`DASHBOARD_CALLBACK`) + per-changelist KPI cards | `common/insights/`, `assets/templates/admin/` (index + components), `assets/templates/admin/payment/*/change_list.html` |
+| Social login (G13) | settings-based `SOCIALACCOUNT_PROVIDERS` from env creds; social adapter calls `user_post_signup` | `config/settings/base.py` SOCIALACCOUNT block, `config/helpers/allauth_adapter.py` (headless `serialize_user` enrichment) |
+| Notifications (in-app inbox + push/SMS fan-out) | dedicated app: Notification model, per-user language delivery, FCM device lifecycle, SMS provider factory, bilingual message catalog — port signal-free (services call services) | `apps/channel/` (message catalog: `template_message.py`; SMS ABC+factory: `domain/utilities/sms_helpers/`; FCM: `domain/services/device.py`) |
+| Payments (gateway + wallet) | gateway adapter/factory behind a service; append-only wallet transaction ledger (fix the read-modify-write balance race with `select_for_update`/`F()`); authenticated idempotent callback endpoint | `apps/payment/domain/` (paymob/tap `Integrations` + `adapters` + `factory`), `models/wallet_transaction.py` |
+| Mobile content app (FAQ/banners/onboarding/contact) | content models with per-app `translation.py` + curated fixtures loaded by a `loadfixtures` command (+ fixtures-loading test) | `apps/appInfo/`, `assets/fixtures/`, `common/management/commands/loadfixtures.py`, `tests/test_fixtures_loading.py` |
+| Runtime-editable operational settings | django-constance with unfold widgets; singleton settings/legal-content models via django-solo | `config/integrations/unfold.py` constance block, `apps/appInfo/models/app_info.py` |
+| Country reference data | code-only Country model + library-derived metadata (dial codes, flags); customer address book with primary-address invariants | `apps/location/models/country.py`, `domain/utils/country_info.py`, `models/address.py` |
+| Public terms/privacy page | one server-rendered page off AppInfo content (the API-only rule's single documented exception) | `common/views/web_view.py`, `assets/templates/terms/` |
+| Release notes discipline | commitizen + conventional-commit CI naming checks | `.github/pr-naming.yml`, `commit-naming.yml`, `release.yml` |
+| ImageField factories | session-shared tiny test image fixture (avoid generating per-row images) | `tests/conftest.py` image fixture |
