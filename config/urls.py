@@ -49,5 +49,9 @@ urlpatterns = [
 
 if settings.DEBUG:
     from debug_toolbar.toolbar import debug_toolbar_urls
+    from django.conf.urls.static import static
 
     urlpatterns += debug_toolbar_urls()
+    # runserver serves static via the staticfiles app but never media -
+    # without this, locally uploaded files 404 on retrieval.
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

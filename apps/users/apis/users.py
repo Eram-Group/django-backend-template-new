@@ -6,6 +6,7 @@ X-Session-Token, G04 ninja-auth-class); request.auth is the User.
 
 from django.http import HttpRequest
 from ninja import Router
+from ninja.responses import Status
 
 from apps.users import selectors
 from apps.users import services
@@ -34,3 +35,11 @@ def user_me_update(request: AuthedRequest, payload: UserUpdateIn) -> User:
         user=request.auth,
         data=payload.dict(exclude_unset=True),
     )
+
+
+@router.delete("/me", response={204: None}, summary="Deactivate current user")
+def user_me_deactivate(request: AuthedRequest) -> Status[None]:
+    """In-app account removal (store policy): deactivates and revokes every
+    session - this request's credentials stop working immediately."""
+    services.user_deactivate(user=request.auth)
+    return Status(204, None)

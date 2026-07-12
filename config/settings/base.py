@@ -157,6 +157,9 @@ ACCOUNT_LOGIN_BY_CODE_ENABLED = True
 ACCOUNT_LOGIN_BY_CODE_REQUIRED = ["password"]
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED = True
+# Without contrib.sites allauth derives "[<request host>]" - brand the OTP
+# emails (the product's first touchpoint) deliberately instead.
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Backend] "
 
 # API-only: no server-rendered account pages; browser + app clients are the
 # HEADLESS_CLIENTS default. The auth OpenAPI spec serves at /_allauth/openapi.json.

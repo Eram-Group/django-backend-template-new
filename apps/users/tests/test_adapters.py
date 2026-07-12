@@ -33,6 +33,40 @@ def test_signup_kill_switch(client: Client, monkeypatch: pytest.MonkeyPatch) -> 
     assert not User.objects.filter(email="blocked@example.com").exists()
 
 
+def test_signup_captures_language_and_welcome_email_uses_it(
+    client: Client, django_capture_on_commit_callbacks: Any
+) -> None:
+    """An English-locale signup must not get the Arabic-default welcome
+    email - Accept-Language is captured at save_user time."""
+    with django_capture_on_commit_callbacks(execute=True):
+        response = client.post(
+            "/_allauth/app/v1/auth/signup",
+            {"email": "locale.probe@example.com"},
+            content_type="application/json",
+            headers={"Accept-Language": "en"},
+        )
+
+    assert response.status_code == 401  # pending login_by_code
+    user = User.objects.get(email="locale.probe@example.com")
+    assert user.language == "en"
+    welcome = [m for m in mail.outbox if "Welcome" in m.subject]
+    assert welcome, [m.subject for m in mail.outbox]
+
+
+def test_signup_defaults_to_arabic_without_accept_language(
+    client: Client, django_capture_on_commit_callbacks: Any
+) -> None:
+    with django_capture_on_commit_callbacks(execute=True):
+        client.post(
+            "/_allauth/app/v1/auth/signup",
+            {"email": "locale.default@example.com"},
+            content_type="application/json",
+        )
+
+    user = User.objects.get(email="locale.default@example.com")
+    assert user.language == "ar"
+
+
 def test_signup_triggers_welcome_email_after_commit(
     client: Client, django_capture_on_commit_callbacks: Any
 ) -> None:

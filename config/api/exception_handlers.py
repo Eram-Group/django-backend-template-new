@@ -48,8 +48,13 @@ def register_exception_handlers(api: NinjaAPI) -> None:
 
     @api.exception_handler(ApplicationError)
     def application_error(request: HttpRequest, exc: ApplicationError) -> HttpResponse:
+        # extra["code"]: the stable token clients branch on (messages are
+        # localized); an explicit extra["code"] on the instance wins.
         return respond(
-            request, message=exc.message, status=exc.status_code, extra=exc.extra
+            request,
+            message=exc.message,
+            status=exc.status_code,
+            extra={"code": exc.code, **exc.extra},
         )
 
     @api.exception_handler(DjangoValidationError)

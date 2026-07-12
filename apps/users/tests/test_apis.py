@@ -89,6 +89,21 @@ def test_me_patch_cannot_touch_protected_fields(client: Client) -> None:
     assert user.name == "Legit"
 
 
+def test_me_delete_deactivates_and_kills_sessions(client: Client) -> None:
+    """Store-mandated account removal: 204, is_active off, and the very
+    credentials used for the call stop working immediately."""
+    user = UserFactory.create()
+    client.force_login(user)
+
+    response = client.delete(ME)
+
+    assert response.status_code == 204
+    user.refresh_from_db()
+    assert not user.is_active
+    # The session cookie the client still holds must be dead.
+    assert client.get(ME).status_code == 401
+
+
 def test_full_passwordless_flow_and_x_session_token(client: Client) -> None:
     """signup -> email code -> confirm -> call the API with X-Session-Token."""
     email = "flow.probe@example.com"

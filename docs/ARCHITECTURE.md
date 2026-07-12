@@ -153,6 +153,10 @@ Conventions (see `apps/users/tasks/emails.py`):
   columns. The API stays single-field (`name: str`): reading `obj.name`
   returns the active language's value with fallback per
   `MODELTRANSLATION_FALLBACK_LANGUAGES`; the admin edits both columns.
+- **Script validators**: attach `apps/common/validators.py`
+  (`validate_arabic_text` / `validate_english_text`) to `_ar`/`_en` content
+  columns — wrong-script entry is the classic bilingual-admin data bug, and
+  the validators fire in admin forms and services' `full_clean()` alike.
 - **modeltranslation edges** (from production use of the pattern):
   must-translate models set `required_languages = ("ar", "en")` in their
   `TranslationOptions` (fallback-only models omit it); translated admins mix

@@ -46,13 +46,6 @@
   ],
   "tasks": [
     {
-      "id": "wp4-api-auth-polish",
-      "group": "G14",
-      "title": "API & auth polish: error codes, DELETE /users/me, signup language capture, subject prefix, local media, script validators",
-      "endGoal": "Envelope carries extra['code'] (default snake_case class name); user_deactivate service + 204 route purging UserSessions; user.language set from Accept-Language at signup (welcome email locale test); ACCOUNT_EMAIL_SUBJECT_PREFIX set; media served under DEBUG; apps/common/validators.py ar/en script validators documented.",
-      "status": "pending"
-    },
-    {
       "id": "wp5-email-story",
       "group": "G14",
       "title": "Email story: templated HTML email helper + branded ar/en auth-code templates",

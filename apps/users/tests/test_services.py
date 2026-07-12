@@ -2,6 +2,7 @@ from typing import Any
 
 import pytest
 from allauth.account.models import EmailAddress
+from allauth.usersessions.models import UserSession
 from django.core import mail
 from django.core.exceptions import ValidationError
 
@@ -72,3 +73,19 @@ def test_factory_users_are_passwordless_and_verified() -> None:
     assert not user.has_usable_password()
     assert EmailAddress.objects.filter(user=user, verified=True, primary=True).exists()
     assert User.objects.filter(pk=user.pk).exists()
+
+
+def test_user_deactivate_flips_is_active_and_ends_sessions() -> None:
+    user = UserFactory.create()
+    UserSession.objects.create(
+        user=user,
+        ip="127.0.0.1",
+        session_key="deactivate-probe-session-key",
+        user_agent="probe",
+    )
+
+    services.user_deactivate(user=user)
+
+    user.refresh_from_db()
+    assert not user.is_active
+    assert not UserSession.objects.filter(user=user).exists()

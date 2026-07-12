@@ -14,6 +14,7 @@ from typing import Any
 from allauth.account.adapter import DefaultAccountAdapter
 from django.http import HttpRequest
 from django.utils.crypto import get_random_string
+from django.utils.translation import get_language_from_request
 
 from apps.users.models import User
 from apps.users.services import user_post_signup
@@ -44,6 +45,11 @@ class AccountAdapter(DefaultAccountAdapter):
         commit: bool = True,
     ) -> User:
         """Run post-signup side effects once the user row actually exists."""
+        # First-touchpoint localization: the welcome email renders in
+        # user.language, which defaults to Arabic - capture the client's
+        # Accept-Language (constrained to LANGUAGES by Django) before the
+        # post-signup task enqueues.
+        user.language = get_language_from_request(request)
         saved: User = super().save_user(request, user, form, commit=commit)
         if commit:
             # Social signups reach here with commit=False (no pk yet); the

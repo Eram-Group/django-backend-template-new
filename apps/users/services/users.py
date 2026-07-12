@@ -1,5 +1,6 @@
 from typing import Any
 
+from allauth.usersessions.models import UserSession
 from django.db import transaction
 
 from apps.users.models import User
@@ -24,3 +25,17 @@ def user_update(*, user: User, data: dict[str, Any]) -> User:
 def user_post_signup(*, user: User) -> None:
     """Post-signup side effects; the task enqueue rides the signup transaction."""
     transaction.on_commit(lambda: send_welcome_email.enqueue(str(user.pk)))
+
+
+def user_deactivate(*, user: User) -> None:
+    """Store-mandated in-app account removal (Apple 5.1.1(v) / Google Play).
+
+    is_active=False blocks future logins; ending every allauth session kills
+    live browser cookies AND X-Session-Token credentials immediately (end()
+    deletes the session-store row, not just the bookkeeping record).
+    """
+    user.is_active = False
+    user.full_clean()
+    user.save(update_fields=["is_active", "updated_at"])
+    for session in UserSession.objects.filter(user=user):
+        session.end()
