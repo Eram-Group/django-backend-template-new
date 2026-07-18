@@ -26,8 +26,8 @@ class Wallet(BaseModel):
         _("balance"),
         max_digits=12,
         decimal_places=2,
-        default=Decimal("0"),
-        validators=[MinValueValidator(Decimal("0"))],
+        default=Decimal(0),
+        validators=[MinValueValidator(Decimal(0))],
     )
     currency = models.CharField(_("currency"), max_length=3, choices=Currency)
 

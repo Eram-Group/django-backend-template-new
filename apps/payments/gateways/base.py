@@ -88,7 +88,7 @@ class PaymentGateway(Protocol):
 _MINOR_UNIT_EXPONENT = {"SAR": 2, "EGP": 2}
 
 
-def to_minor_units(amount: Decimal, currency: str) -> int:
+def to_minor_units(*, amount: Decimal, currency: str) -> int:
     """Decimal major units -> integer minor units (never float math)."""
     exponent = _MINOR_UNIT_EXPONENT[currency]
     quantum = Decimal(1).scaleb(-exponent)  # 0.01 for 2-decimal currencies

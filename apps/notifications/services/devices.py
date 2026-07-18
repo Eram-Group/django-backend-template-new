@@ -8,18 +8,19 @@ from apps.users.models import User
 def device_register(
     *, user: User, registration_id: str, platform: DevicePlatform
 ) -> Device:
-    """Idempotent upsert on registration_id.
+    """Idempotent upsert on registration_id (update_or_create).
 
     A token that shows up under a new account is REASSIGNED (one device =
     one signed-in user); platform updates ride along.
     """
-    device = Device.objects.filter(registration_id=registration_id).first()
-    if device is None:
-        device = Device(registration_id=registration_id)
-    device.user = user
-    device.platform = platform
+    device, _created = Device.objects.update_or_create(
+        registration_id=registration_id,
+        defaults={"user": user, "platform": platform},
+    )
+    # update_or_create saves before validation can run; full_clean after
+    # still protects - the caller's transaction (ATOMIC_REQUESTS) discards
+    # the write when this raises.
     device.full_clean()
-    device.save()
     return device
 
 

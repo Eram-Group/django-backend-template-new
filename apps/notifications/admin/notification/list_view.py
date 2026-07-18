@@ -18,5 +18,7 @@ LIST_FILTER = (
 LIST_FILTER_SUBMIT = True  # form-based (range) filters apply on submit
 SEARCH_FIELDS = ("recipient__email",)
 SEARCH_HELP_TEXT = _("Search by recipient email.")
+# FK columns render without a per-row query on the changelist.
+LIST_SELECT_RELATED = ("recipient",)
 ORDERING = ("-created_at",)
 LIST_PER_PAGE = 50

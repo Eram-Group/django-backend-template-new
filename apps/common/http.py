@@ -77,7 +77,24 @@ class OutboundError(Exception):
 
 
 class OutboundTransportError(OutboundError):
-    """DNS/connect/timeout failure - the response never arrived."""
+    """DNS/connect/timeout failure - the response never arrived.
+
+    ``request_sent`` is False only when the failure provably happened before
+    the request hit the wire (DNS/connect phase). True means the outcome is
+    UNKNOWN - a read timeout may have been processed by the provider -
+    so callers that trigger non-idempotent effects (payment refunds) must
+    not auto-revert on it.
+    """
+
+    def __init__(
+        self,
+        *,
+        service: str,
+        detail: str,
+        request_sent: bool,
+    ) -> None:
+        self.request_sent = request_sent
+        super().__init__(service=service, detail=detail)
 
 
 class OutboundStatusError(OutboundError):
@@ -187,6 +204,9 @@ def request_json(
         raise OutboundTransportError(
             service=service,
             detail=f"{method} {url} -> {type(exc).__name__}: {exc}",
+            # Same predicate as _retry_connect_only: connect-phase failures
+            # are the only ones where the request provably never went out.
+            request_sent=not isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout),
         ) from exc
 
     logger.info(

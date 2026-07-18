@@ -91,6 +91,11 @@ lint.select = [
   "A",   # flake8-builtins (no shadowing id/type/...)
   "PTH", # flake8-use-pathlib
   "PERF", # perflint (inefficient loops/copies)
+  "PGH", # pygrep-hooks (no blanket noqa / type: ignore)
+  "FURB", # refurb (modernize idioms)
+  "LOG", # flake8-logging
+  "G",   # flake8-logging-format
+  "RET", # flake8-return
 ]
 lint.ignore = [
   "RUF012", # ClassVar annotations conflict with Django's class-attr idiom (Meta, admin, etc.)
@@ -106,6 +111,13 @@ lint.isort.force-single-line = true
 [tool.mypy]
 python_version = "3.14"
 strict = true
+warn_unreachable = true
+enable_error_code = [
+  "ignore-without-code", # every type: ignore names its error code
+  "redundant-expr",
+  "truthy-bool",
+  "possibly-undefined",
+]
 files = [ "apps", "config", "manage.py" ]
 plugins = [
   "mypy_django_plugin.main",
@@ -184,6 +196,13 @@ layers = [
   "models",
 ]
 containers = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
+ignore_imports = [
+  # Recorded exception (2026-07-18): the refund executor task trampolines
+  # into its own app's services (function-level import) - the provider call
+  # must run in the worker, outside ATOMIC_REQUESTS, while the money logic
+  # (wallet_apply, revert) stays in services.
+  "apps.payments.tasks.refunds -> apps.payments.services.payments",
+]
 
 [[tool.importlinter.contracts]]
 # One app = one bounded context; cross-app access via services/selectors

@@ -11,5 +11,7 @@ LIST_FILTER = (
 LIST_FILTER_SUBMIT = True
 SEARCH_FIELDS = ("wallet__user__email",)
 SEARCH_HELP_TEXT = _("Search by wallet owner email.")
+# FK columns render without a per-row query on the changelist.
+LIST_SELECT_RELATED = ("wallet__user", "actor")
 ORDERING = ("-created_at",)
 LIST_PER_PAGE = 50

@@ -66,7 +66,8 @@ def test_unread_count_and_read_flow(client: Client) -> None:
     assert client.get(f"{LIST}/unread-count").json() == {"unread": 1}
     assert client.post(f"{LIST}/read-all").json() == {"updated": 1}
     assert client.get(f"{LIST}/unread-count").json() == {"unread": 0}
-    assert second.pk  # created above; read via read-all
+    second.refresh_from_db()
+    assert second.read_at is not None  # read via read-all
 
 
 def test_reading_someone_elses_notification_is_404(client: Client) -> None:

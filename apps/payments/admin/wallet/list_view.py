@@ -7,5 +7,7 @@ LIST_FILTER = ("currency",)
 LIST_FILTER_SUBMIT = False
 SEARCH_FIELDS = ("user__email",)
 SEARCH_HELP_TEXT = _("Search by user email.")
+# FK columns render without a per-row query on the changelist.
+LIST_SELECT_RELATED = ("user",)
 ORDERING = ("-updated_at",)
 LIST_PER_PAGE = 50

@@ -12,7 +12,8 @@ USER_UPDATABLE_FIELDS = frozenset({"name", "phone", "language"})
 
 
 def user_update(*, user: User, data: dict[str, Any]) -> User:
-    """Apply a partial update; callers pass .dict(exclude_unset=True) payloads."""
+    """Apply a partial update; callers pass only-sent-keys payloads
+    (PatchDict in the API layer)."""
     for field, value in data.items():
         if field not in USER_UPDATABLE_FIELDS:
             msg = f"Field not updatable: {field}"

@@ -20,5 +20,5 @@
 #     title: str
 #
 #
-# class ExampleUpdateIn(Schema):  # all-optional; PATCH via .dict(exclude_unset=True)
-#     title: str | None = None
+# class ExampleUpdateIn(Schema):  # PATCH handlers take PatchDict[ExampleUpdateIn]
+#     title: str

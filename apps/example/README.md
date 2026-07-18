@@ -26,5 +26,5 @@ Copy this app to start a new domain (one app = one bounded context):
 - Services take keyword-only args, run `full_clean()` before save, and raise
   `ApplicationError` subclasses.
 - Schemas: `Summary` / `Detail(Summary)` outputs; separate `CreateIn` /
-  `UpdateIn` (all-optional, PATCH via `exclude_unset`); never ModelSchema.
+  `UpdateIn` (PATCH via `ninja.PatchDict[UpdateIn]`); never ModelSchema.
 - List endpoints declare `apps.common.pagination.CursorPagination`.

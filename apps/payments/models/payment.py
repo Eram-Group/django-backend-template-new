@@ -68,6 +68,13 @@ class Payment(BaseModel):
         _("gateway callback"), null=True, blank=True
     )
     paid_at = models.DateTimeField(_("paid at"), null=True, blank=True)
+    # Write-ahead marker for the refund executor: stamped (and committed)
+    # BEFORE the provider refund call, which is NOT idempotent at Tap/Paymob.
+    # A REFUND_PENDING row with this set must never re-hit the gateway -
+    # it needs manual reconciliation against the provider dashboard.
+    refund_attempted_at = models.DateTimeField(
+        _("refund attempted at"), null=True, blank=True, editable=False
+    )
 
     class Meta:
         verbose_name = _("payment")

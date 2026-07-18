@@ -3,8 +3,8 @@ from typing import Any
 import pytest
 from allauth.account.models import EmailAddress
 from allauth.usersessions.models import UserSession
-from django.core import mail
 from django.core.exceptions import ValidationError
+from django.core.mail import EmailMessage
 
 from apps.payments.constants import DEFAULT_CURRENCY
 from apps.users import services
@@ -45,6 +45,7 @@ def test_user_update_runs_model_validation() -> None:
 
 def test_user_post_signup_provisions_wallet_and_enqueues_welcome_email(
     django_capture_on_commit_callbacks: Any,
+    mailoutbox: list[EmailMessage],
 ) -> None:
     # Bare create_user, like real signup: no factory-provisioned wallet yet.
     user = User.objects.create_user("signup@example.com", name="New User")
@@ -56,14 +57,16 @@ def test_user_post_signup_provisions_wallet_and_enqueues_welcome_email(
     assert user.wallet.balance == 0
     # ImmediateBackend (test settings) ran the enqueued task synchronously.
     assert len(callbacks) == 1
-    assert len(mail.outbox) == 1
-    assert mail.outbox[0].to == [user.email]
+    assert len(mailoutbox) == 1
+    assert mailoutbox[0].to == [user.email]
 
 
-def test_user_post_signup_sends_nothing_before_commit() -> None:
+def test_user_post_signup_sends_nothing_before_commit(
+    mailoutbox: list[EmailMessage],
+) -> None:
     user = User.objects.create_user("signup@example.com", name="New User")
     services.user_post_signup(user=user)  # transaction never commits in tests
-    assert not mail.outbox
+    assert not mailoutbox
 
 
 def test_updatable_fields_are_a_safe_allowlist() -> None:

@@ -7,6 +7,7 @@ are localized, so the stable code is what clients branch on.
 
 import pytest
 from django.http import HttpRequest
+from django.http import HttpResponse
 from django.test import Client
 from django.urls import path
 from ninja import NinjaAPI
@@ -28,7 +29,20 @@ def boom(request: HttpRequest) -> None:
     raise TeapotRefusedError("رسالة مترجمة", extra={"fields": {"tea": ["نفدت"]}})
 
 
-urlpatterns = [path("probe/", probe_api.urls)]
+def crash(request: HttpRequest) -> HttpResponse:
+    msg = "unhandled probe crash"
+    raise RuntimeError(msg)
+
+
+urlpatterns = [
+    path("probe/", probe_api.urls),
+    path("api/crash", crash),
+    path("crash", crash),
+]
+
+# The real project handler (config.urls) - wired here so pytest.mark.urls
+# resolves it exactly the way production's ROOT_URLCONF does.
+handler500 = "config.urls.handle_500"
 
 
 @pytest.mark.urls(__name__)
@@ -41,3 +55,25 @@ def test_application_error_envelope_carries_machine_code(client: Client) -> None
     assert set(body) == {"message", "extra"}
     assert body["extra"]["code"] == "teapot_refused"
     assert body["extra"]["fields"] == {"tea": ["نفدت"]}
+
+
+@pytest.mark.urls(__name__)
+@pytest.mark.django_db
+def test_unhandled_crash_keeps_json_envelope_on_api_paths() -> None:
+    client = Client(raise_request_exception=False)
+
+    response = client.get("/api/crash")
+
+    assert response.status_code == 500
+    assert set(response.json()) == {"message", "extra"}
+
+
+@pytest.mark.urls(__name__)
+@pytest.mark.django_db
+def test_unhandled_crash_stays_html_off_api_paths() -> None:
+    client = Client(raise_request_exception=False)
+
+    response = client.get("/crash")
+
+    assert response.status_code == 500
+    assert response.headers["Content-Type"].startswith("text/html")

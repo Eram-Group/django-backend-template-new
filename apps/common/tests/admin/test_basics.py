@@ -292,7 +292,8 @@ def test_list_editable_cannot_bypass_field_rules(model: type[Model]) -> None:
     )
     expanded = set(
         expand_translation_shadows(
-            ruled, {field.name for field in model._meta.get_fields()}
+            fields=ruled,
+            model_field_names={field.name for field in model._meta.get_fields()},
         )
     )
     overlap = expanded & set(model_admin.list_editable or ())

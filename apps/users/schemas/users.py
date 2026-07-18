@@ -24,8 +24,10 @@ class UserDetail(UserSummary):
 
 
 class UserUpdateIn(Schema):
-    """All-optional PATCH input - apply with .dict(exclude_unset=True)."""
+    """PATCH input - handlers wrap it in PatchDict[UserUpdateIn], which
+    auto-optionalizes every field and delivers only the keys the client
+    actually sent (absent != null)."""
 
-    name: str | None = None
-    phone: str | None = None  # E164 with country code; "" clears it
-    language: Language | None = None
+    name: str
+    phone: str  # E164 with country code; "" clears it
+    language: Language

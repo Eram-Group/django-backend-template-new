@@ -1,7 +1,7 @@
 from typing import Any
 
 import pytest
-from django.core import mail
+from django.core.mail import EmailMessage
 from django.core.mail import EmailMultiAlternatives
 from django.test import Client
 
@@ -34,7 +34,9 @@ def test_signup_kill_switch(client: Client, monkeypatch: pytest.MonkeyPatch) -> 
     assert not User.objects.filter(email="blocked@example.com").exists()
 
 
-def test_login_code_email_is_branded_html_with_real_expiry(client: Client) -> None:
+def test_login_code_email_is_branded_html_with_real_expiry(
+    client: Client, mailoutbox: list[EmailMessage]
+) -> None:
     """The OTP email (the product's first touchpoint) must be branded HTML;
     the expiry line renders from ACCOUNT_LOGIN_BY_CODE_TIMEOUT, never
     hardcoded copy (drift bug observed in the reference template)."""
@@ -46,7 +48,7 @@ def test_login_code_email_is_branded_html_with_real_expiry(client: Client) -> No
         content_type="application/json",
     )
 
-    message = mail.outbox[-1]
+    message = mailoutbox[-1]
     assert message.subject.startswith("[Backend] ")
     code_match = re.search(r"\b(\d{6})\b", str(message.body))
     assert code_match, message.body
@@ -60,7 +62,9 @@ def test_login_code_email_is_branded_html_with_real_expiry(client: Client) -> No
 
 
 def test_signup_captures_language_and_welcome_email_uses_it(
-    client: Client, django_capture_on_commit_callbacks: Any
+    client: Client,
+    django_capture_on_commit_callbacks: Any,
+    mailoutbox: list[EmailMessage],
 ) -> None:
     """An English-locale signup must not get the Arabic-default welcome
     email - Accept-Language is captured at save_user time."""
@@ -75,8 +79,8 @@ def test_signup_captures_language_and_welcome_email_uses_it(
     assert response.status_code == 401  # pending login_by_code
     user = User.objects.get(email="locale.probe@example.com")
     assert user.language == "en"
-    welcome = [m for m in mail.outbox if "Welcome" in m.subject]
-    assert welcome, [m.subject for m in mail.outbox]
+    welcome = [m for m in mailoutbox if "Welcome" in m.subject]
+    assert welcome, [m.subject for m in mailoutbox]
 
 
 def test_signup_defaults_to_arabic_without_accept_language(
@@ -94,7 +98,9 @@ def test_signup_defaults_to_arabic_without_accept_language(
 
 
 def test_signup_triggers_welcome_email_after_commit(
-    client: Client, django_capture_on_commit_callbacks: Any
+    client: Client,
+    django_capture_on_commit_callbacks: Any,
+    mailoutbox: list[EmailMessage],
 ) -> None:
     """The no-signals chain: adapter.save_user -> service -> task on_commit."""
     with django_capture_on_commit_callbacks(execute=True):
@@ -105,9 +111,9 @@ def test_signup_triggers_welcome_email_after_commit(
         )
 
     assert response.status_code == 401  # pending login_by_code
-    recipients = [message.to for message in mail.outbox]
-    subjects = [message.subject for message in mail.outbox]
-    assert [["chain.probe@example.com"]] * len(mail.outbox) == recipients
+    recipients = [message.to for message in mailoutbox]
+    subjects = [message.subject for message in mailoutbox]
+    assert [["chain.probe@example.com"]] * len(mailoutbox) == recipients
     # Both the verification-code email and the welcome task's email went out.
     assert any("Welcome" in subject for subject in subjects), subjects
-    assert len(mail.outbox) >= 2
+    assert len(mailoutbox) >= 2

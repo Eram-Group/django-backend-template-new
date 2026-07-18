@@ -12,6 +12,7 @@ from typing import Any
 
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
+from django.core.management.base import CommandParser
 
 from config.env import env
 
@@ -19,7 +20,7 @@ from config.env import env
 class Command(BaseCommand):
     help = "Simulate the gateway webhook for a payment (local only)."
 
-    def add_arguments(self, parser: Any) -> None:
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("payment_pk", help="Payment pk (uuid).")
         parser.add_argument(
             "--fail", action="store_true", help="Deliver a failed event instead."

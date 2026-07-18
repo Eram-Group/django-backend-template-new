@@ -86,7 +86,9 @@ class PaymobGateway:
             url=f"{_BASE}/v1/intention/",
             headers=_headers(),
             json={
-                "amount": to_minor_units(request.amount, request.currency),
+                "amount": to_minor_units(
+                    amount=request.amount, currency=request.currency
+                ),
                 "currency": request.currency,
                 "payment_methods": list(integration_ids),
                 # Idempotent at Paymob AND echoed back as merchant_order_id.
@@ -176,7 +178,7 @@ class PaymobGateway:
             headers=_headers(),
             json={
                 "transaction_id": transaction_id,
-                "amount_cents": to_minor_units(amount, currency),
+                "amount_cents": to_minor_units(amount=amount, currency=currency),
             },
             retry="connect-only",
         )

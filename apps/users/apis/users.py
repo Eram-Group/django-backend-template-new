@@ -4,6 +4,7 @@ Authentication is the NinjaAPI default auth (session cookie or
 X-Session-Token, G04 ninja-auth-class); request.auth is the User.
 """
 
+from ninja import PatchDict
 from ninja import Router
 from ninja.responses import Status
 
@@ -22,11 +23,11 @@ def user_me(request: AuthedRequest[User]) -> User:
 
 
 @router.patch("/me", response=UserDetail, summary="Update current user")
-def user_me_update(request: AuthedRequest[User], payload: UserUpdateIn) -> User:
-    return services.user_update(
-        user=request.auth,
-        data=payload.dict(exclude_unset=True),
-    )
+def user_me_update(
+    request: AuthedRequest[User], payload: PatchDict[UserUpdateIn]
+) -> User:
+    # PatchDict delivers only the keys the client sent.
+    return services.user_update(user=request.auth, data=payload)
 
 
 @router.delete("/me", response={204: None}, summary="Deactivate current user")

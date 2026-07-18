@@ -14,7 +14,7 @@ Fieldsets = list[tuple[str | None, dict[str, Any]]]
 
 
 def expand_translation_shadows(
-    fields: tuple[str, ...], model_field_names: Collection[str]
+    *, fields: tuple[str, ...], model_field_names: Collection[str]
 ) -> tuple[str, ...]:
     """modeltranslation shadow columns (``name`` -> ``name_ar``/``name_en``)
     are separate model fields, so a rule keyed on the base field would leak
@@ -79,12 +79,14 @@ class FieldRuleLookups:
 
     def readonly_rule_fields(self, context: AdminContext) -> tuple[str, ...]:
         return expand_translation_shadows(
-            self.field_permissions.readonly_fields(context), self._model_field_names()
+            fields=self.field_permissions.readonly_fields(context),
+            model_field_names=self._model_field_names(),
         )
 
     def hidden_rule_fields(self, context: AdminContext) -> tuple[str, ...]:
         return expand_translation_shadows(
-            self.field_permissions.hidden_fields(context), self._model_field_names()
+            fields=self.field_permissions.hidden_fields(context),
+            model_field_names=self._model_field_names(),
         )
 
     def _model_field_names(self) -> frozenset[str]:
@@ -92,7 +94,7 @@ class FieldRuleLookups:
 
 
 def drop_hidden_from_fieldsets(
-    fieldsets: Collection[tuple[Any, Any]], hidden: set[str]
+    fieldsets: Collection[tuple[Any, Any]], *, hidden: set[str]
 ) -> Fieldsets:
     """Filter hidden fields out of declared fieldsets; drop emptied ones."""
     filtered: Fieldsets = []

@@ -12,6 +12,7 @@ from django.http import JsonResponse
 from django.urls import include
 from django.urls import path
 from django.views.defaults import page_not_found
+from django.views.defaults import server_error
 
 from apps.common.health import healthz
 from apps.common.health import readyz
@@ -28,7 +29,22 @@ def handle_404(
     return page_not_found(request, exception)
 
 
+def handle_500(request: HttpRequest) -> HttpResponse:
+    """Crashed API requests keep the JSON error contract; the rest stay HTML.
+
+    Runs after Django's exception logging/Sentry capture - this only shapes
+    the response body, never swallows the error.
+    """
+    if request.path.startswith("/api/"):
+        return JsonResponse(
+            {"message": "Something went wrong on our side.", "extra": {}},
+            status=500,
+        )
+    return server_error(request)
+
+
 handler404 = "config.urls.handle_404"
+handler500 = "config.urls.handle_500"
 
 if env.SECURE_ADMIN_LOGIN:
     # Admin authenticates via allauth's email-code flow instead of passwords.

@@ -22,7 +22,9 @@ transitive dependency of factory_boy — never import it.
   `django_get_or_create = [...]` on the natural key (e.g. email).
 - Structure comes from factory_boy declarations (`Sequence`,
   `LazyAttribute`, `LazyFunction`, `SubFactory`, `Trait` under
-  `class Params`); every fake VALUE comes from `apps/common/tests/fake.py`
+  `class Params`, `fuzzy.FuzzyChoice` for weighted/random picks — never
+  `LazyFunction(lambda: random.choice(...))`, which bypasses factory_boy's
+  reseedable RNG); every fake VALUE comes from `apps/common/tests/fake.py`
   (mimesis `Locale.AR_SA` / `Locale.EN` providers — Arabic users get Arabic
   values). Add new value helpers there, never instantiate mimesis/Faker in
   a factory.
@@ -78,7 +80,8 @@ transitive dependency of factory_boy — never import it.
 - Seeded rows carry the `@seed.example.com` email domain: `--wipe` deletes
   exactly those; sequence offsets off the existing domain count so re-runs
   append without conflicts. `--seed N` = deterministic (`random.seed` +
-  `fake.reseed`).
+  `fake.reseed` + `factory.random.reseed_random` — the last one seeds
+  factory_boy's own RNG, which `FuzzyChoice` draws from).
 - Spread timestamps for realism with `QuerySet.update()` (bypasses
   auto_now/auto_now_add); remember `F()` reads pre-update values, so
   copying a freshly-randomized column needs a second UPDATE.

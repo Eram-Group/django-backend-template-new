@@ -17,6 +17,9 @@ FIELDSETS = (
             )
         },
     ),
-    ("Dates", {"fields": ("paid_at", "created_at", "updated_at")}),
+    (
+        "Dates",
+        {"fields": ("paid_at", "refund_attempted_at", "created_at", "updated_at")},
+    ),
 )
 READONLY_FIELDS = ()

@@ -22,6 +22,7 @@ from typing import Any
 from allauth.headless.spec.internal.schema import get_schema
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
+from django.core.management.base import CommandParser
 
 _HTTP_METHODS = {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
 _ACCEPT_LANGUAGE_REF = "#/components/parameters/AcceptLanguage"
@@ -90,7 +91,7 @@ def merge_auth_spec(
 class Command(BaseCommand):
     help = "Merge the allauth headless auth spec into an exported openapi.json."
 
-    def add_arguments(self, parser: Any) -> None:
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("--input", default="openapi.json")
         parser.add_argument("--output", default=None, help="defaults to --input")
         parser.add_argument(

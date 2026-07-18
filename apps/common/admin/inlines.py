@@ -124,7 +124,7 @@ class InlineDiscipline(FieldRuleLookups, _InlineBase):
         fieldsets = list(super().get_fieldsets(request, obj))
         if not hidden:
             return fieldsets
-        return drop_hidden_from_fieldsets(fieldsets, hidden)
+        return drop_hidden_from_fieldsets(fieldsets, hidden=hidden)
 
     def get_formset(
         self, request: HttpRequest, obj: Any | None = None, **kwargs: Any

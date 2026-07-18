@@ -132,6 +132,28 @@ def test_transport_failure_raises_transport_error() -> None:
 
 
 @respx.mock
+def test_connect_failure_reports_request_not_sent() -> None:
+    """Connect-phase failures provably never reached the provider."""
+    respx.post(URL).mock(side_effect=httpx.ConnectError("refused"))
+
+    with pytest.raises(OutboundTransportError) as excinfo:
+        request_json(service="svc", method="POST", url=URL, retry="none")
+
+    assert excinfo.value.request_sent is False
+
+
+@respx.mock
+def test_read_timeout_reports_request_sent() -> None:
+    """A read timeout means the provider MAY have processed the request."""
+    respx.post(URL).mock(side_effect=httpx.ReadTimeout("slow"))
+
+    with pytest.raises(OutboundTransportError) as excinfo:
+        request_json(service="svc", method="POST", url=URL, retry="none")
+
+    assert excinfo.value.request_sent is True
+
+
+@respx.mock
 def test_status_error_body_is_truncated() -> None:
     respx.post(URL).mock(return_value=httpx.Response(400, text="x" * 2_000))
 

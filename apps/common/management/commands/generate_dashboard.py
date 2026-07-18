@@ -11,6 +11,7 @@ from typing import Any
 from django.apps import apps
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
+from django.core.management.base import CommandParser
 
 TEMPLATES: dict[str, str] = {
     "__init__.py": """from {app_name}.admin.{entity}.admin import {model}Admin
@@ -175,7 +176,7 @@ class {model}Admin(ExportableModelAdmin):
 class Command(BaseCommand):
     help = "Scaffold an admin/<entity>/ package wired to apps.common.admin."
 
-    def add_arguments(self, parser: Any) -> None:
+    def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("app_label", help="App label, e.g. users")
         parser.add_argument("model_name", help="Model class name, e.g. User")
         parser.add_argument(

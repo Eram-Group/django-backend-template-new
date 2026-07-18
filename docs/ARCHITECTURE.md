@@ -95,9 +95,10 @@ Every API error has ONE shape, produced in ONE place
 - Outputs: `Summary` and `Detail(Summary)` per entity, each paired with a
   selector fetching exactly what it serializes. Add a smaller `Ref` tier only
   when an embed needs it (deferred until then).
-- Inputs: `CreateIn` (required fields) and `UpdateIn` (all-optional) are
-  **separate classes** — never inheriting each other. PATCH endpoints apply
-  `payload.dict(exclude_unset=True)` so absent ≠ null.
+- Inputs: `CreateIn` and `UpdateIn` are **separate classes** — never
+  inheriting each other. PATCH handlers take `ninja.PatchDict[UpdateIn]`,
+  which auto-optionalizes the schema and delivers only the keys the client
+  sent, so absent ≠ null.
 - Services guard writes with an explicit allowlist
   (`USER_UPDATABLE_FIELDS`) + `full_clean()` — the schema is not the only
   gate.

@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 import pytest
-from django.core import mail
+from django.core.mail import EmailMessage
 from django.test import Client
 
 from apps.users.constants import Language
@@ -129,7 +129,9 @@ def test_me_delete_deactivates_and_kills_sessions(client: Client) -> None:
     assert client.get(ME).status_code == 401
 
 
-def test_full_passwordless_flow_and_x_session_token(client: Client) -> None:
+def test_full_passwordless_flow_and_x_session_token(
+    client: Client, mailoutbox: list[EmailMessage]
+) -> None:
     """signup -> email code -> confirm -> call the API with X-Session-Token."""
     email = "flow.probe@example.com"
     headers: dict[str, Any] = {"content_type": "application/json"}
@@ -144,8 +146,8 @@ def test_full_passwordless_flow_and_x_session_token(client: Client) -> None:
     session_token = body["meta"]["session_token"]
     assert User.objects.filter(email=email).exists()
 
-    code_match = re.search(r"\b(\d{6})\b", str(mail.outbox[-1].body))
-    assert code_match, mail.outbox[-1].body
+    code_match = re.search(r"\b(\d{6})\b", str(mailoutbox[-1].body))
+    assert code_match, mailoutbox[-1].body
     confirmed = client.post(
         "/_allauth/app/v1/auth/code/confirm",
         {"code": code_match.group(1)},

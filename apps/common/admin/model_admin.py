@@ -156,7 +156,7 @@ class BaseModelAdmin(FieldRuleLookups, ModelAdmin):
         fieldsets = list(super().get_fieldsets(request, obj))
         if not hidden:
             return fieldsets
-        return drop_hidden_from_fieldsets(fieldsets, hidden)
+        return drop_hidden_from_fieldsets(fieldsets, hidden=hidden)
 
     def get_list_display(self, request: HttpRequest) -> list[Any]:
         context = AdminContext(request=request, obj=None)

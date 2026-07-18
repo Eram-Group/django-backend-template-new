@@ -31,7 +31,7 @@ class ApplicationError(Exception):
         if "code" not in cls.__dict__:
             cls.code = _derive_code(cls.__name__)
 
-    def __init__(self, message: str, extra: dict[str, Any] | None = None) -> None:
+    def __init__(self, message: str, *, extra: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.message = message
         self.extra = extra or {}

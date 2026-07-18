@@ -24,8 +24,9 @@ docs/ARCHITECTURE.md explains the conventions in depth. Topic rules live in
   `ApplicationError` subclasses; the mapping lives ONLY in
   `config/api/exception_handlers.py`.
 - Schemas: `Summary` / `Detail(Summary)` outputs paired with selectors;
-  `CreateIn` and `UpdateIn` are separate classes; PATCH applies
-  `.dict(exclude_unset=True)`. Lists paginate with
+  `CreateIn` and `UpdateIn` are separate classes; PATCH handlers take
+  `ninja.PatchDict[UpdateIn]` (auto-optionalizes; view receives only
+  sent keys). Lists paginate with
   `apps/common/pagination.CursorPagination`.
 - **Env discipline**: `config/env.py` is the only `os.environ` reader; every
   field required, no code defaults; a new field updates `.env.example` in

@@ -35,6 +35,7 @@ class PaymentAdmin(ExportableModelAdmin):
     list_filter_submit = list_view.LIST_FILTER_SUBMIT
     search_fields = list_view.SEARCH_FIELDS
     search_help_text = list_view.SEARCH_HELP_TEXT
+    list_select_related = list_view.LIST_SELECT_RELATED
     ordering = list_view.ORDERING
     list_per_page = list_view.LIST_PER_PAGE
 
@@ -62,11 +63,17 @@ class PaymentAdmin(ExportableModelAdmin):
         icon="currency_exchange",
     )
     def refund_payment(self, request: HttpRequest, object_id: str) -> HttpResponse:
+        # Interlock only: the provider call runs in the worker task, outside
+        # this request's ATOMIC_REQUESTS transaction (see payment_refund_start).
         payment = Payment.objects.get(pk=object_id)
         try:
-            services.payment_refund(payment=payment, actor=cast("User", request.user))
+            services.payment_refund_start(
+                payment=payment, actor=cast("User", request.user)
+            )
         except ApplicationError as exc:
             messages.error(request, exc.message)
         else:
-            messages.success(request, _("Payment refunded."))
+            messages.success(
+                request, _("Refund started - refresh to see the final status.")
+            )
         return redirect(reverse("admin:payments_payment_change", args=[object_id]))
