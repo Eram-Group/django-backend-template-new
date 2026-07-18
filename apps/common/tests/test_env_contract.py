@@ -7,6 +7,8 @@ the other fails here (same-change rule from CLAUDE.md).
 
 from pathlib import Path
 
+from pydantic import SecretStr
+
 from config.env import Env
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[3] / ".env.example"
@@ -36,4 +38,36 @@ def test_env_example_matches_env_fields_exactly() -> None:
     assert example == fields, (
         ".env.example key order must match config/env.py field order "
         "(keeps the two reviewable side by side)."
+    )
+
+
+def _looks_like_a_comment(value: object) -> bool:
+    """True when a parsed env value is really a stray trailing comment.
+
+    SecretStr survives model_dump as an object rather than a str, so unwrap it
+    first - otherwise the check skips exactly the credential fields most
+    likely to carry an explanatory comment.
+    """
+    if isinstance(value, SecretStr):
+        value = value.get_secret_value()
+    return isinstance(value, str) and value.lstrip().startswith("#")
+
+
+def test_env_example_parses_with_no_comment_values() -> None:
+    """.env.example must load as a complete, valid config.
+
+    CI is the only consumer that runs `cp .env.example .env`, so a malformed
+    line here is invisible locally and fails a job instead. A trailing
+    `KEY= # note` is the trap: env_ignore_empty makes a bare `KEY=` mean
+    unset, but the comment makes it a real VALUE, silently defeating every
+    `is None` not-configured guard downstream.
+    """
+    env = Env(_env_file=str(ENV_EXAMPLE))
+
+    commented = sorted(
+        key for key, value in env.model_dump().items() if _looks_like_a_comment(value)
+    )
+    assert not commented, (
+        f"Values in .env.example parsed as comments: {commented}. "
+        "Move the note to its own line and leave the value empty."
     )

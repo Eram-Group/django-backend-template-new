@@ -139,6 +139,11 @@ container boot; the image never runs collectstatic at build time.
 
 ### One-time provisioning
 
+0. **GitHub remote**, if the repo is still local only — CI, the secret scan
+   and the migration guard cannot run without one:
+   `gh repo create <owner>/<name> --private --source=. --remote=origin`
+   then `git push -u origin main`. With no deploy variables set (below),
+   every deploy stage skips and only `ci.yml` + `secret-scan.yml` run.
 1. **ECR** repository for the image.
 2. **RDS** PostgreSQL 18; one database; `DATABASE_URL` into Secrets Manager.
 3. **S3** bucket (static + media prefixes via django-storages) fronted by
