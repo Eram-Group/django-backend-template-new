@@ -24,16 +24,23 @@ from apps.payments.exceptions import InsufficientBalanceError
 from apps.payments.exceptions import PaymentGatewayUnavailableError
 from apps.payments.exceptions import PaymentNotFoundError
 from apps.payments.exceptions import PaymentNotRefundableError
+from apps.payments.exceptions import SavedCardGatewayMismatchError
+from apps.payments.exceptions import SavedCardNotFoundError
 from apps.payments.exceptions import WalletCurrencyMismatchError
 from apps.payments.exceptions import WalletNotFoundError
 from apps.payments.gateways.base import ChargeStatus
+from apps.payments.gateways.base import CheckoutSession
 from apps.payments.gateways.base import RefundResult
+from apps.payments.gateways.base import SavedCardData
 from apps.payments.gateways.base import WebhookEvent
+from apps.payments.gateways.base import WebhookEventKind
 from apps.payments.gateways.fake import FakeGateway
 from apps.payments.models import Payment
+from apps.payments.models import SavedCard
 from apps.payments.models import Wallet
 from apps.payments.models import WalletTransaction
 from apps.payments.tests.factories import PaymentFactory
+from apps.payments.tests.factories import SavedCardFactory
 from apps.payments.tests.factories import WalletFactory
 from apps.users.tests.factories import UserFactory
 
@@ -556,3 +563,300 @@ def test_reconcile_leaves_fresh_rows_alone(monkeypatch: pytest.MonkeyPatch) -> N
     assert fresh_pending.status == PaymentStatus.PENDING
     assert fresh_refunding.status == PaymentStatus.REFUND_PENDING
     assert fresh_refunding.refund_attempted_at is None  # executor never ran on it
+
+
+# --- saved cards -----------------------------------------------------------------
+
+
+def _card_data(**overrides: Any) -> SavedCardData:
+    fields: dict[str, Any] = {
+        "token": "fake_card_A",
+        "customer_id": "fake_cus_A",
+        "agreement_id": "fake_agr_A",
+        "brand": "VISA",
+        "last4": "1019",
+        "exp_month": 12,
+        "exp_year": 2030,
+        "email": "",
+    }
+    fields.update(overrides)
+    return SavedCardData(**fields)
+
+
+def test_initiate_with_save_card_marks_request() -> None:
+    user = UserFactory.create()
+
+    payment = services.payment_initiate(
+        user=user,
+        amount=Decimal("50.00"),
+        currency=Currency.SAR,
+        save_card=True,
+    )
+
+    assert payment.save_card_requested is True
+    assert "/fake-checkout/" in payment.checkout_url  # normal redirect flow
+
+
+def test_paid_event_with_card_payload_stores_saved_card() -> None:
+    payment = PaymentFactory.create(save_card_requested=True)
+    event = WebhookEvent(
+        reference=str(payment.idempotency_key),
+        transaction_id="txn_1",
+        is_paid=True,
+        status="PAID",
+        raw={"probe": True},
+        saved_card=_card_data(),
+    )
+
+    services.payment_apply_gateway_event(gateway_name="fake", event=event)
+    services.payment_apply_gateway_event(gateway_name="fake", event=event)  # replay
+
+    # Scoped to this test's rows: --reuse-db keeps rows committed by the
+    # admin-gate session fixture around (reconcile-test precedent).
+    card = SavedCard.objects.get(user=payment.user)  # one despite the replay
+    assert card.user == payment.user
+    assert card.token == "fake_card_A"  # noqa: S105 - test fixture value
+    assert card.gateway_agreement_id == "fake_agr_A"
+    payment.refresh_from_db()
+    assert payment.saved_card == card
+
+
+def test_paid_event_card_payload_ignored_without_opt_in() -> None:
+    payment = PaymentFactory.create()  # save_card_requested defaults False
+    event = WebhookEvent(
+        reference=str(payment.idempotency_key),
+        transaction_id="txn_1",
+        is_paid=True,
+        status="PAID",
+        raw={"probe": True},
+        saved_card=_card_data(),
+    )
+
+    services.payment_apply_gateway_event(gateway_name="fake", event=event)
+
+    assert not SavedCard.objects.filter(user=payment.user).exists()
+    payment.refresh_from_db()
+    assert payment.saved_card is None
+    assert payment.status == PaymentStatus.PAID  # the payment itself applied
+
+
+def test_initiate_with_saved_card_charges_instantly() -> None:
+    user = UserFactory.create()
+    card = SavedCardFactory.create(user=user)
+
+    payment = services.payment_initiate(
+        user=user,
+        amount=Decimal("50.00"),
+        currency=Currency.SAR,
+        kind=PaymentKind.WALLET_TOPUP,
+        saved_card=card,
+    )
+
+    assert payment.status == PaymentStatus.PAID  # FakeGateway captures instantly
+    assert payment.checkout_url == ""
+    assert payment.saved_card == card
+    user.wallet.refresh_from_db()  # factory cached the pre-credit instance
+    assert user.wallet.balance == Decimal("50.00")
+
+
+def test_initiate_with_another_users_card_is_rejected() -> None:
+    user = UserFactory.create()
+    other_card = SavedCardFactory.create()
+
+    with pytest.raises(SavedCardNotFoundError):
+        services.payment_initiate(
+            user=user,
+            amount=Decimal("50.00"),
+            currency=Currency.SAR,
+            saved_card=other_card,
+        )
+
+    assert user.payments.count() == 0  # rejected before any row/provider call
+
+
+def test_initiate_with_gateway_mismatch_card_is_rejected() -> None:
+    user = UserFactory.create()
+    card = SavedCardFactory.create(user=user, gateway="tap")  # SAR -> fake in tests
+
+    with pytest.raises(SavedCardGatewayMismatchError):
+        services.payment_initiate(
+            user=user,
+            amount=Decimal("50.00"),
+            currency=Currency.SAR,
+            saved_card=card,
+        )
+
+
+def test_charge_saved_marks_paid_and_credits_wallet() -> None:
+    user = UserFactory.create()
+    card = SavedCardFactory.create(user=user)
+
+    payment = services.payment_charge_saved(
+        user=user,
+        saved_card=card,
+        amount=Decimal("25.00"),
+        currency=Currency.SAR,
+        kind=PaymentKind.WALLET_TOPUP,
+    )
+
+    assert payment.status == PaymentStatus.PAID
+    assert payment.saved_card == card
+    assert payment.gateway_transaction_id.startswith("fake_txn_")
+    user.wallet.refresh_from_db()  # factory cached the pre-credit instance
+    assert user.wallet.balance == Decimal("25.00")
+
+
+def test_charge_saved_declined_marks_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    user = UserFactory.create()
+    card = SavedCardFactory.create(user=user)
+
+    def declined(self: FakeGateway, *, request: Any) -> CheckoutSession:
+        return CheckoutSession(
+            charge_id=f"fake_charge_{request.reference}",
+            checkout_url="",
+            raw={"fake": True},
+            is_paid=False,
+            status="DECLINED",
+            transaction_id=f"fake_txn_{request.reference}",
+        )
+
+    monkeypatch.setattr(FakeGateway, "charge_saved", declined)
+
+    payment = services.payment_charge_saved(
+        user=user, saved_card=card, amount=Decimal("25.00"), currency=Currency.SAR
+    )
+
+    assert payment.status == PaymentStatus.FAILED  # non-terminal: webhook can heal
+
+
+def test_charge_saved_gateway_down_marks_failed_and_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = UserFactory.create()
+    card = SavedCardFactory.create(user=user)
+
+    def down(self: FakeGateway, *, request: Any) -> CheckoutSession:
+        raise OutboundTransportError(
+            service="fake", detail="connect timeout", request_sent=False
+        )
+
+    monkeypatch.setattr(FakeGateway, "charge_saved", down)
+
+    with pytest.raises(PaymentGatewayUnavailableError):
+        services.payment_charge_saved(
+            user=user, saved_card=card, amount=Decimal("25.00"), currency=Currency.SAR
+        )
+
+    payment = user.payments.get()
+    assert payment.status == PaymentStatus.FAILED
+
+
+def test_saved_card_store_is_idempotent_and_reassigns_owner() -> None:
+    first_owner = UserFactory.create()
+    second_owner = UserFactory.create()
+
+    services.saved_card_store(user=first_owner, gateway="fake", data=_card_data())
+    card = services.saved_card_store(
+        user=second_owner, gateway="fake", data=_card_data(last4="2222")
+    )
+
+    cards = SavedCard.objects.filter(gateway="fake", token="fake_card_A")  # noqa: S106
+    assert cards.count() == 1  # (gateway, token) upsert, no dupes
+    assert card.user == second_owner  # 3DS on the token proves possession
+    assert card.last4 == "2222"  # metadata refresh rides along
+
+
+def test_saved_card_store_from_event_links_user_by_email() -> None:
+    user = UserFactory.create()
+    event = WebhookEvent(
+        reference="",
+        transaction_id="",
+        is_paid=False,
+        status="token",
+        raw={},
+        kind=WebhookEventKind.CARD_TOKEN,
+        saved_card=_card_data(email=user.email.upper()),  # case-insensitive
+    )
+
+    card = services.saved_card_store_from_event(gateway_name="fake", event=event)
+
+    assert card is not None
+    assert card.user == user
+
+
+def test_saved_card_store_from_event_unknown_email_returns_none() -> None:
+    event = WebhookEvent(
+        reference="",
+        transaction_id="",
+        is_paid=False,
+        status="token",
+        raw={},
+        kind=WebhookEventKind.CARD_TOKEN,
+        saved_card=_card_data(email="nobody@nowhere.example"),
+    )
+
+    stored = services.saved_card_store_from_event(gateway_name="fake", event=event)
+
+    assert stored is None
+    assert not SavedCard.objects.filter(token="fake_card_A").exists()  # noqa: S106
+
+
+def test_saved_card_delete_removes_row() -> None:
+    card = SavedCardFactory.create()
+
+    services.saved_card_delete(user=card.user, saved_card=card)
+
+    assert not SavedCard.objects.filter(pk=card.pk).exists()
+
+
+def test_saved_card_delete_survives_gateway_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The user's intent wins: a dangling provider-side card is inert."""
+    card = SavedCardFactory.create()
+
+    def failing_delete(self: FakeGateway, *, saved_card: Any) -> bool:
+        raise OutboundTransportError(
+            service="fake", detail="read timeout", request_sent=True
+        )
+
+    monkeypatch.setattr(FakeGateway, "delete_saved_card", failing_delete)
+
+    services.saved_card_delete(user=card.user, saved_card=card)
+
+    assert not SavedCard.objects.filter(pk=card.pk).exists()
+
+
+def test_saved_card_delete_rejects_other_owner() -> None:
+    card = SavedCardFactory.create()
+    stranger = UserFactory.create()
+
+    with pytest.raises(SavedCardNotFoundError):
+        services.saved_card_delete(user=stranger, saved_card=card)
+
+    assert SavedCard.objects.filter(pk=card.pk).exists()
+
+
+def test_verify_persists_saved_card_from_charge_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The webhook was lost - verify still vaults the opted-in card."""
+    payment = PaymentFactory.create(save_card_requested=True)
+
+    def paid_with_card(self: FakeGateway, **kwargs: Any) -> ChargeStatus:
+        return ChargeStatus(
+            transaction_id="txn_9",
+            is_paid=True,
+            status="CAPTURED",
+            raw={},
+            saved_card=_card_data(),
+        )
+
+    monkeypatch.setattr(FakeGateway, "fetch_status", paid_with_card)
+
+    services.payment_verify(payment=payment)
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.PAID
+    assert payment.saved_card is not None
+    assert payment.saved_card.token == "fake_card_A"  # noqa: S105 - fixture value

@@ -22,13 +22,25 @@ router = Router(tags=["payments"])
 @router.post("", response=PaymentDetail, summary="Start a checkout")
 def payment_create(request: AuthedRequest[User], payload: PaymentCreateIn) -> Payment:
     """Returns the payment with ``checkout_url`` - open it to complete the
-    payment; then poll GET /payments/{id} (the webhook flips the status)."""
+    payment; then poll GET /payments/{id} (the webhook flips the status).
+
+    With ``saved_card_id`` the charge may settle synchronously: redirect only
+    when ``checkout_url`` is non-empty, otherwise ``status`` is already
+    terminal (paid/failed).
+    """
+    saved_card = (
+        selectors.saved_card_get(user=request.auth, pk=payload.saved_card_id)
+        if payload.saved_card_id
+        else None
+    )
     return services.payment_initiate(
         user=request.auth,
         amount=payload.amount,
         currency=payload.currency,
         kind=payload.kind,
         description=payload.description,
+        save_card=payload.save_card,
+        saved_card=saved_card,
     )
 
 

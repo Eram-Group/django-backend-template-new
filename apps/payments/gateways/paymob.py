@@ -4,7 +4,10 @@ Webhook verification: the transaction-processed callback carries an ``hmac``
 query parameter = HMAC-SHA512 (hex, lowercase) over the concatenated values
 of 20 documented transaction fields in lexicographical key order, keyed with
 the dashboard HMAC secret (developers.paymob.com "HMAC Calculation").
-Booleans serialize as ``true``/``false``.
+Booleans serialize as ``true``/``false``. Card-token callbacks
+(``type: TOKEN``, sent when the customer ticks "Save Card" on the hosted
+page) use the SAME secret and query parameter but their OWN 8-field
+concatenation - see ``_TOKEN_HMAC_FIELDS``.
 
 ``special_reference`` (= our idempotency key) makes charge creation
 idempotent at Paymob AND comes back as ``order.merchant_order_id`` in the
@@ -27,7 +30,10 @@ from apps.payments.gateways.base import CheckoutRequest
 from apps.payments.gateways.base import CheckoutSession
 from apps.payments.gateways.base import GatewayResponseError
 from apps.payments.gateways.base import RefundResult
+from apps.payments.gateways.base import SavedCardData
+from apps.payments.gateways.base import SavedCardRef
 from apps.payments.gateways.base import WebhookEvent
+from apps.payments.gateways.base import WebhookEventKind
 from apps.payments.gateways.base import WebhookVerificationError
 from apps.payments.gateways.base import to_minor_units
 
@@ -58,6 +64,19 @@ _HMAC_FIELDS = (
     "success",
 )
 
+# Card-token (type TOKEN) callbacks sign a DIFFERENT, 8-field concatenation -
+# also lexicographical, same secret, same ``?hmac=`` query parameter.
+_TOKEN_HMAC_FIELDS = (
+    "card_subtype",
+    "created_at",
+    "email",
+    "id",
+    "masked_pan",
+    "merchant_id",
+    "order_id",
+    "token",
+)
+
 
 def _secret() -> str:
     key = settings.PAYMOB_SECRET_KEY
@@ -80,32 +99,19 @@ class PaymobGateway:
         if public_key is None or not integration_ids:
             msg = "PAYMOB_PUBLIC_KEY / PAYMOB_INTEGRATION_IDS are not set"
             raise GatewayResponseError(msg)
-        response = request_json(
-            service="paymob",
-            method="POST",
-            url=f"{_BASE}/v1/intention/",
-            headers=_headers(),
-            json={
-                "amount": to_minor_units(
-                    amount=request.amount, currency=request.currency
-                ),
-                "currency": request.currency,
-                "payment_methods": list(integration_ids),
-                # Idempotent at Paymob AND echoed back as merchant_order_id.
-                "special_reference": request.reference,
-                "items": [],
-                "billing_data": {
-                    "first_name": request.customer_name or "Customer",
-                    "last_name": "-",
-                    "email": request.customer_email,
-                    "phone_number": request.customer_phone or "+20000000000",
-                },
-                "notification_url": request.webhook_url,
-                "redirection_url": request.redirect_url,
-            },
-            retry="connect-only",
+        body = self._intention_body(
+            request=request, payment_methods=list(integration_ids)
         )
-        payload = response.json()
+        if request.saved_card is not None:
+            # One-click CIT: unified checkout shows the stored card (CVV
+            # only). Live mode uses the dedicated Card-on-File integration;
+            # test mode has none - the normal 3DS integration accepts
+            # card_tokens there.
+            cof_id = settings.PAYMOB_COF_INTEGRATION_ID
+            if cof_id is not None:
+                body["payment_methods"] = [cof_id]
+            body["card_tokens"] = [request.saved_card.token]
+        payload = self._post_intention(body)
         intention_id = payload.get("id")
         client_secret = payload.get("client_secret")
         if not intention_id or not client_secret:
@@ -118,6 +124,92 @@ class PaymobGateway:
         return CheckoutSession(
             charge_id=str(intention_id), checkout_url=checkout_url, raw=payload
         )
+
+    def charge_saved(self, *, request: CheckoutRequest) -> CheckoutSession:
+        """MIT/MOTO: intention on the MOTO integration, then a server-side
+        pay with the stored token - no customer interaction, no redirect.
+
+        ``special_reference`` still rides the intention, so the transaction
+        callback that follows links back to our Payment row and a crash
+        between the two calls self-heals via the webhook.
+        """
+        moto_id = settings.PAYMOB_MOTO_INTEGRATION_ID
+        if moto_id is None:
+            msg = "PAYMOB_MOTO_INTEGRATION_ID is not set"
+            raise GatewayResponseError(msg)
+        ref = request.saved_card
+        if ref is None:
+            msg = "paymob saved-card charge without a card ref"
+            raise GatewayResponseError(msg)
+        intention = self._post_intention(
+            self._intention_body(request=request, payment_methods=[moto_id])
+        )
+        intention_id = intention.get("id")
+        keys = intention.get("payment_keys") or []
+        payment_key = next(
+            (k.get("key") for k in keys if k.get("integration") == moto_id),
+            keys[0].get("key") if keys else None,
+        )
+        if not intention_id or not payment_key:
+            msg = f"paymob intention response missing id/payment_keys: {intention}"
+            raise GatewayResponseError(msg)
+        pay_response = request_json(
+            service="paymob",
+            method="POST",
+            url=f"{_BASE}/api/acceptance/payments/pay",
+            headers=_headers(),
+            json={
+                "source": {"identifier": ref.token, "subtype": "TOKEN"},
+                "payment_token": payment_key,
+            },
+            retry="connect-only",
+        )
+        pay = pay_response.json()
+        success = pay.get("success") is True
+        return CheckoutSession(
+            charge_id=str(intention_id),
+            checkout_url="",
+            raw={"intention": intention, "payment": pay},
+            is_paid=success,
+            status="success" if success else "failed",
+            transaction_id=str(pay.get("id", "")),
+        )
+
+    def delete_saved_card(self, *, saved_card: SavedCardRef) -> bool:
+        """Local-only: Paymob documents no public token-delete endpoint."""
+        return True
+
+    def _intention_body(
+        self, *, request: CheckoutRequest, payment_methods: list[int]
+    ) -> dict[str, Any]:
+        return {
+            "amount": to_minor_units(amount=request.amount, currency=request.currency),
+            "currency": request.currency,
+            "payment_methods": payment_methods,
+            # Idempotent at Paymob AND echoed back as merchant_order_id.
+            "special_reference": request.reference,
+            "items": [],
+            "billing_data": {
+                "first_name": request.customer_name or "Customer",
+                "last_name": "-",
+                "email": request.customer_email,
+                "phone_number": request.customer_phone or "+20000000000",
+            },
+            "notification_url": request.webhook_url,
+            "redirection_url": request.redirect_url,
+        }
+
+    def _post_intention(self, body: dict[str, Any]) -> dict[str, Any]:
+        response = request_json(
+            service="paymob",
+            method="POST",
+            url=f"{_BASE}/v1/intention/",
+            headers=_headers(),
+            json=body,
+            retry="connect-only",
+        )
+        payload: dict[str, Any] = response.json()
+        return payload
 
     def parse_webhook(
         self,
@@ -136,6 +228,29 @@ class PaymobGateway:
             msg = "webhook body is not JSON"
             raise WebhookVerificationError(msg) from exc
         obj = payload.get("obj", {})
+        if payload.get("type") == "TOKEN":
+            expected = _expected_hmac(obj, fields=_TOKEN_HMAC_FIELDS)
+            if not hmac.compare_digest(expected, posted.lower()):
+                msg = "hmac mismatch"
+                raise WebhookVerificationError(msg)
+            return WebhookEvent(
+                reference="",  # token callbacks carry no planted reference
+                transaction_id="",
+                is_paid=False,
+                status="token",
+                raw=payload,
+                kind=WebhookEventKind.CARD_TOKEN,
+                saved_card=SavedCardData(
+                    token=str(obj.get("token", "")),
+                    customer_id="",
+                    agreement_id="",
+                    brand=str(obj.get("card_subtype", "")),
+                    last4=_last4(str(obj.get("masked_pan", ""))),
+                    exp_month=None,
+                    exp_year=None,
+                    email=str(obj.get("email", "")),
+                ),
+            )
         if not hmac.compare_digest(_expected_hmac(obj), posted.lower()):
             msg = "hmac mismatch"
             raise WebhookVerificationError(msg)
@@ -186,7 +301,9 @@ class PaymobGateway:
         return RefundResult(ok=payload.get("success") is True, raw=payload)
 
 
-def _expected_hmac(obj: dict[str, Any]) -> str:
+def _expected_hmac(
+    obj: dict[str, Any], *, fields: tuple[str, ...] = _HMAC_FIELDS
+) -> str:
     secret = settings.PAYMOB_HMAC_SECRET
     # Blank is checked alongside None on purpose: env.py already normalises a
     # blank secret to None, but a signature check must fail closed on its own
@@ -195,10 +312,16 @@ def _expected_hmac(obj: dict[str, Any]) -> str:
     if secret is None or not str(secret.get_secret_value()).strip():
         msg = "PAYMOB_HMAC_SECRET is not set"
         raise WebhookVerificationError(msg)
-    concatenated = "".join(_field_value(obj, field) for field in _HMAC_FIELDS)
+    concatenated = "".join(_field_value(obj, field) for field in fields)
     return hmac.new(
         str(secret.get_secret_value()).encode(), concatenated.encode(), hashlib.sha512
     ).hexdigest()
+
+
+def _last4(masked_pan: str) -> str:
+    """``xxxx-xxxx-xxxx-2346`` (or any masked shape) -> last four digits."""
+    digits = "".join(char for char in masked_pan if char.isdigit())
+    return digits[-4:]
 
 
 def _field_value(obj: dict[str, Any], dotted: str) -> str:

@@ -11,7 +11,8 @@
     "After the last task of a group: run the group's checkpoint, fix any fallout, then `git commit -m \"checkpoint(<groupId>): <group title>\"`.",
     "Tips are guidance, not prescriptions - decide from context; PLAN.md wins over any tip; record resolutions by appending to the task's tips.",
     "Any task that adds an Env field updates config/env.py AND .env.example in the same task.",
-    "From G03 onward ruff+mypy must be green at every checkpoint. Since 2026-07-18 the remote exists and CI runs for real, so GitHub is a gate alongside the local checkpoint - not a substitute: CI is the only place `cp .env.example .env` happens, which is exactly how the FIREBASE_CREDENTIALS_B64 comment-as-value bug surfaced."
+    "From G03 onward ruff+mypy must be green at every checkpoint. Since 2026-07-18 the remote exists and CI runs for real, so GitHub is a gate alongside the local checkpoint - not a substitute: CI is the only place `cp .env.example .env` happens, which is exactly how the FIREBASE_CREDENTIALS_B64 comment-as-value bug surfaced.",
+    "2026-07-18 saved cards built (user request; plan in ~/.claude/plans/curious-bubbling-kernighan.md): SavedCard vault + opt-in save at checkout + one-click CIT + service-only MIT (payment_charge_saved) + cards API + admin, Tap tokens->charge with payment_agreement, Paymob TOKEN callback (own 8-field HMAC) + card_tokens CIT + MOTO payments/pay; local suites green - the live test-mode proof is G22."
   ],
   "groups": [
     {
@@ -49,6 +50,12 @@
       "title": "Product expansion",
       "rationale": "Market-facing features requested 2026-07-18: true multi-country/multi-currency support beyond the SAR/EGP pair, and operational zones managed from the dashboard instead of code.",
       "checkpoint": "Each feature demonstrated end-to-end locally; design decisions recorded in the task tips; ruff+mypy+pytest+lint-imports green; commit."
+    },
+    {
+      "id": "G22",
+      "title": "Saved cards live verification",
+      "rationale": "Card-on-file was built and unit/service-tested against respx + FakeGateway on 2026-07-18; both provider accounts have the features enabled. What code cannot prove locally: real 3DS on the token charge, the real TOKEN callback shape/HMAC, Card-on-File/MOTO integration id behavior, and Tap's card+agreement payload on a live save.",
+      "checkpoint": "Saved-card save/one-click/MIT/delete demonstrated against Tap+Paymob TEST modes with evidence in the task tips; ruff+mypy+pytest+lint-imports green; commit."
     }
   ],
   "tasks": [
@@ -171,6 +178,19 @@
         "The cross-app access rule was added to the digest 2026-07-18 (one-way imports recorded in pyproject ignore_imports; passive model ownership only; behavior goes through the owning app's service; FKs as string refs) - check whether it deserves its own .claude/rules topic file like factories.md has.",
         "Inventory pass: list .claude/rules/*, map each to its digest line and its trigger globs; flag digest rules with no rule file and rule files with no digest line, then decide each case deliberately rather than mechanically adding files."
       ],
+      "status": "pending"
+    },
+    {
+      "id": "saved-cards-live-verify",
+      "group": "G22",
+      "title": "Prove saved-card flows against live test-mode gateways",
+      "endGoal": "With real Tap/Paymob TEST keys and a webhook tunnel: Tap checkout with save_card stores card_/cus_/payment_agreement_ ids from the webhook, one-click (tokens->charge, customer_initiated true) and `manage.py charge_saved_card` (MIT, non-3DS) both settle CAPTURED, and DELETE /cards removes the card at Tap; Paymob's hosted Save-Card checkbox delivers a TOKEN callback whose 8-field HMAC verifies and stores the token, a CIT intention with card_tokens shows the saved card CVV-only, and a MOTO intention + payments/pay charges with no customer present; a forged TOKEN hmac is observed rejected as 400.",
+      "tips": [
+        "Both provider accounts had Save Card / tokenization enabled 2026-07-18 (user confirmed). Paymob live mode needs PAYMOB_COF_INTEGRATION_ID + PAYMOB_MOTO_INTEGRATION_ID in .env; in test mode leave CoF empty (falls back to PAYMOB_INTEGRATION_IDS) and ask Paymob support for a test MOTO id if MIT is to be proven there.",
+        "Reuse the gateways-e2e-verify tunnel setup (BACKEND_BASE_URL = ngrok URL); the TOKEN callback arrives as a SECOND POST after the transaction one - watch the webhook log for both.",
+        "mada test cards are the ones that matter for Tap MIT in KSA - verify at least one mada and one Visa/MC saved-card charge."
+      ],
+      "dependsOn": ["gateways-e2e-verify"],
       "status": "pending"
     }
   ]

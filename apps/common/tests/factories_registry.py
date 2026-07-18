@@ -15,9 +15,11 @@ from apps.notifications.models import Notification
 from apps.notifications.tests.factories import DeviceFactory
 from apps.notifications.tests.factories import NotificationFactory
 from apps.payments.models import Payment
+from apps.payments.models import SavedCard
 from apps.payments.models import Wallet
 from apps.payments.models import WalletTransaction
 from apps.payments.tests.factories import PaymentFactory
+from apps.payments.tests.factories import SavedCardFactory
 from apps.payments.tests.factories import WalletFactory
 from apps.payments.tests.factories import WalletTransactionFactory
 from apps.users.models import User
@@ -28,6 +30,7 @@ FACTORIES: dict[type[Model], type[DjangoModelFactory[Any]]] = {
     Device: DeviceFactory,
     Notification: NotificationFactory,
     Payment: PaymentFactory,
+    SavedCard: SavedCardFactory,
     Wallet: WalletFactory,
     WalletTransaction: WalletTransactionFactory,
 }

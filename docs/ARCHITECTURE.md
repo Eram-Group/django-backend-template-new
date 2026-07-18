@@ -215,8 +215,30 @@ Per-area notes:
   `auth=None` surface — signature IS the authentication. Wallet balance
   moves only through `wallet_apply` (Wallet row lock + append-only
   `WalletTransaction` ledger with `balance_after`). Local flow:
-  `manage.py simulate_payment_webhook <pk> [--fail]` drives the same
-  transition service (Mailpit's role, for payments).
+  `manage.py simulate_payment_webhook <pk> [--fail] [--save-card]` drives
+  the same transition service (Mailpit's role, for payments).
+- **Saved cards** (built 2026-07-18): `SavedCard` stores only opaque
+  provider references (Tap card/customer/agreement ids, Paymob token) —
+  PAN and expiry never touch our servers. Saving is consent-gated:
+  `Payment.save_card_requested` (client opt-in) gates persisting the card
+  payload Tap echoes on charge webhooks; Paymob's consent is the hosted
+  checkout's Save-Card checkbox, which arrives as a SEPARATE
+  `type: TOKEN` callback verified with its own 8-field HMAC (same secret,
+  same `?hmac=` param) and linked to the user by billing email — it never
+  touches a Payment row. One-click CIT rides
+  `payment_initiate(saved_card=...)`: Paymob still redirects (CVV-only
+  unified checkout via `card_tokens` + the Card-on-File integration id);
+  Tap charges server-side (single-use token minted from the stored card,
+  then charge) and may settle synchronously — an empty `checkout_url`
+  with a terminal `status` on the response means no redirect. MIT is the
+  service-only `payment_charge_saved` (Tap: `customer_initiated: false`
+  non-3DS, legal only with the stored payment-agreement id; Paymob: MOTO
+  intention then `payments/pay` with the token) — never auto-retried, and
+  the webhook URL always rides along so a crash between charge and row
+  update self-heals through the idempotent event applier. Card deletion
+  is local-first (`saved_card_delete`): the Tap-side detach is
+  best-effort, and `Payment.saved_card` is SET_NULL so payment history
+  survives. `manage.py charge_saved_card` exercises MIT end-to-end.
 
 **Cross-app decisions on record** (independence contract `ignore_imports`
 in `pyproject.toml`): notifications → users (rows belong to a User;

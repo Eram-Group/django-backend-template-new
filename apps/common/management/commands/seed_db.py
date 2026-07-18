@@ -103,18 +103,21 @@ class Command(BaseCommand):
 
         if options["wipe"]:
             from apps.payments.models import Payment
+            from apps.payments.models import SavedCard
             from apps.payments.models import Wallet
             from apps.payments.models import WalletTransaction
 
             seeded_users = User.objects.filter(email__endswith=f"@{SEED_DOMAIN}")
             # PROTECT chain dictates the order: ledger rows first (they
-            # protect wallets AND payments), then payments, then wallets;
-            # deleting users last cascades the rest (EmailAddress, Device,
-            # Notification).
+            # protect wallets AND payments), then payments, then saved cards
+            # (after payments so SET_NULL never rewrites doomed rows), then
+            # wallets; deleting users last cascades the rest (EmailAddress,
+            # Device, Notification).
             wiped = 0
             for qs in (
                 WalletTransaction.objects.filter(wallet__user__in=seeded_users),
                 Payment.objects.filter(user__in=seeded_users),
+                SavedCard.objects.filter(user__in=seeded_users),
                 Wallet.objects.filter(user__in=seeded_users),
                 seeded_users,
             ):
@@ -223,6 +226,7 @@ class Command(BaseCommand):
         from apps.payments.constants import PaymentStatus
         from apps.payments.constants import WalletTransactionKind
         from apps.payments.models import Payment
+        from apps.payments.models import SavedCard
         from apps.payments.models import Wallet
         from apps.payments.models import WalletTransaction
 
@@ -335,6 +339,25 @@ class Command(BaseCommand):
             rng=rng,
         )
         Device.objects.bulk_create(devices, batch_size=BATCH)
+        # SavedCardFactory has no post_generation hooks - plain field parity
+        # is the whole contract (unique (gateway, token) via uuid).
+        saved_cards = fan_out(
+            users,
+            per_parent=(0, 2),
+            build_child=lambda user: SavedCard(
+                user=user,
+                gateway=GatewayName.FAKE,
+                token=f"fake_card_seed_{uuid.uuid4().hex}",
+                gateway_customer_id=f"fake_cus_seed_{uuid.uuid4().hex[:12]}",
+                gateway_agreement_id=f"fake_agr_seed_{uuid.uuid4().hex[:12]}",
+                brand=rng.choice(["VISA", "MASTERCARD", "MADA"]),
+                last4=f"{rng.randint(0, 9999):04d}",
+                exp_month=rng.randint(1, 12),
+                exp_year=now.year + rng.randint(1, 5),
+            ),
+            rng=rng,
+        )
+        SavedCard.objects.bulk_create(saved_cards, batch_size=BATCH)
         notifications = [
             Notification(
                 recipient=user,
@@ -352,6 +375,7 @@ class Command(BaseCommand):
             "wallets": len(wallets),
             "wallet transactions": len(transactions),
             "devices": len(devices),
+            "saved cards": len(saved_cards),
             "notifications": len(notifications),
         }
 
@@ -365,6 +389,7 @@ class Command(BaseCommand):
         from apps.notifications.models import Device
         from apps.notifications.models import Notification
         from apps.payments.models import Payment
+        from apps.payments.models import SavedCard
 
         spread = RawSQL("now() - (random() * interval '180 days')", [])
         seeded_payments = Payment.objects.filter(
@@ -372,7 +397,11 @@ class Command(BaseCommand):
         )
         seeded_payments.update(created_at=spread)
         seeded_payments.update(updated_at=F("created_at"))
-        for model, user_field in ((Device, "user"), (Notification, "recipient")):
+        for model, user_field in (
+            (Device, "user"),
+            (Notification, "recipient"),
+            (SavedCard, "user"),
+        ):
             rows = model.objects.filter(
                 **{f"{user_field}__email__endswith": f"@{SEED_DOMAIN}"}
             )

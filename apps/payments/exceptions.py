@@ -25,6 +25,14 @@ class WebhookRejectedError(PaymentError):
     """Webhook signature verification failed - the gateway should retry/alert."""
 
 
+class SavedCardNotFoundError(PaymentError):
+    status_code = 404
+
+
+class SavedCardGatewayMismatchError(PaymentError):
+    """The card's gateway does not serve the payment's currency."""
+
+
 class WalletError(ApplicationError):
     """Base error for wallet operations."""
 

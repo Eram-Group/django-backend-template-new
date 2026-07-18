@@ -2,14 +2,18 @@
 
 Every gateway plants ``CheckoutRequest.reference`` (= Payment.idempotency_key)
 at the provider and echoes it back in ``WebhookEvent.reference`` - that is how
-a webhook finds its Payment row. Signature verification lives in each
-gateway's ``parse_webhook`` and REALLY verifies (HMAC over the provider's
-documented fields, constant-time compare) - never an echoed shared secret.
+a webhook finds its Payment row. The one exception is ``CARD_TOKEN`` events
+(Paymob sends the card token as a standalone callback carrying no reference) -
+those never touch a Payment row and link to the user by billing email instead.
+Signature verification lives in each gateway's ``parse_webhook`` and REALLY
+verifies (HMAC over the provider's documented fields, constant-time compare) -
+never an echoed shared secret.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import StrEnum
 from typing import Any
 from typing import Protocol
 
@@ -20,6 +24,36 @@ class GatewayResponseError(Exception):
 
 class WebhookVerificationError(Exception):
     """Signature missing or wrong - the request is not from the gateway."""
+
+
+class WebhookEventKind(StrEnum):
+    PAYMENT = "payment"
+    #: Standalone card-token callback (Paymob TOKEN) - no payment state
+    #: change; ``reference``/``transaction_id`` are empty on these events.
+    CARD_TOKEN = "card_token"  # noqa: S105 - event kind, not a secret
+
+
+@dataclass(frozen=True, slots=True)
+class SavedCardRef:
+    """What a gateway needs to charge or delete a stored card (input side)."""
+
+    token: str  # Tap card_id ("card_...") / Paymob card token
+    customer_id: str  # Tap "cus_..."; "" for Paymob
+    agreement_id: str  # Tap "payment_agreement_..."; "" for Paymob
+
+
+@dataclass(frozen=True, slots=True)
+class SavedCardData:
+    """Card payload parsed out of a charge response/webhook (output side)."""
+
+    token: str
+    customer_id: str
+    agreement_id: str
+    brand: str
+    last4: str
+    exp_month: int | None  # Paymob provides neither expiry field
+    exp_year: int | None
+    email: str  # billing email echoed by the gateway ("" when absent)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,13 +67,23 @@ class CheckoutRequest:
     customer_phone: str  # E164 or ""
     webhook_url: str
     redirect_url: str
+    #: Customer asked to store the card (Tap request flag; Paymob ignores it -
+    #: consent is the hosted-page checkbox).
+    save_card: bool = False
+    #: Pay WITH this stored card (CIT via create_checkout, MIT via
+    #: charge_saved).
+    saved_card: SavedCardRef | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class CheckoutSession:
     charge_id: str
-    checkout_url: str
+    checkout_url: str  # "" = no redirect; the outcome was synchronous
     raw: dict[str, Any]
+    is_paid: bool = False  # meaningful only when status != ""
+    #: Gateway-native FINAL status; "" = pending (redirect/webhook settles it).
+    status: str = ""
+    transaction_id: str = ""  # settled txn id for synchronous outcomes
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +93,8 @@ class WebhookEvent:
     is_paid: bool
     status: str  # gateway-native status string (audit/logging)
     raw: dict[str, Any]
+    kind: WebhookEventKind = WebhookEventKind.PAYMENT
+    saved_card: SavedCardData | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +103,8 @@ class ChargeStatus:
     is_paid: bool
     status: str
     raw: dict[str, Any]
+    #: Lets payment_verify persist a card when the webhook was lost.
+    saved_card: SavedCardData | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +131,10 @@ class PaymentGateway(Protocol):
     def refund(
         self, *, transaction_id: str, amount: Decimal, currency: str
     ) -> RefundResult: ...
+
+    def charge_saved(self, *, request: CheckoutRequest) -> CheckoutSession: ...
+
+    def delete_saved_card(self, *, saved_card: SavedCardRef) -> bool: ...
 
 
 _MINOR_UNIT_EXPONENT = {"SAR": 2, "EGP": 2}

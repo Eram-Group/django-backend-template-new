@@ -108,6 +108,11 @@ class Env(BaseSettings):
     PAYMOB_PUBLIC_KEY: str | None = None
     PAYMOB_HMAC_SECRET: SecretStr | None = None
     PAYMOB_INTEGRATION_IDS: CommaSeparated[int] = Field(default_factory=list)
+    # Card-on-file: one-click CIT checkout (unset = fall back to
+    # PAYMOB_INTEGRATION_IDS, which works in Paymob test mode) and MOTO for
+    # server-side MIT charges (unset = MIT refused on paymob).
+    PAYMOB_COF_INTEGRATION_ID: int | None = None
+    PAYMOB_MOTO_INTEGRATION_ID: int | None = None
 
     @field_validator(
         "SECRET_KEY_FALLBACKS",

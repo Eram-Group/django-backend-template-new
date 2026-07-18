@@ -25,6 +25,7 @@ class PaymentDetail(PaymentSummary):
     description: str
     checkout_url: str
     paid_at: datetime | None
+    saved_card_id: uuid.UUID | None
 
 
 class PaymentCreateIn(Schema):
@@ -32,3 +33,8 @@ class PaymentCreateIn(Schema):
     currency: Currency
     kind: PaymentKind = PaymentKind.OTHER
     description: str = ""
+    #: Vault the card entered at checkout for one-click reuse (ignored when
+    #: saved_card_id is sent - a stored card cannot be re-saved).
+    save_card: bool = False
+    #: Pay one-click with this stored card instead of entering card details.
+    saved_card_id: uuid.UUID | None = None

@@ -1,7 +1,8 @@
 """Locally simulate the gateway webhook for a pending payment.
 
-    manage.py simulate_payment_webhook <payment-pk>          # mark paid
-    manage.py simulate_payment_webhook <payment-pk> --fail   # mark failed
+    manage.py simulate_payment_webhook <payment-pk>              # mark paid
+    manage.py simulate_payment_webhook <payment-pk> --fail       # mark failed
+    manage.py simulate_payment_webhook <payment-pk> --save-card  # paid + card
 
 Drives the SAME transition service the real webhook endpoint calls
 (payment_apply_gateway_event), so wallet credit + notification fan-out run
@@ -25,6 +26,11 @@ class Command(BaseCommand):
         parser.add_argument(
             "--fail", action="store_true", help="Deliver a failed event instead."
         )
+        parser.add_argument(
+            "--save-card",
+            action="store_true",
+            help="Attach a vaulted-card payload to the paid event.",
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         if env.ENVIRONMENT != "local":
@@ -36,6 +42,7 @@ class Command(BaseCommand):
 
         from apps.payments import services
         from apps.payments.exceptions import PaymentError
+        from apps.payments.gateways.base import SavedCardData
         from apps.payments.gateways.base import WebhookEvent
         from apps.payments.models import Payment
 
@@ -46,12 +53,29 @@ class Command(BaseCommand):
             raise CommandError(msg) from exc
 
         paid = not options["fail"]
+        saved_card = None
+        if options["save_card"] and paid:
+            # Local-only shortcut: flip the consent gate so the service
+            # persists the card exactly as a real opted-in checkout would.
+            Payment.objects.filter(pk=payment.pk).update(save_card_requested=True)
+            payment.refresh_from_db(fields=["save_card_requested"])
+            saved_card = SavedCardData(
+                token=f"fake_card_{payment.pk}",
+                customer_id=f"fake_cus_{payment.user_id}",
+                agreement_id=f"fake_agr_{payment.pk}",
+                brand="VISA",
+                last4="4242",
+                exp_month=12,
+                exp_year=2030,
+                email=payment.user.email,
+            )
         event = WebhookEvent(
             reference=str(payment.idempotency_key),
             transaction_id=f"fake_txn_{payment.pk}",
             is_paid=paid,
             status="PAID" if paid else "FAILED",
             raw={"simulated": True},
+            saved_card=saved_card,
         )
         try:
             payment = services.payment_apply_gateway_event(

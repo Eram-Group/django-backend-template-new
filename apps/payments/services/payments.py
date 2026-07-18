@@ -31,20 +31,57 @@ from apps.payments.exceptions import PaymentGatewayUnavailableError
 from apps.payments.exceptions import PaymentNotFoundError
 from apps.payments.exceptions import PaymentNotRefundableError
 from apps.payments.exceptions import PaymentRefundFailedError
+from apps.payments.exceptions import SavedCardGatewayMismatchError
+from apps.payments.exceptions import SavedCardNotFoundError
 from apps.payments.exceptions import WalletCurrencyMismatchError
 from apps.payments.gateways import gateway_by_name
 from apps.payments.gateways import gateway_for_currency
 from apps.payments.gateways.base import CheckoutRequest
+from apps.payments.gateways.base import CheckoutSession
 from apps.payments.gateways.base import GatewayResponseError
+from apps.payments.gateways.base import SavedCardRef
 from apps.payments.gateways.base import WebhookEvent
 from apps.payments.models import Payment
+from apps.payments.models import SavedCard
 from apps.payments.models import Wallet
 from apps.payments.selectors.wallets import wallet_get
+from apps.payments.services.saved_cards import saved_card_store
 from apps.payments.services.wallets import wallet_apply
 from apps.payments.tasks.refunds import process_payment_refund
 from apps.users.models import User
 
 logger = structlog.get_logger(__name__)
+
+
+def _card_ref(card: SavedCard) -> SavedCardRef:
+    return SavedCardRef(
+        token=card.token,
+        customer_id=card.gateway_customer_id,
+        agreement_id=card.gateway_agreement_id,
+    )
+
+
+def _session_event(payment: Payment, session: CheckoutSession) -> WebhookEvent:
+    """A synchronous charge outcome, shaped like the webhook that will also
+    arrive - both converge on the idempotent payment_apply_gateway_event."""
+    return WebhookEvent(
+        reference=str(payment.idempotency_key),
+        transaction_id=session.transaction_id or session.charge_id,
+        is_paid=session.is_paid,
+        status=session.status,
+        raw=session.raw,
+    )
+
+
+def _validate_saved_card(
+    *, user: User, saved_card: SavedCard, gateway_name: str
+) -> None:
+    if saved_card.user_id != user.pk:
+        raise SavedCardNotFoundError(str(_("Saved card not found.")))
+    if saved_card.gateway != gateway_name:
+        raise SavedCardGatewayMismatchError(
+            str(_("This card cannot be used with this currency."))
+        )
 
 
 def _wallet_for(*, user: User, currency: str) -> Wallet:
@@ -65,12 +102,21 @@ def payment_initiate(
     currency: Currency | str,
     kind: PaymentKind | str = PaymentKind.OTHER,
     description: str = "",
+    save_card: bool = False,
+    saved_card: SavedCard | None = None,
 ) -> Payment:
     """Create the PENDING row, then ask the gateway for a checkout URL.
 
     The client waits for checkout_url, so the gateway call is synchronous
     (kernel timeout 10s < gunicorn's 30s); the idempotency key is planted at
     the gateway, so a retried initiate can never double-charge.
+
+    ``save_card`` asks the gateway to vault the card entered at checkout
+    (ignored alongside ``saved_card`` - a stored card cannot be re-saved).
+    ``saved_card`` pays one-click WITH a stored card: Paymob still returns a
+    checkout_url (hosted CVV entry); Tap charges server-side and may settle
+    synchronously - the response is then already terminal with an empty
+    checkout_url, or carries a 3DS-challenge URL to redirect to.
 
     Accepted risk: under ATOMIC_REQUESTS the PENDING row becomes visible to
     webhooks only when the request commits, so a webhook racing the commit
@@ -82,6 +128,10 @@ def payment_initiate(
         # reject the mismatch would strand already-captured money.
         _wallet_for(user=user, currency=str(currency))
     gateway = gateway_for_currency(str(currency))
+    if saved_card is not None:
+        _validate_saved_card(
+            user=user, saved_card=saved_card, gateway_name=gateway.name
+        )
     payment = Payment(
         user=user,
         amount=amount,
@@ -89,6 +139,8 @@ def payment_initiate(
         kind=kind,
         description=description,
         gateway=gateway.name,
+        saved_card=saved_card,
+        save_card_requested=save_card and saved_card is None,
     )
     payment.full_clean()
     payment.save()
@@ -104,6 +156,8 @@ def payment_initiate(
             f"{settings.BACKEND_BASE_URL}/api/v1/payments/webhooks/{gateway.name}"
         ),
         redirect_url=f"{settings.FRONTEND_BASE_URL}/payments/{payment.pk}/return",
+        save_card=payment.save_card_requested,
+        saved_card=_card_ref(saved_card) if saved_card is not None else None,
     )
     try:
         session = gateway.create_checkout(request=request)
@@ -125,7 +179,78 @@ def payment_initiate(
             "updated_at",
         ]
     )
+    if not session.checkout_url and session.status:
+        # Synchronous outcome (one-click captured/declined) - apply it now;
+        # the webhook that follows is an idempotent replay.
+        return payment_apply_gateway_event(
+            gateway_name=gateway.name, event=_session_event(payment, session)
+        )
     return payment
+
+
+def payment_charge_saved(
+    *,
+    user: User,
+    saved_card: SavedCard,
+    amount: Decimal,
+    currency: Currency | str,
+    kind: PaymentKind | str = PaymentKind.OTHER,
+    description: str = "",
+) -> Payment:
+    """MIT: charge a stored card server-side, no customer present.
+
+    Never auto-retry a failure here - a merchant-initiated charge that ran
+    twice is a double-charge, not a retry. The gateways always plant our
+    reference AND the webhook URL, so a crash between the provider call and
+    the row update self-heals when the webhook lands; FAILED is non-terminal,
+    so a late CAPTURED webhook corrects a wrongly-FAILED row too.
+    """
+    if kind == PaymentKind.WALLET_TOPUP:
+        _wallet_for(user=user, currency=str(currency))
+    gateway = gateway_for_currency(str(currency))
+    _validate_saved_card(user=user, saved_card=saved_card, gateway_name=gateway.name)
+    payment = Payment(
+        user=user,
+        amount=amount,
+        currency=currency,
+        kind=kind,
+        description=description,
+        gateway=gateway.name,
+        saved_card=saved_card,
+    )
+    payment.full_clean()
+    payment.save()
+    request = CheckoutRequest(
+        reference=str(payment.idempotency_key),
+        amount=payment.amount,
+        currency=payment.currency,
+        description=description,
+        customer_email=user.email,
+        customer_name=user.name,
+        customer_phone=str(user.phone) if user.phone else "",
+        webhook_url=(
+            f"{settings.BACKEND_BASE_URL}/api/v1/payments/webhooks/{gateway.name}"
+        ),
+        redirect_url=f"{settings.FRONTEND_BASE_URL}/payments/{payment.pk}/return",
+        saved_card=_card_ref(saved_card),
+    )
+    try:
+        session = gateway.charge_saved(request=request)
+    except (OutboundError, GatewayResponseError) as exc:
+        payment.status = PaymentStatus.FAILED
+        payment.save(update_fields=["status", "updated_at"])
+        raise PaymentGatewayUnavailableError(
+            str(_("The payment provider is unavailable. Try again shortly."))
+        ) from exc
+    payment.gateway_charge_id = session.charge_id
+    payment.gateway_response = session.raw
+    payment.full_clean()
+    payment.save(update_fields=["gateway_charge_id", "gateway_response", "updated_at"])
+    if session.status:
+        return payment_apply_gateway_event(
+            gateway_name=gateway.name, event=_session_event(payment, session)
+        )
+    return payment  # stays PENDING - the webhook/reconcile sweep settles it
 
 
 def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Payment:
@@ -139,11 +264,19 @@ def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Pa
             raise PaymentNotFoundError(str(_("Payment not found."))) from exc
         payment.gateway_callback = event.raw
         payment.gateway_transaction_id = event.transaction_id
+        if event.saved_card is not None and payment.save_card_requested:
+            # Consent-gated card persistence; the upsert is idempotent, and a
+            # replay may be the FIRST carrier of the card payload when
+            # payment_verify settled the row before the webhook arrived.
+            payment.saved_card = saved_card_store(
+                user=payment.user, gateway=gateway_name, data=event.saved_card
+            )
         if payment.status in TERMINAL_STATUSES:  # replay: record, never re-credit
             payment.save(
                 update_fields=[
                     "gateway_callback",
                     "gateway_transaction_id",
+                    "saved_card",
                     "updated_at",
                 ]
             )
@@ -160,6 +293,7 @@ def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Pa
                 "paid_at",
                 "gateway_callback",
                 "gateway_transaction_id",
+                "saved_card",
                 "updated_at",
             ]
         )
@@ -218,6 +352,7 @@ def payment_verify(*, payment: Payment) -> Payment:
         is_paid=True,
         status=status.status,
         raw=status.raw,
+        saved_card=status.saved_card,
     )
     return payment_apply_gateway_event(gateway_name=payment.gateway, event=event)
 
