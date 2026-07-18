@@ -11,10 +11,7 @@ from apps.common.pagination import CursorPagination
 from apps.common.requests import AuthedRequest
 from apps.payments import selectors
 from apps.payments import services
-from apps.payments.models import Payment
 from apps.payments.models import SavedCard
-from apps.payments.schemas import CardAddIn
-from apps.payments.schemas import PaymentDetail
 from apps.payments.schemas import SavedCardSummary
 from apps.users.models import User
 
@@ -25,24 +22,6 @@ router = Router(tags=["payments"])
 @paginate(CursorPagination)
 def saved_card_list(request: AuthedRequest[User]) -> QuerySet[SavedCard]:
     return selectors.saved_card_list(user=request.auth)
-
-
-@router.post("/cards/add", response=PaymentDetail, summary="Add a card, no payment")
-def saved_card_add(
-    request: AuthedRequest[User], payload: CardAddIn | None = None
-) -> Payment:
-    """Vault a card without charging it: redirect the customer to
-    ``checkout_url`` (a card-verification for a nominal amount that is never
-    captured). After they complete it, the gateway callback stores the
-    card - it then appears in GET /cards.
-
-    With ``card_token`` (from the gateway's card component embedded in the
-    app) the hosted card-entry page is skipped: ``checkout_url`` is then
-    only the 3DS challenge, and may be empty with a terminal ``status``
-    when no challenge was required.
-    """
-    card_token = payload.card_token if payload else ""
-    return services.payment_setup_card(user=request.auth, card_token=card_token)
 
 
 @router.delete(

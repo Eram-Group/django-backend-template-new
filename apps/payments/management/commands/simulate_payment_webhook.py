@@ -55,10 +55,6 @@ class Command(BaseCommand):
         paid = not options["fail"]
         saved_card = None
         if options["save_card"] and paid:
-            # Local-only shortcut: flip the consent gate so the service
-            # persists the card exactly as a real opted-in checkout would.
-            Payment.objects.filter(pk=payment.pk).update(save_card_requested=True)
-            payment.refresh_from_db(fields=["save_card_requested"])
             saved_card = SavedCardData(
                 token=f"fake_card_{payment.pk}",
                 customer_id=f"fake_cus_{payment.user_id}",

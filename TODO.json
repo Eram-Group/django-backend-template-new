@@ -12,7 +12,7 @@
     "Tips are guidance, not prescriptions - decide from context; PLAN.md wins over any tip; record resolutions by appending to the task's tips.",
     "Any task that adds an Env field updates config/env.py AND .env.example in the same task.",
     "From G03 onward ruff+mypy must be green at every checkpoint. Since 2026-07-18 the remote exists and CI runs for real, so GitHub is a gate alongside the local checkpoint - not a substitute: CI is the only place `cp .env.example .env` happens, which is exactly how the FIREBASE_CREDENTIALS_B64 comment-as-value bug surfaced.",
-    "2026-07-18 saved cards built (user request; plan in ~/.claude/plans/curious-bubbling-kernighan.md): SavedCard vault + opt-in save at checkout + one-click CIT + service-only MIT (payment_charge_saved) + cards API + admin, Tap tokens->charge with payment_agreement, Paymob TOKEN callback (own 8-field HMAC) + card_tokens CIT + MOTO payments/pay; local suites green - the live test-mode proof is G22."
+    "2026-07-18 saved cards built (user request; plan in ~/.claude/plans/curious-bubbling-kernighan.md): SavedCard vault + opt-in save at checkout + one-click CIT + service-only MIT (payment_charge_saved) + cards API + admin, Tap tokens->charge with payment_agreement, Paymob TOKEN callback (own 8-field HMAC) + card_tokens CIT + MOTO payments/pay; local suites green - the live test-mode proof is G22. Simplified later the same day (user request): save is always-on (save_card left the API), and the add-card-without-payment flow (Tap authorize+auto-void, Paymob Verification intention - both live-verified) was removed; git history keeps the working implementation."
   ],
   "groups": [
     {
@@ -178,22 +178,6 @@
         "The cross-app access rule was added to the digest 2026-07-18 (one-way imports recorded in pyproject ignore_imports; passive model ownership only; behavior goes through the owning app's service; FKs as string refs) - check whether it deserves its own .claude/rules topic file like factories.md has.",
         "Inventory pass: list .claude/rules/*, map each to its digest line and its trigger globs; flag digest rules with no rule file and rule files with no digest line, then decide each case deliberately rather than mechanically adding files."
       ],
-      "status": "pending"
-    },
-    {
-      "id": "card-add-no-payment",
-      "group": "G22",
-      "title": "Add a card without paying (hosted, no frontend SDK)",
-      "endGoal": "POST /cards/add returns a hosted checkout_url that vaults a card with no purchase: Tap = authorize 1 SAR with save_card + auto-VOID (AUTHORIZED on auth_ ids is the paid outcome, hold never captured); Paymob = intention on the Verification-type integration (PAYMOB_VERIFICATION_INTEGRATION_ID, loud refusal when unset). The CARD_VERIFICATION payment kind never credits the wallet or notifies; the vaulted card immediately works for one-click and MIT.",
-      "tips": [
-        "BUILT 2026-07-18, gates green (360 passed, lint-imports kept, mypy clean) + fake e2e: setup -> simulate_payment_webhook --save-card -> card vaulted, wallet 0.00 untouched -> one-click 30 SAR with the new card paid.",
-        "TAP HALF VERIFIED LIVE 2026-07-18 (sandbox, tunnel): payment_setup_card -> auth_TS05A4520262040u4Y21807305 hosted page -> user card+OTP -> AUTHORIZED webhook VERIFIED with the same hashstring formula as charges (both deliveries 200) -> payment paid with wallet untouched -> SavedCard card_TS51A23262043UdGZ18bg6A56 / cus_TS03A0820262045On951807654 / payment_agreement_u0TD8262045zTDy18sz6M688 -> MIT charge_saved_card 2 SAR with that card CAPTURED synchronously (chg_TS04A5320262045u2KT1807862, wallet 2.00) proving authorize-born agreements charge fine. Authorize left AUTHORIZED with auto VOID SCHEDULED (time:1h) - the actual release was not observed; spot-check later with GET /v2/authorize/auth_TS05A4520262040u4Y21807305 (expect VOIDED).",
-        "Paymob half is blocked on support provisioning a TEST Verification integration (same ticket as tokenization on 4912488 + MOTO); when the id arrives it goes straight into PAYMOB_VERIFICATION_INTEGRATION_ID - also confirm whether the Verification checkout implies saving or still renders the Save-Card checkbox.",
-        "Design notes: currency/gateway derive from the user's wallet (no client input); amount is the _CARD_SETUP_AMOUNT constant (1.00); Tap fetch_status routes auth_ ids to GET /v2/authorize/{id}; the terminal-replay guard is what keeps the later VOID webhook from un-paying the row.",
-        "In-form variant added 2026-07-18: POST /cards/add accepts optional {card_token} (one-time token from the gateway's embedded card component - Tap Card SDK tok_, never a raw PAN; raw-PAN own-form is PCI SAQ-D and gateways refuse it without certification). Tap setup_card then uses the token as the authorize source, so the hosted card-entry page is skipped and checkout_url is only the 3DS challenge (frictionless = synchronous AUTHORIZED session). Paymob ignores card_token - its in-form option is Pixel rendering off the same intention. Frontend work remaining: embed Tap Card SDK on the add-card screen (and Paymob Pixel if wanted).",
-        "IN-FORM TOKEN PATH VERIFIED LIVE 2026-07-18 (sandbox, tunnel): sandbox-minted tok_TS42A3926210dbPM18vX6c318 (SDK stand-in) -> payment_setup_card(card_token=...) -> auth_TS05A3920262100Te921807568 whose checkout_url was the tap_process.aspx 3DS page DIRECTLY (no card-entry page - the core promise of the flow) -> user approved OTP -> AUTHORIZED webhook verified -> paid, card_TS51A3926210OuXm18s56h376 / payment_agreement_3YFO4026210guqA18Lz6W111 vaulted, wallet untouched."
-      ],
-      "dependsOn": ["saved-cards-live-verify"],
       "status": "pending"
     },
     {

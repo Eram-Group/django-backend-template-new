@@ -3,7 +3,6 @@ from apps.payments.services.payments import payment_charge_saved
 from apps.payments.services.payments import payment_initiate
 from apps.payments.services.payments import payment_refund_execute
 from apps.payments.services.payments import payment_refund_start
-from apps.payments.services.payments import payment_setup_card
 from apps.payments.services.payments import payment_verify
 from apps.payments.services.saved_cards import saved_card_delete
 from apps.payments.services.saved_cards import saved_card_store
@@ -17,7 +16,6 @@ __all__ = [
     "payment_initiate",
     "payment_refund_execute",
     "payment_refund_start",
-    "payment_setup_card",
     "payment_verify",
     "saved_card_delete",
     "saved_card_store",

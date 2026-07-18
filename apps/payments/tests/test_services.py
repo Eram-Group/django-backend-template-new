@@ -583,17 +583,16 @@ def _card_data(**overrides: Any) -> SavedCardData:
     return SavedCardData(**fields)
 
 
-def test_initiate_with_save_card_marks_request() -> None:
+def test_initiate_always_requests_card_save() -> None:
     user = UserFactory.create()
 
     payment = services.payment_initiate(
         user=user,
         amount=Decimal("50.00"),
         currency=Currency.SAR,
-        save_card=True,
     )
 
-    assert payment.save_card_requested is True
+    assert payment.save_card_requested is True  # saving is not client-optional
     assert "/fake-checkout/" in payment.checkout_url  # normal redirect flow
 
 
@@ -860,76 +859,3 @@ def test_verify_persists_saved_card_from_charge_status(
     assert payment.status == PaymentStatus.PAID
     assert payment.saved_card is not None
     assert payment.saved_card.token == "fake_card_A"  # noqa: S105 - fixture value
-
-
-# --- payment_setup_card: add a card without paying ---------------------------
-
-
-def test_payment_setup_card_creates_verification_row() -> None:
-    user = UserFactory.create()
-
-    payment = services.payment_setup_card(user=user)
-
-    assert payment.kind == PaymentKind.CARD_VERIFICATION
-    assert payment.amount == Decimal("1.00")
-    assert payment.currency == user.wallet.currency
-    assert payment.save_card_requested is True
-    assert payment.status == PaymentStatus.PENDING
-    assert "/fake-checkout/" in payment.checkout_url
-
-
-def test_payment_setup_card_paid_event_stores_card_without_wallet_credit() -> None:
-    user = UserFactory.create()
-    payment = services.payment_setup_card(user=user)
-    balance_before = user.wallet.balance
-
-    event = WebhookEvent(
-        reference=str(payment.idempotency_key),
-        transaction_id="auth_1",
-        is_paid=True,
-        status="AUTHORIZED",
-        raw={"probe": True},
-        saved_card=_card_data(),
-    )
-    services.payment_apply_gateway_event(gateway_name="fake", event=event)
-    services.payment_apply_gateway_event(gateway_name="fake", event=event)  # replay
-
-    payment.refresh_from_db()
-    user.wallet.refresh_from_db()
-    assert payment.status == PaymentStatus.PAID
-    assert payment.saved_card is not None
-    assert SavedCard.objects.filter(user=user).count() == 1
-    assert user.wallet.balance == balance_before  # verification never credits
-    assert not Notification.objects.filter(
-        recipient=user, kind=NotificationKind.PAYMENT_PAID
-    ).exists()
-
-
-def test_payment_setup_card_gateway_down_marks_failed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    user = UserFactory.create()
-
-    def connect_failure(self: FakeGateway, **kwargs: Any) -> CheckoutSession:
-        raise OutboundTransportError(
-            service="fake", detail="connect refused", request_sent=False
-        )
-
-    monkeypatch.setattr(FakeGateway, "setup_card", connect_failure)
-
-    with pytest.raises(PaymentGatewayUnavailableError):
-        services.payment_setup_card(user=user)
-
-    payment = Payment.objects.get(user=user)
-    assert payment.status == PaymentStatus.FAILED
-
-
-def test_payment_setup_card_threads_sdk_token_to_gateway() -> None:
-    user = UserFactory.create()
-
-    payment = services.payment_setup_card(
-        user=user,
-        card_token="tok_sdk_1",  # noqa: S106 - test fixture value
-    )
-
-    assert payment.gateway_response == {"fake": True, "card_token": "tok_sdk_1"}

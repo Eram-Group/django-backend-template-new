@@ -113,23 +113,6 @@ class PaymobGateway:
             body["card_tokens"] = [request.saved_card.token]
         return self._hosted_session(self._post_intention(body))
 
-    def setup_card(self, *, request: CheckoutRequest) -> CheckoutSession:
-        """Vault a card with no payment: an intention on the Verification
-        integration - it validates the card without transferring or holding
-        funds; the customer saves it on the hosted page and the TOKEN
-        callback delivers the token exactly like a payment-borne save.
-
-        ``card_token`` is not used here: Paymob's in-form option is the
-        Pixel component, which renders off this same intention's
-        client_secret - the backend flow is identical either way.
-        """
-        verification_id = settings.PAYMOB_VERIFICATION_INTEGRATION_ID
-        if verification_id is None:
-            msg = "PAYMOB_VERIFICATION_INTEGRATION_ID is not set"
-            raise GatewayResponseError(msg)
-        body = self._intention_body(request=request, payment_methods=[verification_id])
-        return self._hosted_session(self._post_intention(body))
-
     def _hosted_session(self, payload: dict[str, Any]) -> CheckoutSession:
         public_key = settings.PAYMOB_PUBLIC_KEY
         if public_key is None:

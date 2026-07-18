@@ -8,7 +8,6 @@ from django.test import Client
 
 from apps.payments.constants import PaymentKind
 from apps.payments.constants import PaymentStatus
-from apps.payments.models import Payment
 from apps.payments.models import SavedCard
 from apps.payments.tests.factories import PaymentFactory
 from apps.payments.tests.factories import SavedCardFactory
@@ -258,59 +257,3 @@ def test_webhook_token_event_with_bad_signature_is_400(client: Client) -> None:
 
     assert response.status_code == 400
     assert not SavedCard.objects.filter(token="tok_hosted_1").exists()  # noqa: S106
-
-
-def test_card_add_roundtrip_vaults_without_credit(client: Client) -> None:
-    user = UserFactory.create()
-    client.force_login(user)
-
-    response = client.post(
-        f"{PAYMENTS}/cards/add", "{}", content_type="application/json"
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "pending"
-    assert "/fake-checkout/" in body["checkout_url"]
-
-    payment = Payment.objects.get(pk=body["id"])
-    webhook = client.post(
-        FAKE_WEBHOOK,
-        json.dumps(
-            {
-                "reference": str(payment.idempotency_key),
-                "paid": True,
-                "save_card": True,
-            }
-        ),
-        content_type="application/json",
-        headers=SIGNATURE,
-    )
-
-    assert webhook.status_code == 200
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.PAID
-    cards = client.get(f"{PAYMENTS}/cards").json()["items"]
-    assert len(cards) == 1
-    user.wallet.refresh_from_db()
-    assert user.wallet.balance == 0  # a verification never credits the wallet
-
-
-def test_card_add_requires_auth(client: Client) -> None:
-    assert client.post(f"{PAYMENTS}/cards/add").status_code == 401
-
-
-def test_card_add_accepts_sdk_token(client: Client) -> None:
-    user = UserFactory.create()
-    client.force_login(user)
-
-    response = client.post(
-        f"{PAYMENTS}/cards/add",
-        {"card_token": "tok_sdk_1"},
-        content_type="application/json",
-    )
-
-    assert response.status_code == 200
-    payment = Payment.objects.get(pk=response.json()["id"])
-    expected = {"fake": True, "card_token": "tok_sdk_1"}
-    assert payment.gateway_response == expected

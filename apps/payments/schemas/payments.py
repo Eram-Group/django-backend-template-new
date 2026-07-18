@@ -33,8 +33,6 @@ class PaymentCreateIn(Schema):
     currency: Currency
     kind: PaymentKind = PaymentKind.OTHER
     description: str = ""
-    #: Vault the card entered at checkout for one-click reuse (ignored when
-    #: saved_card_id is sent - a stored card cannot be re-saved).
-    save_card: bool = False
     #: Pay one-click with this stored card instead of entering card details.
+    #: Absent = a new card is entered at checkout and is always vaulted.
     saved_card_id: uuid.UUID | None = None

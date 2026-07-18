@@ -3,7 +3,6 @@
 import hashlib
 import hmac
 import json
-from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
@@ -196,29 +195,17 @@ def _saved_request(*, agreement_id: str = "payment_agreement_555") -> CheckoutRe
 
 
 @respx.mock
-def test_create_checkout_sends_save_card_flag() -> None:
+def test_create_checkout_always_saves_the_card() -> None:
     route = respx.post(CHARGES).mock(
         return_value=httpx.Response(
             200, json={"id": "chg_1", "transaction": {"url": "https://pay.tap/x"}}
         )
     )
-    request = CheckoutRequest(
-        reference="ref-123",
-        amount=Decimal("50.00"),
-        currency="SAR",
-        description="Top-up",
-        customer_email="omar@example.com",
-        customer_name="Omar",
-        customer_phone="",
-        webhook_url="https://backend.example.com/api/v1/payments/webhooks/tap",
-        redirect_url="https://app.example.com/payments/x/return",
-        save_card=True,
-    )
 
-    TapGateway().create_checkout(request=request)
+    TapGateway().create_checkout(request=_request())
 
     payload = json.loads(route.calls.last.request.content)
-    assert payload["save_card"] is True
+    assert payload["save_card"] is True  # saving is not client-optional
     assert payload["threeDSecure"] is True  # saving requires 3DS
 
 
@@ -360,120 +347,3 @@ def test_delete_saved_card_calls_gateway() -> None:
 
     assert TapGateway().delete_saved_card(saved_card=CARD_REF) is True
     assert route.call_count == 1
-
-
-# --- setup_card: add a card without payment (authorize + auto-void) ----------
-
-AUTHORIZE = "https://api.tap.company/v2/authorize/"
-
-
-@respx.mock
-def test_setup_card_sends_hosted_authorize_with_auto_void() -> None:
-    route = respx.post(AUTHORIZE).mock(
-        return_value=httpx.Response(
-            200, json={"id": "auth_1", "transaction": {"url": "https://pay.tap/a"}}
-        )
-    )
-
-    session = TapGateway().setup_card(request=_request())
-
-    body = json.loads(route.calls.last.request.content)
-    assert body["save_card"] is True
-    assert body["threeDSecure"] is True
-    assert body["source"] == {"id": "src_card"}
-    assert body["auto"] == {"type": "VOID", "time": 1}
-    assert body["reference"]["transaction"] == "ref-123"
-    assert body["post"]["url"].endswith("/webhooks/tap")
-    assert body["customer"]["email"] == "omar@example.com"
-    assert session.charge_id == "auth_1"
-    assert session.checkout_url == "https://pay.tap/a"
-    assert session.status == ""  # pending - the AUTHORIZED webhook settles it
-
-
-@respx.mock
-def test_setup_card_without_url_is_loud() -> None:
-    respx.post(AUTHORIZE).mock(return_value=httpx.Response(200, json={"id": "auth_1"}))
-
-    with pytest.raises(GatewayResponseError):
-        TapGateway().setup_card(request=_request())
-
-
-def test_webhook_authorized_settles_an_authorize() -> None:
-    payload = _webhook_payload() | {"id": "auth_1", "status": "AUTHORIZED"}
-
-    event = TapGateway().parse_webhook(
-        headers={"hashstring": _sign(payload)},
-        params={},
-        body=json.dumps(payload).encode(),
-    )
-
-    assert event.is_paid is True
-    assert event.transaction_id == "auth_1"
-
-
-def test_webhook_authorized_never_settles_a_charge() -> None:
-    payload = _webhook_payload() | {"status": "AUTHORIZED"}  # id stays chg_1
-
-    event = TapGateway().parse_webhook(
-        headers={"hashstring": _sign(payload)},
-        params={},
-        body=json.dumps(payload).encode(),
-    )
-
-    assert event.is_paid is False
-
-
-def test_webhook_void_does_not_settle_an_authorize() -> None:
-    payload = _webhook_payload() | {"id": "auth_1", "status": "VOID"}
-
-    event = TapGateway().parse_webhook(
-        headers={"hashstring": _sign(payload)},
-        params={},
-        body=json.dumps(payload).encode(),
-    )
-
-    assert event.is_paid is False
-
-
-@respx.mock
-def test_fetch_status_routes_auth_ids_to_authorize() -> None:
-    route = respx.get("https://api.tap.company/v2/authorize/auth_1").mock(
-        return_value=httpx.Response(200, json={"id": "auth_1", "status": "AUTHORIZED"})
-    )
-
-    status = TapGateway().fetch_status(charge_id="auth_1", reference="ref-123")
-
-    assert route.called
-    assert status.is_paid is True
-
-
-@respx.mock
-def test_setup_card_with_sdk_token_uses_token_source() -> None:
-    route = respx.post(AUTHORIZE).mock(
-        return_value=httpx.Response(
-            200, json={"id": "auth_2", "transaction": {"url": "https://3ds.tap/x"}}
-        )
-    )
-
-    session = TapGateway().setup_card(
-        request=replace(_request(), card_token="tok_sdk_1")  # noqa: S106 - fixture
-    )
-
-    body = json.loads(route.calls.last.request.content)
-    assert body["source"] == {"id": "tok_sdk_1"}  # our form collected the card
-    assert session.checkout_url == "https://3ds.tap/x"  # only the 3DS challenge
-
-
-@respx.mock
-def test_setup_card_with_sdk_token_frictionless_settles() -> None:
-    respx.post(AUTHORIZE).mock(
-        return_value=httpx.Response(200, json={"id": "auth_2", "status": "AUTHORIZED"})
-    )
-
-    session = TapGateway().setup_card(
-        request=replace(_request(), card_token="tok_sdk_1")  # noqa: S106 - fixture
-    )
-
-    assert session.checkout_url == ""
-    assert session.is_paid is True
-    assert session.status == "AUTHORIZED"

@@ -377,31 +377,3 @@ def test_charge_saved_without_payment_keys_is_loud(settings: Any) -> None:
         PaymobGateway().charge_saved(request=_saved_request())
 
     assert pay_route.call_count == 0
-
-
-# --- setup_card: add a card without payment (Verification integration) -------
-
-
-@respx.mock
-def test_setup_card_uses_verification_integration(settings: Any) -> None:
-    settings.PAYMOB_VERIFICATION_INTEGRATION_ID = 55
-    route = respx.post(INTENTION).mock(
-        return_value=httpx.Response(
-            200, json={"id": "int_v", "client_secret": "cs_verify"}
-        )
-    )
-
-    session = PaymobGateway().setup_card(request=_request())
-
-    payload = json.loads(route.calls.last.request.content)
-    assert payload["payment_methods"] == [55]
-    assert payload["amount"] == 7550
-    assert payload["special_reference"] == "ref-456"
-    assert "clientSecret=cs_verify" in session.checkout_url
-
-
-def test_setup_card_without_verification_integration_is_loud(settings: Any) -> None:
-    settings.PAYMOB_VERIFICATION_INTEGRATION_ID = None
-
-    with pytest.raises(GatewayResponseError):
-        PaymobGateway().setup_card(request=_request())

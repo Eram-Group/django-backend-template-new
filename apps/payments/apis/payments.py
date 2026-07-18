@@ -39,7 +39,6 @@ def payment_create(request: AuthedRequest[User], payload: PaymentCreateIn) -> Pa
         currency=payload.currency,
         kind=payload.kind,
         description=payload.description,
-        save_card=payload.save_card,
         saved_card=saved_card,
     )
 

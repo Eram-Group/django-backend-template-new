@@ -64,8 +64,8 @@ class TapGateway:
                 "amount": str(request.amount),
                 "currency": request.currency,
                 "customer_initiated": True,
-                "threeDSecure": True,  # saving requires 3DS; harmless otherwise
-                "save_card": request.save_card,
+                "threeDSecure": True,  # saving requires a 3DS-verified holder
+                "save_card": True,  # every new-card checkout vaults the card
                 "description": request.description,
                 "reference": {
                     # The planted reference - webhooks echo it back.
@@ -91,70 +91,6 @@ class TapGateway:
 
     def charge_saved(self, *, request: CheckoutRequest) -> CheckoutSession:
         return self._charge_saved_card(request=request, customer_initiated=False)
-
-    def setup_card(self, *, request: CheckoutRequest) -> CheckoutSession:
-        """Vault a card with no payment: an authorize (hold, never captured)
-        with save_card on, auto-VOIDed by Tap so the hold releases without a
-        second API call (minimum auto-void unit is 1 hour). The AUTHORIZED
-        webhook carries the same card/customer/payment_agreement objects a
-        captured charge would.
-
-        Two entry modes: without ``card_token`` Tap's hosted page collects
-        the card; with one (SDK-minted ``tok_``) the customer already typed
-        it in our form and only the 3DS challenge - if any - remains.
-        """
-        response = request_json(
-            service="tap",
-            method="POST",
-            url=f"{_BASE}/authorize/",
-            headers=_headers(),
-            json={
-                "amount": str(request.amount),
-                "currency": request.currency,
-                "customer_initiated": True,
-                "threeDSecure": True,  # vaulting requires a 3DS-verified holder
-                "save_card": True,
-                "description": request.description,
-                "reference": {
-                    "transaction": request.reference,
-                    "order": request.reference,
-                },
-                # An SDK-minted tok_ means OUR form already collected the
-                # card - the returned URL is then just the 3DS challenge;
-                # src_card renders Tap's hosted card-entry page instead.
-                "source": {"id": request.card_token or "src_card"},
-                "auto": {"type": "VOID", "time": 1},
-                "post": {"url": request.webhook_url},
-                "redirect": {"url": request.redirect_url},
-                "customer": _customer(request),
-            },
-            retry="connect-only",
-        )
-        payload = response.json()
-        auth_id = payload.get("id")
-        if not auth_id:
-            msg = f"tap authorize response missing id: {payload}"
-            raise GatewayResponseError(msg)
-        checkout_url = str(payload.get("transaction", {}).get("url") or "")
-        if checkout_url:
-            return CheckoutSession(
-                charge_id=str(auth_id), checkout_url=checkout_url, raw=payload
-            )
-        if not request.card_token:
-            # Hosted mode must produce a page to redirect the customer to.
-            msg = f"tap authorize response missing url: {payload}"
-            raise GatewayResponseError(msg)
-        # Token mode may settle without a challenge (3DS frictionless).
-        status = str(payload.get("status", ""))
-        final = status.upper() not in _PENDING_STATUSES
-        return CheckoutSession(
-            charge_id=str(auth_id),
-            checkout_url="",
-            raw=payload,
-            is_paid=final and status.upper() == "AUTHORIZED",
-            status=status if final else "",
-            transaction_id=str(auth_id) if final else "",
-        )
 
     def _charge_saved_card(
         self, *, request: CheckoutRequest, customer_initiated: bool
@@ -265,32 +201,28 @@ class TapGateway:
             msg = "hashstring mismatch"
             raise WebhookVerificationError(msg)
         status = str(payload.get("status", ""))
-        object_id = str(payload.get("id", ""))
         return WebhookEvent(
             reference=str(payload.get("reference", {}).get("transaction", "")),
-            transaction_id=object_id,
-            is_paid=_is_paid(object_id, status),
+            transaction_id=str(payload.get("id", "")),
+            is_paid=status.upper() == _PAID_STATUS,
             status=status,
             raw=payload,
             saved_card=_extract_saved_card(payload),
         )
 
     def fetch_status(self, *, charge_id: str, reference: str) -> ChargeStatus:
-        # Card-setup rows carry an authorize id - a different resource path.
-        path = "authorize" if charge_id.startswith("auth_") else "charges"
         response = request_json(
             service="tap",
             method="GET",
-            url=f"{_BASE}/{path}/{charge_id}",
+            url=f"{_BASE}/charges/{charge_id}",
             headers=_headers(),
             retry="transient",  # GET is idempotent
         )
         payload = response.json()
         status = str(payload.get("status", ""))
-        object_id = str(payload.get("id", ""))
         return ChargeStatus(
-            transaction_id=object_id,
-            is_paid=_is_paid(object_id, status),
+            transaction_id=str(payload.get("id", "")),
+            is_paid=status.upper() == _PAID_STATUS,
             status=status,
             raw=payload,
             saved_card=_extract_saved_card(payload),
@@ -331,14 +263,6 @@ def _customer(request: CheckoutRequest) -> dict[str, Any]:
             "number": parsed.national_number,
         }
     return customer
-
-
-def _is_paid(object_id: str, status: str) -> bool:
-    """CAPTURED settles a charge; AUTHORIZED settles an authorize (the
-    card-setup hold, which is auto-voided and never reaches CAPTURED)."""
-    if object_id.startswith("auth_"):
-        return status.upper() == "AUTHORIZED"
-    return status.upper() == _PAID_STATUS
 
 
 def _extract_saved_card(payload: dict[str, Any]) -> SavedCardData | None:
