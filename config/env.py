@@ -13,9 +13,11 @@ S3/CloudFront, cookie domain).
 
 from typing import Annotated
 from typing import Literal
+from typing import get_args
 
 from pydantic import Field
 from pydantic import SecretStr
+from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from pydantic_settings import NoDecode
@@ -119,6 +121,28 @@ class Env(BaseSettings):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
+
+    @field_validator("*", mode="before")
+    @classmethod
+    def _blank_optional_is_unset(cls, value: object, info: ValidationInfo) -> object:
+        """Treat a blank string as unset on the optional feature-toggle fields.
+
+        ``env_ignore_empty`` only catches an *exactly* empty value, so a
+        whitespace-only one parses as a real ``SecretStr('   ')`` and slips
+        past every ``is None`` not-configured guard downstream - surfacing far
+        away as a decode error at send time, or worse: ``paymob._expected_hmac``
+        computes a signature with a blank key instead of refusing the webhook.
+
+        Only fields that already permit ``None`` are normalised, so required
+        fields keep failing loudly at import and the ``CommaSeparated`` lists
+        (never optional) still collapse to an empty list.
+        """
+        if not isinstance(value, str) or value.strip():
+            return value
+        field = cls.model_fields.get(info.field_name or "")
+        if field is None or type(None) not in get_args(field.annotation):
+            return value
+        return None
 
 
 # pydantic-settings fills the required fields from .env / the process environment.

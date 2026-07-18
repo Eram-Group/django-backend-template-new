@@ -93,7 +93,7 @@ def _webhook_obj() -> dict[str, Any]:
     }
 
 
-def _sign(obj: dict[str, Any]) -> str:
+def _sign(obj: dict[str, Any], key: str = HMAC_SECRET) -> str:
     concatenated = (
         f"{obj['amount_cents']}{obj['created_at']}{obj['currency']}"
         f"{'true' if obj['error_occured'] else 'false'}"
@@ -111,9 +111,7 @@ def _sign(obj: dict[str, Any]) -> str:
         f"{obj['source_data']['type']}"
         f"{'true' if obj['success'] else 'false'}"
     )
-    return hmac.new(
-        HMAC_SECRET.encode(), concatenated.encode(), hashlib.sha512
-    ).hexdigest()
+    return hmac.new(key.encode(), concatenated.encode(), hashlib.sha512).hexdigest()
 
 
 def test_webhook_with_valid_hmac_parses() -> None:
@@ -148,6 +146,26 @@ def test_webhook_without_hmac_param_is_rejected() -> None:
     with pytest.raises(WebhookVerificationError):
         PaymobGateway().parse_webhook(
             headers={}, params={}, body=json.dumps({"obj": _webhook_obj()}).encode()
+        )
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t"])
+def test_webhook_with_blank_secret_fails_closed(settings: Any, blank: str) -> None:
+    """A blank signing secret must refuse the webhook, never sign with it.
+
+    env.py normalises a blank secret to None before it reaches settings, but
+    verification must not depend on that: a blank key yields a digest the
+    caller can compute too, so the check would wave through a forged payload.
+    """
+    settings.PAYMOB_HMAC_SECRET = SecretStr(blank)
+    obj = _webhook_obj()
+
+    with pytest.raises(WebhookVerificationError):
+        PaymobGateway().parse_webhook(
+            headers={},
+            # The signature an attacker would send, knowing the key is blank.
+            params={"hmac": _sign(obj, key=blank)},
+            body=json.dumps({"obj": obj}).encode(),
         )
 
 

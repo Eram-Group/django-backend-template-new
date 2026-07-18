@@ -7,6 +7,7 @@ the other fails here (same-change rule from CLAUDE.md).
 
 from pathlib import Path
 
+import pytest
 from pydantic import SecretStr
 
 from config.env import Env
@@ -71,3 +72,32 @@ def test_env_example_parses_with_no_comment_values() -> None:
         f"Values in .env.example parsed as comments: {commented}. "
         "Move the note to its own line and leave the value empty."
     )
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t", "\n"])
+def test_blank_optional_secret_normalises_to_none(blank: str) -> None:
+    """A blank optional secret must read as unset, not as a blank SecretStr.
+
+    env_ignore_empty only catches an exactly-empty value, so whitespace would
+    otherwise parse as SecretStr('   ') and slip past every `is None`
+    not-configured guard - deferring the failure to send time, or letting
+    paymob sign a webhook with a blank key instead of refusing it.
+    """
+    env = Env(_env_file=str(ENV_EXAMPLE), FIREBASE_CREDENTIALS_B64=blank)
+    assert env.FIREBASE_CREDENTIALS_B64 is None
+
+    env = Env(_env_file=str(ENV_EXAMPLE), PAYMOB_HMAC_SECRET=blank)
+    assert env.PAYMOB_HMAC_SECRET is None
+
+
+def test_blank_normalisation_leaves_lists_and_required_fields_alone() -> None:
+    """Only optional fields normalise - lists still collapse, required stay strict."""
+    env = Env(_env_file=str(ENV_EXAMPLE), PAYMOB_INTEGRATION_IDS="   ")
+    assert env.PAYMOB_INTEGRATION_IDS == []  # an empty list, never None
+
+    env = Env(_env_file=str(ENV_EXAMPLE), PAYMOB_INTEGRATION_IDS="1, 2 ,3")
+    assert env.PAYMOB_INTEGRATION_IDS == [1, 2, 3]
+
+    # A required field is left untouched by the normaliser (blank-vs-missing
+    # for required fields is a separate, pre-existing question).
+    assert Env(_env_file=str(ENV_EXAMPLE), ADMIN_URL="admin/").ADMIN_URL == "admin/"

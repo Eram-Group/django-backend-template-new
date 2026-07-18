@@ -186,7 +186,11 @@ class PaymobGateway:
 
 def _expected_hmac(obj: dict[str, Any]) -> str:
     secret = settings.PAYMOB_HMAC_SECRET
-    if secret is None:
+    # Blank is checked alongside None on purpose: env.py already normalises a
+    # blank secret to None, but a signature check must fail closed on its own
+    # input rather than trust that something upstream sanitised it - signing
+    # with a blank key yields a digest an attacker can compute too.
+    if secret is None or not str(secret.get_secret_value()).strip():
         msg = "PAYMOB_HMAC_SECRET is not set"
         raise WebhookVerificationError(msg)
     concatenated = "".join(_field_value(obj, field) for field in _HMAC_FIELDS)
