@@ -94,15 +94,12 @@ db-reset:
 bash *args:
     docker compose run --rm web bash {{ args }}
 
-# Extract + compile ar/en translation catalogs (compile = local verification
-# only; images compile at build once .po files exist).
+# Images compile at build once .po files exist; compiling here is local
+# verification only.
+# Extract + compile the ar/en translation catalogs.
 messages:
     uv run manage.py makemessages -l ar -l en --ignore .venv --ignore staticfiles --ignore Gawdat_Django_Template --ignore sample_project
     uv run manage.py compilemessages --ignore .venv --ignore Gawdat_Django_Template --ignore sample_project
-
-# Push the current branch (or move stray commits off main) and open a PR.
-pr *flags:
-    ./scripts/git-pr.sh {{ flags }}
 
 # Start a fresh branch off up-to-date main.
 branch name:
@@ -110,8 +107,8 @@ branch name:
     git pull
     git checkout -b {{ name }}
 
-# Bump the lockfile to the latest compatible versions (Renovate is the
-# scheduled path; this is the local escape hatch). Run `just test` after.
+# Dependabot is the scheduled path; this is the local escape hatch.
+# Bump the lockfile to the latest compatible versions. Run `just test` after.
 update:
     uv lock --upgrade
 

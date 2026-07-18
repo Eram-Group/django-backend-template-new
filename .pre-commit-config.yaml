@@ -42,12 +42,6 @@ repos:
     hooks:
       - id: gitleaks
 
-  - repo: https://github.com/shellcheck-py/shellcheck-py
-    rev: v0.11.0.1
-    hooks:
-      - id: shellcheck
-        files: ^scripts/
-
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.11.29
     hooks:
