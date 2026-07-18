@@ -43,6 +43,12 @@
       "title": "Claude structure",
       "rationale": "CLAUDE.md digest, .claude/rules topic files, PLAN.md, and ARCHITECTURE.md must say the same thing - drift here silently misleads every future session.",
       "checkpoint": "Digest is a faithful summary; every digest rule that has depth has a .claude/rules file that auto-loads on the right globs; no contradictions across CLAUDE.md, PLAN.md, ARCHITECTURE.md; commit."
+    },
+    {
+      "id": "G21",
+      "title": "Product expansion",
+      "rationale": "Market-facing features requested 2026-07-18: true multi-country/multi-currency support beyond the SAR/EGP pair, and operational zones managed from the dashboard instead of code.",
+      "checkpoint": "Each feature demonstrated end-to-end locally; design decisions recorded in the task tips; ruff+mypy+pytest+lint-imports green; commit."
     }
   ],
   "tasks": [
@@ -127,6 +133,32 @@
         "IaC: Terraform aws_ecs_express_gateway_service (provider >= 6.23.0); CloudFormation/CDK supported since launch. Schedules live in IaC next to the commands they trigger - never click-ops.",
         "Recurring jobs: EventBridge Scheduler -> ECS RunTask with command override `python manage.py <command>` reusing the task definition family; one-off Fargate seconds per run, no always-on beat process.",
         "AWS positions Express Mode as the migration target for App Runner (availability changing) and the EOL Copilot CLI - a point in favor of betting on it."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "multi-country-multi-currency",
+      "group": "G21",
+      "title": "Handle multi-country and multi-currency support",
+      "endGoal": "The platform supports operating in more than the current two markets: a new country/currency can be added by configuration + one gateway class, wallets and payments behave correctly across currencies, and every hardcoded two-currency assumption is either generalized or has a loud guard.",
+      "tips": [
+        "Requested by Omar 2026-07-18. Current state: Currency enum = SAR/EGP only (apps/payments/constants.py), one wallet per user fixed at signup in DEFAULT_CURRENCY=SAR, topups reject currency mismatch at initiate AND credit time.",
+        "Known hardcoded spots from the 2026-07-18 payments review: _MINOR_UNIT_EXPONENT in gateways/base.py maps only SAR/EGP (=2) - a 3-decimal (KWD/BHD) or 0-decimal currency needs an entry; tap.py _format_amount hardcodes 2 decimals; PAYMENT_GATEWAYS needs an entry per currency (missing = clean 503).",
+        "Design decisions to make and record here: one wallet per user vs wallet-per-currency; where country lives (User field? phone-derived? request locale?); FX/conversion explicitly in or out of scope; whether SMS routing (clients/sms/routing.py picks provider by phone country) generalizes with the same country registry.",
+        "Arabic-first rule already covers locale; check mimesis locales in apps/common/tests/fake.py if new locales ship."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "zones-from-dashboard",
+      "group": "G21",
+      "title": "Load zones from the dashboard",
+      "endGoal": "Zones are data, not code: staff create/edit zones in the admin dashboard, the app reads them at runtime through selectors, and zone changes require no deploy.",
+      "tips": [
+        "Requested by Omar 2026-07-18. Scope to clarify with Omar before building: what a zone is (geographic service/delivery area? pricing region? country subdivision?) and which app owns it (likely a new bounded-context app per the one-app-one-domain rule).",
+        "Follow the house patterns: model inherits BaseModel (uuidv7 pk) + factory registered in factories_registry (coverage gate), admin package scaffolded via `manage.py generate_dashboard <app> Zone`, writes through a zone service, reads through selectors.",
+        "Zone names are user-facing: per-app translation.py (django-modeltranslation) for Arabic-first naming.",
+        "If zones are geometric (polygons/radii) decide storage early: PostGIS/GeoDjango is a real infra dependency (RDS supports it) vs simple structured fields (city/district lists) - record the decision here."
       ],
       "status": "pending"
     },

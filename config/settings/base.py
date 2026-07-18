@@ -10,6 +10,7 @@ from typing import Any
 
 import dj_database_url
 import structlog
+from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.csp import CSP
 from django.utils.translation import gettext_lazy as _
@@ -215,6 +216,9 @@ UNFOLD = {
     "SHOW_BACK_BUTTON": True,
     "ENVIRONMENT": environment_callback,
     "ENVIRONMENT_TITLE_PREFIX": lambda request: f"[{env.ENVIRONMENT}] ",
+    # Same layout in ar and en - admin.css pins direction to ltr (lambda so
+    # the manifest hash resolves per-request after collectstatic).
+    "STYLES": [lambda request: static("css/admin.css")],
     "BORDER_RADIUS": "8px",
     # Tailwind-style ramps as "R G B" strings; font tokens map onto base.
     "COLORS": {
@@ -397,6 +401,7 @@ EXPORT_FORMATS = [base_formats.CSV, base_formats.XLSX]
 # --- Static / media (S3 via django-storages in production.py) --------------
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [BASE_DIR / "static"]  # first-party assets (admin.css)
 MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -419,10 +424,12 @@ SMSMISR_SENDER = env.SMSMISR_SENDER
 SMSMISR_LIVE = False  # "1" live vs "2" test API mode; production.py decides
 FIREBASE_CREDENTIALS_B64 = env.FIREBASE_CREDENTIALS_B64
 
-# --- Payments: currency -> gateway class (fake locally; production.py swaps) --
+# --- Payments: currency -> gateway class. One mapping for every environment;
+# the .env keys decide test vs live mode (locally: provider TEST keys + a
+# tunnel for webhooks). test.py pins FakeGateway so suites never do HTTP. --
 PAYMENT_GATEWAYS = {
-    "SAR": "apps.payments.gateways.fake.FakeGateway",
-    "EGP": "apps.payments.gateways.fake.FakeGateway",
+    "SAR": "apps.payments.gateways.tap.TapGateway",
+    "EGP": "apps.payments.gateways.paymob.PaymobGateway",
 }
 BACKEND_BASE_URL = env.BACKEND_BASE_URL
 FRONTEND_BASE_URL = env.FRONTEND_BASE_URL  # checkout return/redirect pages

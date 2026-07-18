@@ -153,7 +153,8 @@ jobs:
           run-task: true
           run-task-container-overrides: >
             [{"name": "app", "command": ["sh", "-c",
-            "python manage.py migrate --noinput &&
+            "python manage.py check --deploy --fail-level WARNING &&
+            python manage.py migrate --noinput &&
             python manage.py createcachetable &&
             python manage.py collectstatic --noinput"]}]
           run-task-subnets: ${{ vars.ECS_SUBNETS }}

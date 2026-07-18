@@ -1,0 +1,9 @@
+/* Keep the admin layout identical in Arabic and English (user decision:
+ * translate the chrome, never mirror it). Unfold 0.101.0 has no [dir="rtl"]
+ * selectors of its own - the whole RTL flip is direction inheritance from
+ * the dir attribute the skeleton template puts on <html> - so overriding
+ * the computed direction here reverts the entire layout at once. Re-verify
+ * that assumption when upgrading django-unfold. */
+html[dir="rtl"] {
+    direction: ltr;
+}

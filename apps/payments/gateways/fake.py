@@ -1,8 +1,9 @@
-"""The local/test gateway - Mailpit's role for payments.
+"""The test gateway - Mailpit's role for payments (test.py maps every
+currency here so suites never touch provider HTTP).
 
 Checkout "succeeds" instantly with a fake URL; the webhook path is exercised
-locally with ``manage.py simulate_payment_webhook <payment-pk> [--fail]``,
-which drives the SAME transition service the real webhook endpoint calls.
+with ``manage.py simulate_payment_webhook <payment-pk> [--fail]``, which
+drives the SAME transition service the real webhook endpoint calls.
 """
 
 import json

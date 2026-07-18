@@ -19,6 +19,13 @@ EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 # provider HTTP even when real creds sit in a developer's .env.
 SMS_BACKEND = "apps.notifications.clients.sms.backends.LocmemSmsBackend"
 PUSH_BACKEND = "apps.notifications.clients.push.backends.LocmemPushBackend"
+
+# The payments analogue of the outboxes above: every currency resolves to
+# FakeGateway, so suites never hit Tap/Paymob even with test keys in .env.
+PAYMENT_GATEWAYS = {
+    "SAR": "apps.payments.gateways.fake.FakeGateway",
+    "EGP": "apps.payments.gateways.fake.FakeGateway",
+}
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",

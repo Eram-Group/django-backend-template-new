@@ -88,7 +88,7 @@ registry — factory_boy for structure, mimesis for values (Arabic users get
 ar-sa names). Related rows fan out per parent with variance. Seeded rows
 carry the `@seed.example.com` email domain: `manage.py seed_db --wipe ...`
 removes exactly them, `--seed N` makes runs deterministic. Refuses to run
-unless `ENVIRONMENT=local`. Conventions: `.claude/rules/factories.md`.
+unless `ENVIRONMENT=local`. Conventions: `CLAUDE.md` ("Factories & seed data").
 
 ## Background tasks
 
@@ -113,11 +113,13 @@ deployed, observable fakes locally, in-memory in tests** (details:
   the console locally — trigger any notification and watch the
   `sms_console_send` / `push_console_send` structlog lines. Deployed, the
   real providers activate only when their env creds are set.
-- **Payments** use a fake gateway locally: `POST /api/v1/payments/` returns
-  a fake checkout URL, then
-  `manage.py simulate_payment_webhook <payment-pk> [--fail]` delivers the
-  gateway event — the payment flips to paid, the wallet is credited, and
-  the notification fans out, exactly like production.
+- **Payments** route by currency to the same gateways in every environment
+  (Tap SAR / Paymob EGP) — put the providers' TEST-mode keys in `.env` and
+  tunnel webhooks (`ngrok http 8000`, `BACKEND_BASE_URL` = the tunnel URL).
+  `manage.py simulate_payment_webhook <payment-pk> [--fail]` still delivers
+  a gateway event by hand — the payment flips to paid, the wallet is
+  credited, and the notification fans out, exactly like production. The
+  test suite always runs against `FakeGateway` (pinned in `test.py`).
 - All provider credentials are optional `X | None` env fields (see
   `.env.example`): absent = that provider is simply not configured.
 

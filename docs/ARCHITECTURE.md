@@ -170,13 +170,15 @@ an allowlist success predicate (OurSMS accepted/rejected counts, SMSMisr
 `code == "1901"`) — unknown shapes fail loudly, never pass silently.
 
 **Transport selection = the `EMAIL_BACKEND` pattern** (settings string,
-resolved per call): `SMS_BACKEND` / `PUSH_BACKEND` / `PAYMENT_GATEWAYS`
-(currency → gateway class). Base + local = console/fake (structlog lines,
-fake checkout URLs); `production.py` swaps in the real transports only when
-`_DEPLOYED`; `test.py` = locmem outboxes
+resolved per call): `SMS_BACKEND` / `PUSH_BACKEND` (base + local = console
+backends with structlog lines; `production.py` swaps in the real transports
+only when `_DEPLOYED`) and `PAYMENT_GATEWAYS` (currency → gateway class —
+the same Tap SAR / Paymob EGP mapping in every environment; the `.env` keys
+pick test vs live mode, and local webhooks arrive through a tunnel such as
+ngrok with `BACKEND_BASE_URL` pointing at it). `test.py` = locmem outboxes
 (`apps/notifications/clients/*/backends.py::outbox` — the `mail.outbox`
-analogue), so tests can never touch provider HTTP even with real creds in
-`.env`. Provider clients live in leaf packages
+analogue) plus `FakeGateway` for every currency, so tests can never touch
+provider HTTP even with real creds in `.env`. Provider clients live in leaf packages
 (`apps/notifications/clients/`, `apps/payments/gateways/`) — unconstrained
 by the layer contract, called from services/tasks.
 
@@ -298,8 +300,9 @@ docstrings; proven by the admin-basics gate):
 
 ## Testing
 
-- pytest + factories (see `.claude/rules/factories.md` for the full
-  conventions: factory_boy structure, mimesis values, explicit registry).
+- pytest + factories (see the "Factories & seed data" section of `CLAUDE.md`
+  for the full conventions: factory_boy structure, mimesis values, explicit
+  registry).
 - Cross-app gates in `apps/common/tests/`: **factory coverage** (every
   concrete model registered) and the **admin basics gate** (every registered
   admin exercised generically — no per-admin tests, ever).

@@ -78,10 +78,14 @@ jobs:
           image: ${{ needs.build.outputs.image }}
           environment-variables: SENTRY_RELEASE=${{ github.sha }}
 
-      # Release task (migrate + createcachetable + collectstatic) runs from
-      # this exact new revision - same image AND env as what goes live - and
-      # the service only rolls after it exits 0. Fargate run-task does not
-      # inherit the service's network config, hence the subnet/SG vars.
+      # Release task (deploy checklist + migrate + createcachetable +
+      # collectstatic) runs from this exact new revision - same image AND env
+      # as what goes live - and the service only rolls after it exits 0. The
+      # check runs against the real task-definition env (Secrets Manager
+      # values included) before any DB mutation; --fail-level WARNING makes
+      # "zero warnings" binding (`check` alone only fails at ERROR). Fargate
+      # run-task does not inherit the service's network config, hence the
+      # subnet/SG vars.
       - name: Release task + roll web
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
@@ -91,7 +95,8 @@ jobs:
           run-task: true
           run-task-container-overrides: >
             [{"name": "app", "command": ["sh", "-c",
-            "python manage.py migrate --noinput &&
+            "python manage.py check --deploy --fail-level WARNING &&
+            python manage.py migrate --noinput &&
             python manage.py createcachetable &&
             python manage.py collectstatic --noinput"]}]
           run-task-subnets: ${{ vars.ECS_SUBNETS }}

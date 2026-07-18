@@ -130,4 +130,4 @@ check-deploy:
     DATABASE_URL=postgres://user:pass@db.invalid:5432/app \
     AWS_STORAGE_BUCKET_NAME=bucket AWS_S3_REGION_NAME=me-south-1 \
     AWS_SES_REGION=me-south-1 SENTRY_DSN=https://key@sentry.invalid/1 \
-    uv run manage.py check --deploy
+    uv run manage.py check --deploy --fail-level WARNING

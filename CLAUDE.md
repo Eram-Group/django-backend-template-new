@@ -1,8 +1,7 @@
 # Project rules
 
 PLAN.md is the authoritative design document; TODO.json is the task tracker;
-docs/ARCHITECTURE.md explains the conventions in depth. Topic rules live in
-`.claude/rules/` and auto-load when their files are touched.
+docs/ARCHITECTURE.md explains the conventions in depth.
 
 ## Architecture rules (digest)
 
@@ -55,18 +54,81 @@ docs/ARCHITECTURE.md explains the conventions in depth. Topic rules live in
   `pytest`, `lint-imports` — all must be green (coverage floor 80%,
   warnings are errors).
 
-## Factories & seed data (essentials)
+## Factories & seed data
 
-Full rule: `.claude/rules/factories.md` (loads when factory/seed files are
-in play).
+Stack: factory_boy 3.3+ (structure) + mimesis 19+ (values). Faker is only a
+transitive dependency of factory_boy — never import it.
 
-- Every concrete model ships a factory (`apps/<app>/tests/factories.py`)
-  registered in `apps/common/tests/factories_registry.py` - the coverage
-  gate fails the suite otherwise.
-- factory_boy = structure, mimesis via `apps/common/tests/fake.py` = values
-  (locale-aware ar/en). Never import Faker.
-- Related objects via `RelatedFactory` (dotted-path string if the class
-  import would be circular) — never a hand-rolled post_generation hook;
-  exemplar: `UserFactory.wallet`.
-- Seed data: `just seed` / `manage.py seed_db --scale 0..1` (log curve,
-  1.0 = 1M users; local-only; `--wipe` removes the `@seed.example.com` rows).
+### Writing a factory
+
+- One factory per concrete model, in `apps/<app>/tests/factories.py`,
+  subclassing `DjangoModelFactory[Model]` (the generic subscript is
+  supported at runtime and keeps mypy strict happy).
+- `class Meta` must set `skip_postgeneration_save = True` (3.3+ behavior:
+  avoids the deprecated second save after post_generation) and
+  `django_get_or_create = [...]` on the natural key (e.g. email).
+- Structure comes from factory_boy declarations (`Sequence`,
+  `LazyAttribute`, `LazyFunction`, `SubFactory`, `Trait` under
+  `class Params`, `fuzzy.FuzzyChoice` for weighted/random picks — never
+  `LazyFunction(lambda: random.choice(...))`, which bypasses factory_boy's
+  reseedable RNG); every fake VALUE comes from `apps/common/tests/fake.py`
+  (mimesis `Locale.AR_SA` / `Locale.EN` providers — Arabic users get Arabic
+  values). Add new value helpers there, never instantiate mimesis/Faker in
+  a factory.
+- Factories satisfy runtime invariants, not just DB constraints. UserFactory
+  is the reference: verified primary `EmailAddress` via `post_generation`
+  (code-login pends on verify_email without it), `password = "!"`
+  (passwordless invariant), locale-matched `name`, weighted `language`.
+- `post_generation` hooks must no-op when `create` is False —
+  `Factory.build()` must never touch the database.
+- **Related objects: use `RelatedFactory`, not a hand-rolled
+  `post_generation` hook** (the official recipes recommendation for
+  reverse FK/O2O invariants — verified against docs + 3.3.3 source,
+  2026-07-18). Exemplar: `UserFactory.wallet`, mirroring the signup
+  invariant (`user_post_signup` → `wallet_create`):
+  - Pass the factory as a **dotted-path string**
+    (`RelatedFactory("apps.payments.tests.factories.WalletFactory",
+    factory_related_name="user")`) when a class import would be circular —
+    factory_boy resolves it lazily at first use (`_FactoryWrapper`).
+  - `factory_related_name` passes the parent instance as that kwarg, which
+    also suppresses the child factory's `SubFactory` — so two factories can
+    reference each other without recursion.
+  - The parent's strategy propagates: `.build()` builds the child too,
+    still zero DB queries. `post_generation` remains the tool only where no
+    dedicated construct exists (e.g. many-to-many).
+- Unsaved instances of BaseModel have `pk` set to a `DatabaseDefault`
+  sentinel (db-generated uuidv7), **not** `None` — assert
+  `obj._state.adding`, never `obj.pk is None`.
+- Call factories as `UserFactory.create(...)` / `.build(...)` — never
+  `UserFactory(...)`. Explicit reads better and mypy (no factory_boy stubs)
+  types the dunder-call as a factory instance, not the model.
+- Register the factory in
+  `apps/common/tests/factories_registry.py::FACTORIES` in the SAME change
+  that adds the model — the coverage gate
+  (`apps/common/tests/test_factory_coverage.py`) fails the suite otherwise.
+  The registry is an explicit dict; no auto-discovery, no swallowed errors.
+
+### Bulk seeding (seed_db)
+
+- `manage.py seed_db --scale 0..1` — log curve (0 → 10 users, 0.5 → ~3.2k,
+  1.0 → 1,000,000); `just seed` defaults to 0.3. Local-only guard
+  (`ENVIRONMENT=local`); dev-only imports stay inside `handle()` so the
+  module imports cleanly in production images.
+- At scale, NEVER `Factory.create()`/`create_batch()` (per-row saves +
+  post_generation = hours). Seeders use `Factory.build(...)` in chunks of
+  10k + `bulk_create(batch_size=1000)` (~21k rows/s measured).
+- Do not pass `ignore_conflicts=True` — it disables RETURNING, and the
+  db-generated uuidv7 pks are needed to bulk-create child rows.
+- Child rows fan out per parent with variance via
+  `fan_out(parents, per_parent=(lo, hi), build_child, rng)` — a new child
+  model (e.g. addresses) adds one seeder step declaring its ratio, and must
+  replicate whatever its factory's post_generation would have done (bulk
+  path bypasses hooks).
+- Seeded rows carry the `@seed.example.com` email domain: `--wipe` deletes
+  exactly those; sequence offsets off the existing domain count so re-runs
+  append without conflicts. `--seed N` = deterministic (`random.seed` +
+  `fake.reseed` + `factory.random.reseed_random` — the last one seeds
+  factory_boy's own RNG, which `FuzzyChoice` draws from).
+- Spread timestamps for realism with `QuerySet.update()` (bypasses
+  auto_now/auto_now_add); remember `F()` reads pre-update values, so
+  copying a freshly-randomized column needs a second UPDATE.
