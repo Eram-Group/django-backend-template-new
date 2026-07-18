@@ -20,6 +20,7 @@ Request bodies are never logged (OTP codes, PII); response bodies travel only
 inside raised errors, truncated.
 """
 
+import threading
 import time
 from collections.abc import Mapping
 from typing import Any
@@ -32,6 +33,22 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+
+# One pooled client per process, created lazily on first use (post-fork under
+# gunicorn) so TLS handshakes and connections are reused across provider
+# calls. httpx.Client is thread-safe; timeouts are applied per request.
+_client: httpx.Client | None = None
+_client_lock = threading.Lock()
+
+
+def _get_client() -> httpx.Client:
+    global _client  # process-wide connection pool
+    if _client is None:
+        with _client_lock:
+            if _client is None:
+                _client = httpx.Client(timeout=DEFAULT_TIMEOUT)
+    return _client
+
 
 type RetryPolicy = Literal["transient", "connect-only", "none"]
 
@@ -88,15 +105,15 @@ def _send_once(
     headers: Mapping[str, str] | None,
     timeout: httpx.Timeout,
 ) -> httpx.Response:
-    with httpx.Client(timeout=timeout) as client:
-        response = client.request(
-            method,
-            url,
-            json=json,
-            headers=dict(headers) if headers else None,
-        )
-        response.raise_for_status()
-        return response
+    response = _get_client().request(
+        method,
+        url,
+        json=json,
+        headers=dict(headers) if headers else None,
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response
 
 
 def request_json(

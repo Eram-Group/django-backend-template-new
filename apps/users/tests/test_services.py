@@ -6,6 +6,7 @@ from allauth.usersessions.models import UserSession
 from django.core import mail
 from django.core.exceptions import ValidationError
 
+from apps.payments.constants import DEFAULT_CURRENCY
 from apps.users import services
 from apps.users.constants import Language
 from apps.users.models import User
@@ -42,14 +43,17 @@ def test_user_update_runs_model_validation() -> None:
     assert "language" in excinfo.value.message_dict
 
 
-def test_user_post_signup_enqueues_welcome_email_on_commit(
+def test_user_post_signup_provisions_wallet_and_enqueues_welcome_email(
     django_capture_on_commit_callbacks: Any,
 ) -> None:
-    user = UserFactory.create()
+    # Bare create_user, like real signup: no factory-provisioned wallet yet.
+    user = User.objects.create_user("signup@example.com", name="New User")
 
     with django_capture_on_commit_callbacks(execute=True) as callbacks:
         services.user_post_signup(user=user)
 
+    assert user.wallet.currency == DEFAULT_CURRENCY
+    assert user.wallet.balance == 0
     # ImmediateBackend (test settings) ran the enqueued task synchronously.
     assert len(callbacks) == 1
     assert len(mail.outbox) == 1
@@ -57,7 +61,7 @@ def test_user_post_signup_enqueues_welcome_email_on_commit(
 
 
 def test_user_post_signup_sends_nothing_before_commit() -> None:
-    user = UserFactory.create()
+    user = User.objects.create_user("signup@example.com", name="New User")
     services.user_post_signup(user=user)  # transaction never commits in tests
     assert not mail.outbox
 

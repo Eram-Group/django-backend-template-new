@@ -7,6 +7,7 @@ replayed events (TERMINAL_STATUSES are never overwritten - a second
 "paid" webhook cannot credit the wallet twice).
 """
 
+import uuid
 from decimal import Decimal
 
 from django.conf import settings
@@ -27,15 +28,28 @@ from apps.payments.exceptions import PaymentGatewayUnavailableError
 from apps.payments.exceptions import PaymentNotFoundError
 from apps.payments.exceptions import PaymentNotRefundableError
 from apps.payments.exceptions import PaymentRefundFailedError
+from apps.payments.exceptions import WalletCurrencyMismatchError
 from apps.payments.gateways import gateway_by_name
 from apps.payments.gateways import gateway_for_currency
 from apps.payments.gateways.base import CheckoutRequest
 from apps.payments.gateways.base import GatewayResponseError
 from apps.payments.gateways.base import WebhookEvent
 from apps.payments.models import Payment
+from apps.payments.models import Wallet
+from apps.payments.selectors.wallets import wallet_get
 from apps.payments.services.wallets import wallet_apply
-from apps.payments.services.wallets import wallet_get_or_create
 from apps.users.models import User
+
+
+def _wallet_for(*, user: User, currency: str) -> Wallet:
+    """Resolve the user's signup-provisioned wallet for a payment in
+    ``currency``, rejecting a currency mismatch before any money moves."""
+    wallet = wallet_get(user=user)
+    if wallet.currency != currency:
+        raise WalletCurrencyMismatchError(
+            str(_("Wallet currency does not match the payment currency."))
+        )
+    return wallet
 
 
 def payment_initiate(
@@ -52,6 +66,10 @@ def payment_initiate(
     (kernel timeout 10s < gunicorn's 30s); the idempotency key is planted at
     the gateway, so a retried initiate can never double-charge.
     """
+    if kind == PaymentKind.WALLET_TOPUP:
+        # Fail before the provider charges: waiting for the credit path to
+        # reject the mismatch would strand already-captured money.
+        _wallet_for(user=user, currency=str(currency))
     gateway = gateway_for_currency(str(currency))
     payment = Payment(
         user=user,
@@ -141,7 +159,7 @@ def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Pa
 
 def _on_paid(payment: Payment) -> None:
     if payment.kind == PaymentKind.WALLET_TOPUP:
-        wallet = wallet_get_or_create(user=payment.user, currency=payment.currency)
+        wallet = _wallet_for(user=payment.user, currency=payment.currency)
         entry = wallet_apply(
             wallet_id=wallet.pk,
             amount=payment.amount,
@@ -196,33 +214,32 @@ def payment_verify(*, payment: Payment) -> Payment:
 def payment_refund(*, payment: Payment, actor: User) -> Payment:
     """Full refund (partial refunds: extend with an amount arg + partial ledger).
 
-    A refunded wallet top-up debits the wallet - if the user already spent
-    the credit, InsufficientBalanceError blocks the refund (resolve the
-    balance first).
+    Ordering is money-safe:
+
+    1. Interlock transaction: lock the row, require PAID, flip to
+       REFUND_PENDING (a concurrent second refund now fails the PAID check
+       before ever reaching the gateway), and debit the wallet for top-ups.
+       If the user already spent the credit, InsufficientBalanceError rolls
+       everything back before the provider is contacted.
+    2. Gateway refund call, outside any transaction.
+    3. Finalize: REFUNDED on success; on gateway failure the wallet debit
+       is compensated and the row restored to PAID.
+
+    A crash between 2 and 3 leaves the row in REFUND_PENDING for manual
+    reconciliation against the provider dashboard - preferred over any
+    ordering that can refund twice at the provider or lose the debit.
     """
-    if payment.status != PaymentStatus.PAID:
-        raise PaymentNotRefundableError(str(_("Only paid payments can be refunded.")))
     gateway = gateway_by_name(payment.gateway)
     if gateway is None:
         raise PaymentNotFoundError(str(_("Payment gateway is not configured.")))
-    try:
-        result = gateway.refund(
-            transaction_id=payment.gateway_transaction_id or payment.gateway_charge_id,
-            amount=payment.amount,
-            currency=payment.currency,
-        )
-    except (OutboundError, GatewayResponseError) as exc:
-        raise PaymentGatewayUnavailableError(
-            str(_("The payment provider is unavailable. Try again shortly."))
-        ) from exc
-    if not result.ok:
-        raise PaymentRefundFailedError(str(_("The gateway rejected the refund.")))
     with transaction.atomic():
         locked = Payment.objects.select_for_update().get(pk=payment.pk)
-        if locked.status == PaymentStatus.REFUNDED:
-            return locked
+        if locked.status != PaymentStatus.PAID:
+            raise PaymentNotRefundableError(
+                str(_("Only paid payments can be refunded."))
+            )
         if locked.kind == PaymentKind.WALLET_TOPUP:
-            wallet = wallet_get_or_create(user=locked.user, currency=locked.currency)
+            wallet = _wallet_for(user=locked.user, currency=locked.currency)
             wallet_apply(
                 wallet_id=wallet.pk,
                 amount=-locked.amount,
@@ -230,7 +247,45 @@ def payment_refund(*, payment: Payment, actor: User) -> Payment:
                 payment=locked,
                 actor=actor,
             )
+        locked.status = PaymentStatus.REFUND_PENDING
+        locked.full_clean()
+        locked.save(update_fields=["status", "updated_at"])
+    try:
+        result = gateway.refund(
+            transaction_id=locked.gateway_transaction_id or locked.gateway_charge_id,
+            amount=locked.amount,
+            currency=locked.currency,
+        )
+    except (OutboundError, GatewayResponseError) as exc:
+        _refund_revert(payment_id=locked.pk, actor=actor)
+        raise PaymentGatewayUnavailableError(
+            str(_("The payment provider is unavailable. Try again shortly."))
+        ) from exc
+    if not result.ok:
+        _refund_revert(payment_id=locked.pk, actor=actor)
+        raise PaymentRefundFailedError(str(_("The gateway rejected the refund.")))
+    with transaction.atomic():
+        locked = Payment.objects.select_for_update().get(pk=payment.pk)
         locked.status = PaymentStatus.REFUNDED
         locked.full_clean()
         locked.save(update_fields=["status", "updated_at"])
         return locked
+
+
+def _refund_revert(*, payment_id: uuid.UUID, actor: User) -> None:
+    """Undo the refund interlock: compensate the wallet debit, restore PAID."""
+    with transaction.atomic():
+        locked = Payment.objects.select_for_update().get(pk=payment_id)
+        if locked.kind == PaymentKind.WALLET_TOPUP:
+            wallet = _wallet_for(user=locked.user, currency=locked.currency)
+            wallet_apply(
+                wallet_id=wallet.pk,
+                amount=locked.amount,
+                kind=WalletTransactionKind.ADJUSTMENT,
+                payment=locked,
+                actor=actor,
+                note="Refund reverted: the gateway refund did not go through.",
+            )
+        locked.status = PaymentStatus.PAID
+        locked.full_clean()
+        locked.save(update_fields=["status", "updated_at"])

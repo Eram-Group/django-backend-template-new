@@ -98,8 +98,8 @@ bash *args:
 # verification only.
 # Extract + compile the ar/en translation catalogs.
 messages:
-    uv run manage.py makemessages -l ar -l en --ignore .venv --ignore staticfiles --ignore Gawdat_Django_Template --ignore sample_project
-    uv run manage.py compilemessages --ignore .venv --ignore Gawdat_Django_Template --ignore sample_project
+    uv run manage.py makemessages -l ar -l en --ignore .venv --ignore staticfiles
+    uv run manage.py compilemessages --ignore .venv
 
 # Start a fresh branch off up-to-date main.
 branch name:

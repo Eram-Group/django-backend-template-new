@@ -29,6 +29,12 @@ class WalletError(ApplicationError):
     """Base error for wallet operations."""
 
 
+class WalletNotFoundError(WalletError):
+    """Every user gets a wallet at signup - missing means broken invariant."""
+
+    status_code = 404
+
+
 class InsufficientBalanceError(WalletError):
     pass
 

@@ -32,6 +32,24 @@ transitive dependency of factory_boy — never import it.
   (passwordless invariant), locale-matched `name`, weighted `language`.
 - `post_generation` hooks must no-op when `create` is False —
   `Factory.build()` must never touch the database.
+- **Related objects: use `RelatedFactory`, not a hand-rolled
+  `post_generation` hook** (the official recipes recommendation for
+  reverse FK/O2O invariants — verified against docs + 3.3.3 source,
+  2026-07-18). Exemplar: `UserFactory.wallet`, mirroring the signup
+  invariant (`user_post_signup` → `wallet_create`):
+  - Pass the factory as a **dotted-path string**
+    (`RelatedFactory("apps.payments.tests.factories.WalletFactory",
+    factory_related_name="user")`) when a class import would be circular —
+    factory_boy resolves it lazily at first use (`_FactoryWrapper`).
+  - `factory_related_name` passes the parent instance as that kwarg, which
+    also suppresses the child factory's `SubFactory` — so two factories can
+    reference each other without recursion.
+  - The parent's strategy propagates: `.build()` builds the child too,
+    still zero DB queries. `post_generation` remains the tool only where no
+    dedicated construct exists (e.g. many-to-many).
+- Unsaved instances of BaseModel have `pk` set to a `DatabaseDefault`
+  sentinel (db-generated uuidv7), **not** `None` — assert
+  `obj._state.adding`, never `obj.pk is None`.
 - Call factories as `UserFactory.create(...)` / `.build(...)` — never
   `UserFactory(...)`. Explicit reads better and mypy (no factory_boy stubs)
   types the dunder-call as a factory instance, not the model.

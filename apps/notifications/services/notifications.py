@@ -73,6 +73,8 @@ def notification_mark_read(*, user: User, pk: uuid.UUID) -> Notification:
 
 
 def notification_mark_all_read(*, user: User) -> int:
+    # Bulk .update() skips auto_now, so updated_at must be set explicitly.
+    now = timezone.now()
     return Notification.objects.filter(recipient=user, read_at__isnull=True).update(
-        read_at=timezone.now()
+        read_at=now, updated_at=now
     )

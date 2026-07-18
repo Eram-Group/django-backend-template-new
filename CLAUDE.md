@@ -9,6 +9,12 @@ docs/ARCHITECTURE.md explains the conventions in depth. Topic rules live in
 - Layering per app, enforced by import-linter:
   `apis | admin | management → services → tasks → selectors → models`.
   Apps are independent; `apps.common` imports no domain app.
+- Cross-app access: one-way only, each direction recorded in `pyproject.toml`
+  `ignore_imports`. Importing another app's **model** is allowed only for
+  passive ownership (FK target, read-only — e.g. `User` from payments).
+  Anything with behavior or invariants goes through the owning app's
+  **service** (`notification_send`, `wallet_apply`) — never mutate another
+  app's model directly. FKs use string refs (`"app.Model"`), no import.
 - **No signals** in first-party code — services call services. Third-party
   boundaries use the library's hooks (allauth adapter `save_user`, never
   `user_signed_up`).
@@ -58,5 +64,8 @@ in play).
   gate fails the suite otherwise.
 - factory_boy = structure, mimesis via `apps/common/tests/fake.py` = values
   (locale-aware ar/en). Never import Faker.
+- Related objects via `RelatedFactory` (dotted-path string if the class
+  import would be circular) — never a hand-rolled post_generation hook;
+  exemplar: `UserFactory.wallet`.
 - Seed data: `just seed` / `manage.py seed_db --scale 0..1` (log curve,
   1.0 = 1M users; local-only; `--wipe` removes the `@seed.example.com` rows).

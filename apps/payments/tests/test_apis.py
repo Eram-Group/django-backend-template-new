@@ -8,7 +8,6 @@ from django.test import Client
 
 from apps.payments.constants import PaymentKind
 from apps.payments.constants import PaymentStatus
-from apps.payments.services import payment_apply_gateway_event  # noqa: F401
 from apps.payments.tests.factories import PaymentFactory
 from apps.users.tests.factories import UserFactory
 
@@ -142,7 +141,7 @@ def test_webhook_for_unknown_payment_is_404(client: Client) -> None:
 # --- wallet ----------------------------------------------------------------------
 
 
-def test_wallet_is_created_lazily_and_lists_ledger(client: Client) -> None:
+def test_wallet_shows_credited_balance_and_ledger(client: Client) -> None:
     payment = PaymentFactory.create(kind=PaymentKind.WALLET_TOPUP)
     client.post(
         FAKE_WEBHOOK,

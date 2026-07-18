@@ -5,9 +5,10 @@ from pathlib import Path
 
 import pytest
 import stamina
-from allauth.account.models import EmailAddress
+from pytest_django.fixtures import SettingsWrapper
 
 from apps.users.models import User
+from apps.users.tests.factories import UserFactory
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -23,20 +24,16 @@ def _stamina_testing() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
-def _tmp_media_root(settings: object, tmp_path: Path) -> None:
+def _tmp_media_root(settings: SettingsWrapper, tmp_path: Path) -> None:
     """Tests never write into the real media/ directory."""
-    settings.MEDIA_ROOT = tmp_path / "media"  # type: ignore[attr-defined]
+    settings.MEDIA_ROOT = tmp_path / "media"
 
 
 @pytest.fixture
 def user(db: None) -> User:
     """A regular, passwordless user with a VERIFIED email.
 
-    The verified EmailAddress row matters: with mandatory email
-    verification, login flows pend on verify_email without it.
+    UserFactory owns that invariant (verified primary EmailAddress via
+    post_generation, unusable password) - single source of truth.
     """
-    created = User.objects.create_user("user@example.com", name="Test User")
-    EmailAddress.objects.create(
-        user=created, email=created.email, primary=True, verified=True
-    )
-    return created
+    return UserFactory.create()

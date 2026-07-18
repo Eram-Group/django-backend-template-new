@@ -53,7 +53,7 @@ class Payment(BaseModel):
     )
     # Checkout-time id (Tap charge id / Paymob intention id) ...
     gateway_charge_id = models.CharField(
-        _("gateway charge id"), max_length=255, blank=True, db_index=True
+        _("gateway charge id"), max_length=255, blank=True
     )
     # ... vs the settled transaction id reported by the webhook (refunds
     # target this one on Paymob).
@@ -74,6 +74,15 @@ class Payment(BaseModel):
         verbose_name_plural = _("payments")
         indexes = [
             models.Index(fields=["user", "status"]),
+            models.Index(fields=["gateway_charge_id"]),
+        ]
+        constraints = [
+            # DB backstop for the MinValueValidator - guards any write path
+            # that bypasses full_clean (raw SQL, bulk updates).
+            models.CheckConstraint(
+                condition=models.Q(amount__gt=0),
+                name="payment_amount_positive",
+            ),
         ]
 
     def __str__(self) -> str:

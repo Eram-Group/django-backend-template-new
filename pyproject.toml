@@ -198,9 +198,15 @@ ignore_imports = [
   "apps.notifications.** -> apps.users.**",
   # Explicit decision (2026-07-12): payments belongs to a User (payer,
   # wallet owner) and announces outcomes through notifications' service
-  # re-exports. One-way only; neither app imports payments.
+  # re-exports.
   "apps.payments.** -> apps.users.**",
   "apps.payments.** -> apps.notifications.**",
+  # Explicit decision (2026-07-18): signup provisions the wallet -
+  # user_post_signup calls payments' wallet_create service re-export, and
+  # UserFactory/tests replicate and assert the invariant. Service + test
+  # edges only; users' runtime models/selectors never import payments.
+  "apps.users.services.users -> apps.payments.services",
+  "apps.users.tests.** -> apps.payments.**",
   # The shared fake-value helper is deliberately user-locale-aware; without
   # this, any app's tests importing fake form an indirect chain to users.
   "apps.common.tests.fake -> apps.users.constants",

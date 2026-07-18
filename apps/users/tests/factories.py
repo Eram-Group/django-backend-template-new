@@ -7,6 +7,7 @@ from typing import Any
 from allauth.account.models import EmailAddress
 from factory.declarations import LazyAttribute
 from factory.declarations import LazyFunction
+from factory.declarations import RelatedFactory
 from factory.declarations import Sequence
 from factory.declarations import Trait
 from factory.django import DjangoModelFactory
@@ -50,3 +51,11 @@ class UserFactory(DjangoModelFactory[User]):
             email=self.email,
             defaults={"primary": True, "verified": True},
         )
+
+    # Signup provisions a wallet (user_post_signup) - factory-made users
+    # satisfy the same invariant. Dotted path: payments factories import
+    # this module, so importing WalletFactory back would be circular;
+    # WalletFactory's django_get_or_create=["user"] keeps this idempotent.
+    wallet = RelatedFactory(
+        "apps.payments.tests.factories.WalletFactory", factory_related_name="user"
+    )

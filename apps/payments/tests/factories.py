@@ -5,6 +5,7 @@ from decimal import Decimal
 from factory.declarations import SubFactory
 from factory.django import DjangoModelFactory
 
+from apps.payments.constants import DEFAULT_CURRENCY
 from apps.payments.constants import Currency
 from apps.payments.constants import GatewayName
 from apps.payments.constants import PaymentKind
@@ -34,7 +35,7 @@ class WalletFactory(DjangoModelFactory[Wallet]):
         skip_postgeneration_save = True
 
     user = SubFactory(UserFactory)
-    currency = Currency.SAR
+    currency = DEFAULT_CURRENCY  # same default the signup provisioning uses
 
 
 class WalletTransactionFactory(DjangoModelFactory[WalletTransaction]):

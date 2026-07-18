@@ -11,6 +11,7 @@ from pydantic import SecretStr
 
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import Notification
+from apps.payments import selectors
 from apps.payments import services
 from apps.payments.constants import Currency
 from apps.payments.constants import PaymentKind
@@ -20,7 +21,14 @@ from apps.payments.exceptions import InsufficientBalanceError
 from apps.payments.exceptions import PaymentGatewayUnavailableError
 from apps.payments.exceptions import PaymentNotFoundError
 from apps.payments.exceptions import PaymentNotRefundableError
+from apps.payments.exceptions import PaymentRefundFailedError
+from apps.payments.exceptions import WalletCurrencyMismatchError
+from apps.payments.exceptions import WalletNotFoundError
+from apps.payments.gateways.base import RefundResult
 from apps.payments.gateways.base import WebhookEvent
+from apps.payments.gateways.fake import FakeGateway
+from apps.payments.models import Payment
+from apps.payments.models import Wallet
 from apps.payments.models import WalletTransaction
 from apps.payments.tests.factories import PaymentFactory
 from apps.payments.tests.factories import WalletFactory
@@ -142,14 +150,16 @@ def test_paid_topup_credits_wallet_and_notifies_exactly_once() -> None:
     )
 
 
-def test_paid_other_kind_notifies_without_wallet() -> None:
+def test_paid_other_kind_notifies_and_leaves_wallet_untouched() -> None:
     payment = PaymentFactory.create(kind=PaymentKind.OTHER)
 
     services.payment_apply_gateway_event(
         gateway_name="fake", event=_paid_event(payment)
     )
 
-    assert not hasattr(payment.user, "wallet") or not payment.user.wallet
+    wallet = payment.user.wallet  # provisioned at signup, never credited
+    assert wallet.balance == Decimal("0")
+    assert not wallet.transactions.exists()
     assert Notification.objects.filter(
         recipient=payment.user, kind=NotificationKind.PAYMENT_PAID
     ).exists()
@@ -228,6 +238,115 @@ def test_refund_blocked_when_topup_was_spent() -> None:
 
     with pytest.raises(InsufficientBalanceError):
         services.payment_refund(payment=payment, actor=staff)
+
+
+def test_refund_gateway_hit_once_when_second_refund_races(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second refund landing mid-provider-call is rejected by the interlock."""
+    staff = UserFactory.create(staff=True)
+    payment = PaymentFactory.create(kind=PaymentKind.WALLET_TOPUP)
+    services.payment_apply_gateway_event(
+        gateway_name="fake", event=_paid_event(payment)
+    )
+    payment.refresh_from_db()
+    gateway_calls: list[str] = []
+
+    def racing_refund(
+        self: FakeGateway, *, transaction_id: str, amount: Decimal, currency: str
+    ) -> RefundResult:
+        gateway_calls.append(transaction_id)
+        # The double-click: a second refund arrives while this one is in
+        # flight - it must fail the PAID check, never reach the gateway.
+        with pytest.raises(PaymentNotRefundableError):
+            services.payment_refund(
+                payment=Payment.objects.get(pk=payment.pk), actor=staff
+            )
+        return RefundResult(ok=True, raw={"fake": True})
+
+    monkeypatch.setattr(FakeGateway, "refund", racing_refund)
+
+    services.payment_refund(payment=payment, actor=staff)
+
+    assert gateway_calls == ["txn_1"]  # provider refunded exactly once
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.REFUNDED
+    wallet = payment.user.wallet
+    wallet.refresh_from_db()
+    assert wallet.balance == Decimal("0")  # debited exactly once
+
+
+def test_refund_reverts_wallet_and_status_when_gateway_rejects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    staff = UserFactory.create(staff=True)
+    payment = PaymentFactory.create(kind=PaymentKind.WALLET_TOPUP)
+    services.payment_apply_gateway_event(
+        gateway_name="fake", event=_paid_event(payment)
+    )
+    payment.refresh_from_db()
+    monkeypatch.setattr(
+        FakeGateway,
+        "refund",
+        lambda self, **kwargs: RefundResult(ok=False, raw={"fake": True}),
+    )
+
+    with pytest.raises(PaymentRefundFailedError):
+        services.payment_refund(payment=payment, actor=staff)
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.PAID  # restored, refundable again
+    wallet = payment.user.wallet
+    wallet.refresh_from_db()
+    assert wallet.balance == payment.amount  # debit compensated
+    kinds = list(wallet.transactions.values_list("kind", flat=True))
+    assert kinds.count(WalletTransactionKind.REFUND) == 1
+    assert kinds.count(WalletTransactionKind.ADJUSTMENT) == 1
+
+
+# --- wallet invariants -----------------------------------------------------------
+
+
+def test_wallet_get_requires_provisioned_wallet() -> None:
+    user = UserFactory.create()
+    Wallet.objects.filter(user=user).delete()  # break the signup invariant
+
+    with pytest.raises(WalletNotFoundError):
+        selectors.wallet_get(user=user)
+
+
+def test_initiate_topup_rejects_mismatched_wallet_currency() -> None:
+    wallet = WalletFactory.create(currency=Currency.SAR)
+
+    with pytest.raises(WalletCurrencyMismatchError):
+        services.payment_initiate(
+            user=wallet.user,
+            amount=Decimal("10.00"),
+            currency=Currency.EGP,
+            kind=PaymentKind.WALLET_TOPUP,
+        )
+
+    # Rejected before the provider was asked for a checkout: no row at all.
+    assert not Payment.objects.filter(user=wallet.user).exists()
+
+
+def test_paid_event_rejects_mismatched_wallet_currency() -> None:
+    """Credit-time backstop: a mismatched payment that bypassed initiate
+    (crafted row, currency changed later) must never credit the wallet."""
+    payment = PaymentFactory.create(
+        kind=PaymentKind.WALLET_TOPUP, currency=Currency.EGP
+    )  # the factory user's signup wallet is SAR
+
+    with pytest.raises(WalletCurrencyMismatchError):
+        services.payment_apply_gateway_event(
+            gateway_name="fake", event=_paid_event(payment)
+        )
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.PENDING  # transition rolled back
+    wallet = payment.user.wallet
+    assert wallet.balance == Decimal("0")
+    assert not wallet.transactions.exists()
 
 
 # --- simulate_payment_webhook (the local Mailpit-for-payments) -------------------

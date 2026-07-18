@@ -111,6 +111,17 @@ def test_mark_all_read_counts_only_unread() -> None:
     assert services.notification_mark_all_read(user=user) == 0
 
 
+def test_mark_all_read_refreshes_updated_at() -> None:
+    notification = NotificationFactory.create()
+    stale = notification.updated_at
+
+    services.notification_mark_all_read(user=notification.recipient)
+
+    notification.refresh_from_db()
+    assert notification.updated_at > stale  # bulk .update() bypasses auto_now
+    assert notification.updated_at == notification.read_at
+
+
 def test_device_register_is_an_upsert_that_reassigns() -> None:
     first_owner = UserFactory.create()
     second_owner = UserFactory.create()

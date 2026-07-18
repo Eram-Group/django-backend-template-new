@@ -3,6 +3,7 @@ from typing import Any
 from allauth.usersessions.models import UserSession
 from django.db import transaction
 
+from apps.payments.services import wallet_create
 from apps.users.models import User
 from apps.users.tasks import send_welcome_email
 
@@ -23,7 +24,12 @@ def user_update(*, user: User, data: dict[str, Any]) -> User:
 
 
 def user_post_signup(*, user: User) -> None:
-    """Post-signup side effects; the task enqueue rides the signup transaction."""
+    """Post-signup side effects; everything rides the signup transaction.
+
+    The wallet is provisioned HERE (explicit cross-app service call) - the
+    payment flows only ever ``wallet_get`` and assume it exists.
+    """
+    wallet_create(user=user)
     transaction.on_commit(lambda: send_welcome_email.enqueue(str(user.pk)))
 
 

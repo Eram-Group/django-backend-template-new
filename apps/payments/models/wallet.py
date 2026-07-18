@@ -10,7 +10,7 @@ from apps.payments.constants import Currency
 
 
 class Wallet(BaseModel):
-    """One wallet per user, created lazily on first credit.
+    """One wallet per user, provisioned at signup (users.user_post_signup).
 
     ALL balance movement goes through services.wallet_apply (row lock +
     ledger entry) - nothing else may write ``balance``.
@@ -34,6 +34,14 @@ class Wallet(BaseModel):
     class Meta:
         verbose_name = _("wallet")
         verbose_name_plural = _("wallets")
+        constraints = [
+            # DB backstop for the wallet_apply overdraft check - guards any
+            # write path that bypasses the service (raw SQL, future code).
+            models.CheckConstraint(
+                condition=models.Q(balance__gte=0),
+                name="wallet_balance_non_negative",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.user} wallet ({self.balance} {self.currency})"

@@ -40,12 +40,12 @@ def target_count(scale: float) -> int:
     return round(10 * math.pow(100_000, scale))
 
 
-def fan_out[P](
+def fan_out[P, C: Model](
     parents: list[P],
     per_parent: tuple[int, int],
-    build_child: Callable[[P], Model],
+    build_child: Callable[[P], C],
     rng: random.Random,
-) -> list[Model]:
+) -> list[C]:
     """Children per parent drawn uniformly from per_parent=(lo, hi)."""
     return [
         build_child(parent)
@@ -93,8 +93,16 @@ class Command(BaseCommand):
             fake.reseed(options["seed"])
 
         if options["wipe"]:
-            deleted, _ = User.objects.filter(email__endswith=f"@{SEED_DOMAIN}").delete()
-            self.stdout.write(f"wiped {deleted} previously seeded rows")
+            from apps.payments.models import Wallet
+
+            seeded_users = User.objects.filter(email__endswith=f"@{SEED_DOMAIN}")
+            # Wallet.user is PROTECT - wallets go first, then users cascade
+            # the rest (EmailAddress etc.).
+            wallets_deleted, _ = Wallet.objects.filter(user__in=seeded_users).delete()
+            deleted, _ = seeded_users.delete()
+            self.stdout.write(
+                f"wiped {deleted + wallets_deleted} previously seeded rows"
+            )
 
         count = target_count(scale)
         self.stdout.write(f"scale={scale} -> {count:,} users")
@@ -112,11 +120,13 @@ class Command(BaseCommand):
     def _seed_users(self, count: int, rng: random.Random) -> dict[str, int]:
         from allauth.account.models import EmailAddress
 
+        from apps.payments.constants import DEFAULT_CURRENCY
+        from apps.payments.models import Wallet
         from apps.users.models import User
         from apps.users.tests.factories import UserFactory
 
         offset = User.objects.filter(email__endswith=f"@{SEED_DOMAIN}").count()
-        users_done = emails_done = 0
+        users_done = emails_done = wallets_done = 0
         started = time.monotonic()
         for chunk_start in range(0, count, CHUNK):
             size = min(CHUNK, count - chunk_start)
@@ -142,8 +152,20 @@ class Command(BaseCommand):
                     rng=rng,
                 )
                 EmailAddress.objects.bulk_create(addresses, batch_size=BATCH)
+                # Bulk path must replicate UserFactory's wallet post_generation
+                # (signup invariant: every user has a wallet).
+                wallets = fan_out(
+                    created,
+                    per_parent=(1, 1),
+                    build_child=lambda user: Wallet(
+                        user=user, currency=DEFAULT_CURRENCY
+                    ),
+                    rng=rng,
+                )
+                Wallet.objects.bulk_create(wallets, batch_size=BATCH)
             users_done += len(created)
             emails_done += len(addresses)
+            wallets_done += len(wallets)
             rate = users_done / max(time.monotonic() - started, 0.001)
             self.stdout.write(
                 f"  users {users_done:,}/{count:,} "
@@ -156,4 +178,8 @@ class Command(BaseCommand):
         seeded = User.objects.filter(email__endswith=f"@{SEED_DOMAIN}")
         seeded.update(created_at=RawSQL("now() - (random() * interval '365 days')", []))
         seeded.update(updated_at=F("created_at"), date_joined=F("created_at"))
-        return {"users": users_done, "email addresses": emails_done}
+        return {
+            "users": users_done,
+            "email addresses": emails_done,
+            "wallets": wallets_done,
+        }

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-12 20:33+0000\n"
+"POT-Creation-Date: 2026-07-18 13:24+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,6 +17,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
 #: apps/common/validators.py:20
 msgid "Use Arabic text only - Latin letters are not allowed."
 msgstr ""
@@ -139,7 +140,7 @@ msgstr ""
 msgid "Notification not found."
 msgstr ""
 
-#: apps/payments/admin/payment/admin.py:59 apps/payments/constants.py:34
+#: apps/payments/admin/payment/admin.py:59 apps/payments/constants.py:45
 msgid "Refund"
 msgstr ""
 
@@ -175,44 +176,52 @@ msgstr ""
 msgid "Egyptian pound"
 msgstr ""
 
-#: apps/payments/constants.py:11
+#: apps/payments/constants.py:15
 msgid "Wallet top-up"
 msgstr ""
 
-#: apps/payments/constants.py:12
+#: apps/payments/constants.py:16
 msgid "Other"
 msgstr ""
 
-#: apps/payments/constants.py:16
+#: apps/payments/constants.py:20
 msgid "Pending"
 msgstr ""
 
-#: apps/payments/constants.py:17
+#: apps/payments/constants.py:21
 msgid "Paid"
 msgstr ""
 
-#: apps/payments/constants.py:18
+#: apps/payments/constants.py:22
 msgid "Failed"
 msgstr ""
 
-#: apps/payments/constants.py:19
+#: apps/payments/constants.py:25
+msgid "Refund pending"
+msgstr ""
+
+#: apps/payments/constants.py:26
 msgid "Refunded"
 msgstr ""
 
-#: apps/payments/constants.py:29
+#: apps/payments/constants.py:40
 msgid "Fake (local)"
 msgstr ""
 
-#: apps/payments/constants.py:33
+#: apps/payments/constants.py:44
 msgid "Top-up"
 msgstr ""
 
-#: apps/payments/constants.py:35
+#: apps/payments/constants.py:46
 msgid "Manual adjustment"
 msgstr ""
 
-#: apps/payments/constants.py:36
+#: apps/payments/constants.py:47
 msgid "Payment"
+msgstr ""
+
+#: apps/payments/gateways/__init__.py:24
+msgid "No payment gateway is configured for this currency."
 msgstr ""
 
 #: apps/payments/models/payment.py:33
@@ -307,29 +316,38 @@ msgid "wallet transactions"
 msgstr ""
 
 #: apps/payments/selectors/payments.py:21
-#: apps/payments/services/payments.py:110
+#: apps/payments/services/payments.py:128
 msgid "Payment not found."
 msgstr ""
 
-#: apps/payments/services/payments.py:85 apps/payments/services/payments.py:182
-#: apps/payments/services/payments.py:216
+#: apps/payments/selectors/wallets.py:17
+msgid "Wallet not found."
+msgstr ""
+
+#: apps/payments/services/payments.py:50
+msgid "Wallet currency does not match the payment currency."
+msgstr ""
+
+#: apps/payments/services/payments.py:103
+#: apps/payments/services/payments.py:200
+#: apps/payments/services/payments.py:262
 msgid "The payment provider is unavailable. Try again shortly."
 msgstr ""
 
-#: apps/payments/services/payments.py:174
-#: apps/payments/services/payments.py:207
+#: apps/payments/services/payments.py:192
+#: apps/payments/services/payments.py:234
 msgid "Payment gateway is not configured."
 msgstr ""
 
-#: apps/payments/services/payments.py:204
+#: apps/payments/services/payments.py:239
 msgid "Only paid payments can be refunded."
 msgstr ""
 
-#: apps/payments/services/payments.py:219
+#: apps/payments/services/payments.py:266
 msgid "The gateway rejected the refund."
 msgstr ""
 
-#: apps/payments/services/wallets.py:46
+#: apps/payments/services/wallets.py:53
 msgid "Insufficient wallet balance."
 msgstr ""
 
@@ -367,6 +385,10 @@ msgstr ""
 
 #: apps/users/models/user.py:80
 msgid "language"
+msgstr ""
+
+#: apps/users/selectors/users.py:15
+msgid "User not found."
 msgstr ""
 
 #: config/settings/base.py:272 config/settings/base.py:275

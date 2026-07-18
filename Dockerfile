@@ -35,7 +35,9 @@ RUN if [ -n "$(find locale -name '*.po' -print -quit 2>/dev/null)" ]; then \
     fi
 
 # --- Runtime stage: slim, non-root -------------------------------------------
-FROM python:3.14-slim AS runtime
+# Debian codename pinned to match the builder base - the .venv (and any
+# compiled wheels) must run against the same libc it was built on.
+FROM python:3.14-slim-bookworm AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"

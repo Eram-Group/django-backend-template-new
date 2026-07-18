@@ -17,14 +17,19 @@ def healthz(request: HttpRequest) -> JsonResponse:
 
 
 def readyz(request: HttpRequest) -> JsonResponse:
-    """Readiness: database/cache/storage reachable (django-health-check)."""
+    """Readiness: database and cache reachable (django-health-check).
+
+    Deliberately NOT storage: the Storage check does a save/read/delete
+    round-trip against S3, which on a frequent LB probe is real cost and
+    flaps the pod out of rotation on any transient S3 blip. Storage health
+    belongs in monitoring, not in the serve-traffic gate.
+    """
     from health_check.base import HealthCheckResult
     from health_check.checks import Cache
     from health_check.checks import Database
-    from health_check.checks import Storage
 
     async def run_all() -> list[HealthCheckResult]:
-        checks = (Database(), Cache(), Storage())
+        checks = (Database(), Cache())
         return [await check.get_result() for check in checks]
 
     results = asyncio.run(run_all())

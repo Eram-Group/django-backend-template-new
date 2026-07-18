@@ -28,8 +28,8 @@ def _gate_data(django_db_setup: Any, django_db_blocker: Any) -> None:
     with django_db_blocker.unblock():
         # Third-party admin targets that no local factory owns.
         Group.objects.get_or_create(name="Gate group")
-        UserFactory(email=SUPERUSER_EMAIL, is_staff=True, is_superuser=True)
-        UserFactory(email=PERMLESS_STAFF_EMAIL, is_staff=True)
+        UserFactory.create(email=SUPERUSER_EMAIL, is_staff=True, is_superuser=True)
+        UserFactory.create(email=PERMLESS_STAFF_EMAIL, is_staff=True)
         priv_staff = UserFactory.create(email=PRIV_STAFF_EMAIL, is_staff=True)
         priv_staff.user_permissions.set(Permission.objects.all())
         for factory in FACTORIES.values():
