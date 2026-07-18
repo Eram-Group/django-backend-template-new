@@ -187,7 +187,10 @@ zero infra provisioned.
 - **PR / push** — `ci.yml`: lint (pre-commit) → mypy → lock check →
   migrations check → pytest (coverage ≥ 80%, postgres:18 service), plus a
   parallel prod-image build + compose smoke (`/healthz`, `/readyz`, auth spec).
-  TruffleHog secret scan; Renovate keeps dependencies fresh.
+  TruffleHog secret scan; Dependabot (`.github/dependabot.yml`) keeps uv,
+  actions, images and pre-commit hooks fresh — weekly, after a cooldown so a
+  yanked release never reaches a PR. It updates `uv.lock`, not the `>=` floors
+  in `pyproject.toml`; raising a floor stays a deliberate edit.
 - **Merge to main** — `deploy-dev.yml`: build + push `:sha` (OIDC, GHA layer
   cache) → render web task def (`SENTRY_RELEASE=sha`) → **release task** from
   that revision, then roll web (waits for stability) → roll worker → sync the
