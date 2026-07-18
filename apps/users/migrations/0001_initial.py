@@ -40,3 +40,5 @@ class Migration(migrations.Migration):
             ],
         ),
     ]
+
+# Deliberate edit to prove guard-migrations rejects modified migrations.
