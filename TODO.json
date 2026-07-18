@@ -4,13 +4,13 @@
   "created": "2026-07-11",
   "workflow": [
     "Groups run in array order; tasks run in array order within their group unless dependsOn says otherwise.",
-    "Completed work is removed from this file - done through the easy-sweep (2026-07-11): G00-G05, G08, G09, G10 (on-GitHub verification of workflows still pending the remote), superuser bootstrap, and the /users/me slice; G14 template-enhancement sweep fully adopted 2026-07-12 (wp1-wp8 commits); G15 external-client build complete 2026-07-12 (wp-a HTTP kernel, wp-b User.phone, wp-c apps/notifications, wp-d apps/payments, wp-e docs - plan in ~/.claude/plans/toasty-snuggling-gosling.md). Group ARRAY ORDER = execution order.",
+    "Completed work is removed from this file - done through the easy-sweep (2026-07-11): G00-G05, G08, G09, G10 (workflows verified green on GitHub 2026-07-18: remote created at omargawdat/django-backend-template, first real run exposed 5 defects invisible locally - unresolvable setup-uv@v8 tag, invalid `compose run --no-build` flag, TruffleHog flagging the repo's own dev creds, guard-migrations missing the pull-requests scope so it failed every PR without ever evaluating its rule, and a .env.example trailing comment parsed as the value; all fixed in PR #1, and the migration guard was then proven to reject a modified migration and to bypass on the allow-migration-edit label), superuser bootstrap, and the /users/me slice; G14 template-enhancement sweep fully adopted 2026-07-12 (wp1-wp8 commits); G15 external-client build complete 2026-07-12 (wp-a HTTP kernel, wp-b User.phone, wp-c apps/notifications, wp-d apps/payments, wp-e docs - plan in ~/.claude/plans/toasty-snuggling-gosling.md). Group ARRAY ORDER = execution order.",
     "One task = one working session. Set status=in_progress before starting; set done only when the endGoal is observed, not assumed.",
     "Never start a task whose dependsOn are not all done.",
     "After the last task of a group: run the group's checkpoint, fix any fallout, then `git commit -m \"checkpoint(<groupId>): <group title>\"`.",
     "Tips are guidance, not prescriptions - decide from context; PLAN.md wins over any tip; record resolutions by appending to the task's tips.",
     "Any task that adds an Env field updates config/env.py AND .env.example in the same task.",
-    "From G03 onward ruff+mypy must be green at every checkpoint; GitHub CI is expectedly broken until G10 rewrites it (no remote exists yet) - local checkpoints are the gate."
+    "From G03 onward ruff+mypy must be green at every checkpoint. Since 2026-07-18 the remote exists and CI runs for real, so GitHub is a gate alongside the local checkpoint - not a substitute: CI is the only place `cp .env.example .env` happens, which is exactly how the FIREBASE_CREDENTIALS_B64 comment-as-value bug surfaced."
   ],
   "groups": [
     {
