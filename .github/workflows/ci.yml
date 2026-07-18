@@ -31,7 +31,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v8
+      # Exact pin: astral-sh publishes no floating `v8` major tag (v7 is the
+      # last one), so `@v8` is unresolvable. Renovate's github-actions
+      # manager keeps this current.
+      - uses: astral-sh/setup-uv@v8.3.2
         with:
           enable-cache: true
 
@@ -91,8 +94,10 @@ jobs:
       - name: Boot stack (release step before web/worker)
         run: |
           docker compose up -d --wait postgres mailpit
-          docker compose run --rm --no-build web python manage.py migrate
-          docker compose run --rm --no-build web python manage.py createcachetable
+          # `compose run` has no --no-build flag (only up/create do); it
+          # reuses the loaded backend:local image and builds only if absent.
+          docker compose run --rm web python manage.py migrate
+          docker compose run --rm web python manage.py createcachetable
           docker compose up -d --wait --no-build
 
       - name: Smoke
