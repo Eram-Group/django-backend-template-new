@@ -45,6 +45,17 @@ class FakeGateway:
     def charge_saved(self, *, request: CheckoutRequest) -> CheckoutSession:
         return self._instant_capture(request)
 
+    def setup_card(self, *, request: CheckoutRequest) -> CheckoutSession:
+        # Pending like a real hosted setup; simulate_payment_webhook
+        # <pk> --save-card plays the gateway callback that vaults the card.
+        return CheckoutSession(
+            charge_id=f"fake_setup_{request.reference}",
+            checkout_url=(
+                f"{settings.FRONTEND_BASE_URL}/fake-checkout/{request.reference}"
+            ),
+            raw={"fake": True, "card_token": request.card_token},
+        )
+
     def delete_saved_card(self, *, saved_card: SavedCardRef) -> bool:
         return True
 

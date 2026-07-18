@@ -73,6 +73,11 @@ class CheckoutRequest:
     #: Pay WITH this stored card (CIT via create_checkout, MIT via
     #: charge_saved).
     saved_card: SavedCardRef | None = None
+    #: One-time token minted by the gateway's OWN card component embedded in
+    #: our frontend (Tap Card SDK ``tok_...``) - the card was already
+    #: collected, so a hosted card-entry page is skipped and only the 3DS
+    #: challenge remains. Never a raw PAN and never a stored-card token.
+    card_token: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +138,8 @@ class PaymentGateway(Protocol):
     ) -> RefundResult: ...
 
     def charge_saved(self, *, request: CheckoutRequest) -> CheckoutSession: ...
+
+    def setup_card(self, *, request: CheckoutRequest) -> CheckoutSession: ...
 
     def delete_saved_card(self, *, saved_card: SavedCardRef) -> bool: ...
 

@@ -17,3 +17,14 @@ class SavedCardSummary(Schema):
     exp_month: int | None
     exp_year: int | None
     created_at: datetime
+
+
+class CardAddIn(Schema):
+    """Optional body for POST /cards/add.
+
+    ``card_token`` is a one-time token minted by the gateway's own card
+    component embedded in the frontend (Tap Card SDK ``tok_...``) - never a
+    raw PAN. Empty = the hosted page collects the card instead.
+    """
+
+    card_token: str = ""

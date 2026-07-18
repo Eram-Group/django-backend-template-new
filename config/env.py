@@ -113,6 +113,9 @@ class Env(BaseSettings):
     # server-side MIT charges (unset = MIT refused on paymob).
     PAYMOB_COF_INTEGRATION_ID: int | None = None
     PAYMOB_MOTO_INTEGRATION_ID: int | None = None
+    # Verification-type integration: add-card-without-payment (unset =
+    # card setup refused on paymob).
+    PAYMOB_VERIFICATION_INTEGRATION_ID: int | None = None
 
     @field_validator(
         "SECRET_KEY_FALLBACKS",

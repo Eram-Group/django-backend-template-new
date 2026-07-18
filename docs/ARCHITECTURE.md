@@ -239,6 +239,21 @@ Per-area notes:
   is local-first (`saved_card_delete`): the Tap-side detach is
   best-effort, and `Payment.saved_card` is SET_NULL so payment history
   survives. `manage.py charge_saved_card` exercises MIT end-to-end.
+  Add-card-without-payment (`POST /cards/add` → `payment_setup_card`):
+  a nominal `PaymentKind.CARD_VERIFICATION` row (1.00, wallet currency)
+  whose hosted session vaults the card without a purchase — Tap runs an
+  authorize with `save_card` that Tap auto-VOIDs (AUTHORIZED on `auth_`
+  ids counts as the paid outcome; the hold is never captured), Paymob
+  uses the Verification-type integration — the
+  `PAYMOB_VERIFICATION_INTEGRATION_ID` env id, refused loudly when unset.
+  `_on_paid` skips wallet credit and notifications for that kind; the
+  client contract is checkout's (redirect to `checkout_url`, card then
+  appears in `GET /cards`). Optional `card_token` (a one-time token from
+  the gateway's own card component embedded in the app - Tap Card SDK;
+  never a raw PAN) skips the hosted card-entry page: `checkout_url` is
+  then only the 3DS challenge, and a frictionless outcome settles
+  synchronously. Paymob's in-form equivalent is the Pixel component
+  rendering off the same intention - no backend difference.
 
 **Cross-app decisions on record** (independence contract `ignore_imports`
 in `pyproject.toml`): notifications → users (rows belong to a User;

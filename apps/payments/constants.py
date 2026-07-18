@@ -13,6 +13,9 @@ DEFAULT_CURRENCY = Currency.SAR
 
 class PaymentKind(models.TextChoices):
     WALLET_TOPUP = "wallet_topup", _("Wallet top-up")
+    #: Add-card-without-payment: a nominal hold/verification whose only
+    #: purpose is vaulting the card. Never credits the wallet on paid.
+    CARD_VERIFICATION = "card_verification", _("Card verification")
     OTHER = "other", _("Other")
 
 

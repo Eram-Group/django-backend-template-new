@@ -253,6 +253,82 @@ def payment_charge_saved(
     return payment  # stays PENDING - the webhook/reconcile sweep settles it
 
 
+#: Nominal amount for card-setup verifications: Tap authorizes-then-voids
+#: it, a Paymob Verification intention never moves it.
+_CARD_SETUP_AMOUNT = Decimal("1.00")
+
+
+def payment_setup_card(*, user: User, card_token: str = "") -> Payment:
+    """Add a card without paying: a nominal hosted verification whose only
+    purpose is vaulting the card (Tap: authorize + auto-void; Paymob:
+    Verification-integration intention).
+
+    Currency - and therefore gateway - comes from the user's wallet; the
+    client contract is checkout's: redirect to ``checkout_url``, the gateway
+    callback vaults the card (``save_card_requested`` gates persistence
+    exactly like an opt-in checkout), and the card shows up in GET /cards.
+
+    ``card_token`` (one-time token from the gateway's card component
+    embedded in our frontend) skips the hosted card-entry page: the
+    remaining ``checkout_url`` is just the 3DS challenge, and a
+    frictionless outcome may settle synchronously (empty ``checkout_url``,
+    terminal ``status``).
+    """
+    wallet = wallet_get(user=user)
+    gateway = gateway_for_currency(wallet.currency)
+    payment = Payment(
+        user=user,
+        amount=_CARD_SETUP_AMOUNT,
+        currency=wallet.currency,
+        kind=PaymentKind.CARD_VERIFICATION,
+        description=str(_("Card verification")),
+        gateway=gateway.name,
+        save_card_requested=True,
+    )
+    payment.full_clean()
+    payment.save()
+    request = CheckoutRequest(
+        reference=str(payment.idempotency_key),
+        amount=payment.amount,
+        currency=payment.currency,
+        description=payment.description,
+        customer_email=user.email,
+        customer_name=user.name,
+        customer_phone=str(user.phone) if user.phone else "",
+        webhook_url=(
+            f"{settings.BACKEND_BASE_URL}/api/v1/payments/webhooks/{gateway.name}"
+        ),
+        redirect_url=f"{settings.FRONTEND_BASE_URL}/payments/{payment.pk}/return",
+        save_card=True,
+        card_token=card_token,
+    )
+    try:
+        session = gateway.setup_card(request=request)
+    except (OutboundError, GatewayResponseError) as exc:
+        payment.status = PaymentStatus.FAILED
+        payment.save(update_fields=["status", "updated_at"])
+        raise PaymentGatewayUnavailableError(
+            str(_("The payment provider is unavailable. Try again shortly."))
+        ) from exc
+    payment.gateway_charge_id = session.charge_id
+    payment.checkout_url = session.checkout_url
+    payment.gateway_response = session.raw
+    payment.full_clean()
+    payment.save(
+        update_fields=[
+            "gateway_charge_id",
+            "checkout_url",
+            "gateway_response",
+            "updated_at",
+        ]
+    )
+    if not session.checkout_url and session.status:
+        return payment_apply_gateway_event(
+            gateway_name=gateway.name, event=_session_event(payment, session)
+        )
+    return payment
+
+
 def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Payment:
     """Apply one gateway event (webhook or verify) - idempotent on replays."""
     with transaction.atomic():
@@ -303,6 +379,10 @@ def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Pa
 
 
 def _on_paid(payment: Payment) -> None:
+    if payment.kind == PaymentKind.CARD_VERIFICATION:
+        # Nominal hold/verification - no money to credit, and the card
+        # appearing in the user's list is the success signal.
+        return
     if payment.kind == PaymentKind.WALLET_TOPUP:
         wallet = _wallet_for(user=payment.user, currency=payment.currency)
         entry = wallet_apply(
