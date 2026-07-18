@@ -42,6 +42,15 @@ repos:
     hooks:
       - id: gitleaks
 
+  # No `files:` filter on purpose - the hook's own `types: [shell]` matches by
+  # extension AND shebang, anywhere in the tree. The previous `^scripts/`
+  # restriction stopped matching when that folder went, and would have left
+  # any future script silently unlinted.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
+    hooks:
+      - id: shellcheck
+
   - repo: https://github.com/astral-sh/uv-pre-commit
     rev: 0.11.29
     hooks:
