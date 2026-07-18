@@ -1,0 +1,93 @@
+# Dependency updates, native to GitHub - no external service or app install.
+#
+# Replaces renovate.json (2026-07-18): Dependabot's uv ecosystem now updates
+# uv.lock directly, and the pre-commit ecosystem landed, so every manager the
+# Renovate config enabled is covered here.
+#
+# One deliberate difference: Dependabot updates uv.lock but NOT pyproject.toml.
+# That is correct for this repo - the manifest pins `>=` floors, which need not
+# move when a newer version ships, and `uv lock --check` stays green. Raising a
+# floor (e.g. to adopt a new API) remains a manual, intentional edit.
+#
+# `cooldown` waits N days after a release before proposing it, so a compromised
+# or immediately-yanked version is unlikely to reach a PR. Security updates for
+# a known CVE are never delayed by it.
+
+version: 2
+
+updates:
+  # Python runtime + dev groups, resolved through uv.lock.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Asia/Riyadh"
+    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 3
+      semver-major-days: 14
+    groups:
+      python-non-major:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      # Stay on 6.0.x until the 6.1/6.2-LTS hop is planned.
+      - dependency-name: "django"
+        versions: [">=6.1"]
+
+  # Workflow action versions. Majors land as individual PRs on purpose: the
+  # G10 sweep showed a bad pin breaks every job at once (setup-uv@v8 did not
+  # resolve), so they deserve to be reviewed one at a time.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Asia/Riyadh"
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Base image in the Dockerfile.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Asia/Riyadh"
+    groups:
+      docker-images:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Service images in compose.yaml (postgres, mailpit).
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Asia/Riyadh"
+    groups:
+      compose-images:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # Hook revisions in .pre-commit-config.yaml - CI calls pre-commit the single
+  # lint source, so a stale ruff here silently diverges from the local gate.
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Asia/Riyadh"
+    groups:
+      pre-commit-hooks:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
