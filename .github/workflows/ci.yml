@@ -37,7 +37,7 @@ jobs:
       # Exact pin: astral-sh publishes no floating `v8` major tag (v7 is the
       # last one), so `@v8` is unresolvable. Dependabot's github-actions
       # ecosystem keeps this current.
-      - uses: astral-sh/setup-uv@v8.3.2
+      - uses: astral-sh/setup-uv@v9.0.0
         with:
           enable-cache: true
 
