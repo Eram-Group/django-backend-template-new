@@ -455,6 +455,8 @@ SECURE_CSP = {
 # --- Cross-origin (browser SPA clients) ----------------------------------------
 CORS_ALLOWED_ORIGINS = env.FRONTEND_ALLOWED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 100_000
+
 # Only the API surfaces are cross-origin; the admin (and anything else) must
 # never carry credentialed CORS headers for the frontend origins.
 CORS_URLS_REGEX = r"^/(api|_allauth)/"
