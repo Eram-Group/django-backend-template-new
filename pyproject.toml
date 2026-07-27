@@ -31,7 +31,6 @@ dependencies = [
   "django-structlog>=10.1.0",
   "django-tasks-db>=0.12.0",
   "django-unfold>=0.101.0",
-  "firebase-admin>=7.5",
   "gunicorn>=26.0",
   "httpx>=0.28",
   "openpyxl>=3.1.5",
@@ -127,7 +126,7 @@ overrides = [
   # Django migrations should not produce any errors:
   { module = "*.migrations.*", ignore_errors = true },
   # Third-party packages without type stubs / py.typed:
-  { module = [ "allauth.*", "health_check.*", "django_ratelimit.*", "unfold.*", "import_export.*", "phonenumber_field.*", "firebase_admin.*" ], ignore_missing_imports = true },
+  { module = [ "allauth.*", "health_check.*", "django_ratelimit.*", "unfold.*", "import_export.*", "phonenumber_field.*" ], ignore_missing_imports = true },
   # The framework wraps unfold/import-export (untyped) once; per-entity
   # admins subclass OUR typed classes and need no exemption:
   { module = "apps.common.admin.*", disallow_subclassing_any = false },
@@ -165,10 +164,6 @@ filterwarnings = [
   # Upstream django-guid still calls asyncio.iscoroutinefunction (removed in
   # py3.16); drop this ignore once a fixed release ships.
   "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:django_guid",
-  # firebase-admin 7.x nudges Message.token toward Message.fid, but client
-  # apps register FCM registration TOKENS (FirebaseMessaging.getToken()) -
-  # fid targeting is a different identifier. Revisit when mobile SDKs move.
-  "ignore:Message.token is deprecated:DeprecationWarning",
 ]
 
 [tool.coverage]
@@ -195,7 +190,7 @@ layers = [
   "selectors",
   "models",
 ]
-containers = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
+containers = [ "apps.users", "apps.payments", "apps.example" ] # append each new app
 ignore_imports = [
   # Recorded exception (2026-07-18): the refund executor task trampolines
   # into its own app's services (function-level import) - the provider call
@@ -209,17 +204,11 @@ ignore_imports = [
 # re-exports only after an explicit decision - never silently.
 name = "Domain apps independent"
 type = "independence"
-modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
+modules = [ "apps.users", "apps.payments", "apps.example" ] # append each new app
 ignore_imports = [
-  # Explicit decision (2026-07-12): notifications addresses users - Device/
-  # Notification rows belong to a User, delivery reads user.phone/.language.
-  # One-way only; users never imports notifications.
-  "apps.notifications.** -> apps.users.**",
   # Explicit decision (2026-07-12): payments belongs to a User (payer,
-  # wallet owner) and announces outcomes through notifications' service
-  # re-exports.
+  # wallet owner). One-way only; users never imports payments' models.
   "apps.payments.** -> apps.users.**",
-  "apps.payments.** -> apps.notifications.**",
   # Explicit decision (2026-07-18): signup provisions the wallet -
   # user_post_signup calls payments' wallet_create service re-export, and
   # UserFactory/tests replicate and assert the invariant. Service + test
@@ -238,14 +227,12 @@ ignore_imports = [
 name = "Common imports no domain app"
 type = "forbidden"
 source_modules = [ "apps.common" ]
-forbidden_modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
+forbidden_modules = [ "apps.users", "apps.payments", "apps.example" ] # append each new app
 ignore_imports = [
   "apps.common.tests.** -> apps.users.**",
-  "apps.common.tests.** -> apps.notifications.**",
   "apps.common.tests.** -> apps.payments.**",
   "apps.common.tests.** -> apps.example.**",
   "apps.common.management.commands.seed_db -> apps.users.**",
-  "apps.common.management.commands.seed_db -> apps.notifications.**",
   "apps.common.management.commands.seed_db -> apps.payments.**",
   "apps.common.management.commands.seed_db -> apps.example.**",
   # createsu bootstraps the concrete User by design (portable ECS one-off).

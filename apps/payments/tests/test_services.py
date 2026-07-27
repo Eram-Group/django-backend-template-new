@@ -12,8 +12,6 @@ from django.utils import timezone
 from pydantic import SecretStr
 
 from apps.common.http import OutboundTransportError
-from apps.notifications.constants import NotificationKind
-from apps.notifications.models import Notification
 from apps.payments import selectors
 from apps.payments import services
 from apps.payments.constants import Currency
@@ -176,15 +174,9 @@ def test_paid_topup_credits_wallet_and_notifies_exactly_once() -> None:
     wallet = payment.user.wallet
     assert wallet.balance == payment.amount
     assert wallet.transactions.count() == 1  # the replay did NOT double credit
-    assert (
-        Notification.objects.filter(
-            recipient=payment.user, kind=NotificationKind.WALLET_CREDITED
-        ).count()
-        == 1
-    )
 
 
-def test_paid_other_kind_notifies_and_leaves_wallet_untouched() -> None:
+def test_paid_other_kind_leaves_wallet_untouched() -> None:
     payment = PaymentFactory.create(kind=PaymentKind.OTHER)
 
     services.payment_apply_gateway_event(
@@ -194,9 +186,6 @@ def test_paid_other_kind_notifies_and_leaves_wallet_untouched() -> None:
     wallet = payment.user.wallet  # provisioned at signup, never credited
     assert wallet.balance == Decimal(0)
     assert not wallet.transactions.exists()
-    assert Notification.objects.filter(
-        recipient=payment.user, kind=NotificationKind.PAYMENT_PAID
-    ).exists()
 
 
 def test_failed_event_marks_failed() -> None:

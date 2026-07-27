@@ -83,8 +83,8 @@ def test_blank_optional_secret_normalises_to_none(blank: str) -> None:
     not-configured guard - deferring the failure to send time, or letting
     paymob sign a webhook with a blank key instead of refusing it.
     """
-    env = Env(_env_file=str(ENV_EXAMPLE), FIREBASE_CREDENTIALS_B64=blank)
-    assert env.FIREBASE_CREDENTIALS_B64 is None
+    env = Env(_env_file=str(ENV_EXAMPLE), TAP_SECRET_KEY=blank)
+    assert env.TAP_SECRET_KEY is None
 
     env = Env(_env_file=str(ENV_EXAMPLE), PAYMOB_HMAC_SECRET=blank)
     assert env.PAYMOB_HMAC_SECRET is None

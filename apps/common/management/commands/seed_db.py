@@ -8,8 +8,8 @@
 Scale is logarithmic: rows = 10 * 100_000**scale (0 -> 10, 0.5 -> ~3.2k,
 0.75 -> ~56k, 1.0 -> 1M) - that is the USER count; the seeder populates the
 whole domain graph per user (email address, wallet, payments with a
-realistic status mix, a replayable wallet ledger, devices, notifications),
-so total rows are ~6-8x. Seeded rows carry the @seed.example.com email
+realistic status mix, a replayable wallet ledger, saved cards), so total
+rows are ~5-6x. Seeded rows carry the @seed.example.com email
 domain so --wipe can remove exactly them.
 
 Seeders build instances through the factory registry WITHOUT saving
@@ -111,8 +111,7 @@ class Command(BaseCommand):
             # PROTECT chain dictates the order: ledger rows first (they
             # protect wallets AND payments), then payments, then saved cards
             # (after payments so SET_NULL never rewrites doomed rows), then
-            # wallets; deleting users last cascades the rest (EmailAddress,
-            # Device, Notification).
+            # wallets; deleting users last cascades the rest (EmailAddress).
             wiped = 0
             for qs in (
                 WalletTransaction.objects.filter(wallet__user__in=seeded_users),
@@ -205,21 +204,15 @@ class Command(BaseCommand):
     def _seed_domain_graph(
         self, users: list[Any], rng: random.Random
     ) -> dict[str, int]:
-        """Payments, a replayable wallet ledger, devices, and notifications
-        for one chunk of freshly created users - all bulk, all invariants:
-        wallet.balance equals the last ledger balance_after (and never goes
-        negative), notifications mirror what _on_paid would have sent, and
-        contexts carry exactly the catalog's context_keys.
+        """Payments, a replayable wallet ledger, and saved cards for one chunk
+        of freshly created users - all bulk, all invariants: wallet.balance
+        equals the last ledger balance_after (and never goes negative).
         """
         import uuid
         from decimal import Decimal
 
         from django.utils import timezone
 
-        from apps.notifications.constants import DevicePlatform
-        from apps.notifications.constants import NotificationKind
-        from apps.notifications.models import Device
-        from apps.notifications.models import Notification
         from apps.payments.constants import DEFAULT_CURRENCY
         from apps.payments.constants import GatewayName
         from apps.payments.constants import PaymentKind
@@ -234,14 +227,11 @@ class Command(BaseCommand):
         currency = str(DEFAULT_CURRENCY)
         # (payment-or-None, kind, signed amount, balance_after)
         type TxSpec = tuple[Any, WalletTransactionKind, Decimal, Decimal]
-        # (kind, catalog-complete context)
-        type NotifSpec = tuple[NotificationKind, dict[str, str]]
         payments: list[Any] = []
-        plans: list[tuple[Any, Decimal, list[TxSpec], list[NotifSpec]]] = []
+        plans: list[tuple[Any, Decimal, list[TxSpec]]] = []
         for user in users:
             balance = Decimal(0)
             tx_specs: list[TxSpec] = []
-            notif_specs: list[NotifSpec] = []
             for _ in range(rng.randint(0, 4)):
                 amount = Decimal(rng.randint(10, 500))
                 is_topup = rng.random() < 0.7
@@ -272,24 +262,6 @@ class Command(BaseCommand):
                     tx_specs.append(
                         (payment, WalletTransactionKind.TOPUP, amount, balance)
                     )
-                    # Mirrors _on_paid's WALLET_CREDITED context exactly.
-                    notif_specs.append(
-                        (
-                            NotificationKind.WALLET_CREDITED,
-                            {
-                                "amount": str(amount),
-                                "currency": currency,
-                                "balance": str(balance),
-                            },
-                        )
-                    )
-                elif settled:
-                    notif_specs.append(
-                        (
-                            NotificationKind.PAYMENT_PAID,
-                            {"amount": str(amount), "currency": currency},
-                        )
-                    )
                 if status == PaymentStatus.REFUNDED and is_topup:
                     balance -= amount
                     tx_specs.append(
@@ -299,21 +271,14 @@ class Command(BaseCommand):
                 spend = Decimal(rng.randint(1, int(balance)))
                 balance -= spend
                 tx_specs.append((None, WalletTransactionKind.PAYMENT, -spend, balance))
-            if rng.random() < 0.1:
-                notif_specs.append(
-                    (
-                        NotificationKind.ANNOUNCEMENT,
-                        {"message": f"Seed announcement {uuid.uuid4().hex[:6]}"},
-                    )
-                )
-            plans.append((user, balance, tx_specs, notif_specs))
+            plans.append((user, balance, tx_specs))
 
         Payment.objects.bulk_create(payments, batch_size=BATCH)
         # Signup invariant (UserFactory.wallet RelatedFactory): one wallet per
         # user - carrying the ledger's final balance.
         wallets = [
             Wallet(user=user, currency=currency, balance=balance)
-            for user, balance, _, _ in plans
+            for user, balance, _ in plans
         ]
         Wallet.objects.bulk_create(wallets, batch_size=BATCH)
         transactions = [
@@ -324,21 +289,10 @@ class Command(BaseCommand):
                 balance_after=after,
                 payment=payment,
             )
-            for wallet, (_, _, tx_specs, _) in zip(wallets, plans, strict=True)
+            for wallet, (_, _, tx_specs) in zip(wallets, plans, strict=True)
             for payment, kind, amount, after in tx_specs
         ]
         WalletTransaction.objects.bulk_create(transactions, batch_size=BATCH)
-        devices = fan_out(
-            users,
-            per_parent=(0, 2),
-            build_child=lambda user: Device(
-                user=user,
-                registration_id=f"seed-tok-{uuid.uuid4().hex}",
-                platform=rng.choice(DevicePlatform.values),
-            ),
-            rng=rng,
-        )
-        Device.objects.bulk_create(devices, batch_size=BATCH)
         # SavedCardFactory has no post_generation hooks - plain field parity
         # is the whole contract (unique (gateway, token) via uuid).
         saved_cards = fan_out(
@@ -358,36 +312,20 @@ class Command(BaseCommand):
             rng=rng,
         )
         SavedCard.objects.bulk_create(saved_cards, batch_size=BATCH)
-        notifications = [
-            Notification(
-                recipient=user,
-                kind=kind,
-                context=context,
-                read_at=now if rng.random() < 0.6 else None,
-                push_sent_at=now if rng.random() < 0.85 else None,
-            )
-            for user, _, _, notif_specs in plans
-            for kind, context in notif_specs
-        ]
-        Notification.objects.bulk_create(notifications, batch_size=BATCH)
         return {
             "payments": len(payments),
             "wallets": len(wallets),
             "wallet transactions": len(transactions),
-            "devices": len(devices),
             "saved cards": len(saved_cards),
-            "notifications": len(notifications),
         }
 
     def _spread_child_timestamps(self) -> None:
-        """Give payments/devices/notifications past-dated created_at too.
+        """Give payments and saved cards past-dated created_at too.
 
         The ledger and wallets keep insertion time on purpose: the per-wallet
         balance_after chain must stay chronologically replayable, and a
         random spread would scramble it.
         """
-        from apps.notifications.models import Device
-        from apps.notifications.models import Notification
         from apps.payments.models import Payment
         from apps.payments.models import SavedCard
 
@@ -397,13 +335,6 @@ class Command(BaseCommand):
         )
         seeded_payments.update(created_at=spread)
         seeded_payments.update(updated_at=F("created_at"))
-        for model, user_field in (
-            (Device, "user"),
-            (Notification, "recipient"),
-            (SavedCard, "user"),
-        ):
-            rows = model.objects.filter(
-                **{f"{user_field}__email__endswith": f"@{SEED_DOMAIN}"}
-            )
-            rows.update(created_at=spread)
-            rows.update(updated_at=F("created_at"))
+        seeded_cards = SavedCard.objects.filter(user__email__endswith=f"@{SEED_DOMAIN}")
+        seeded_cards.update(created_at=spread)
+        seeded_cards.update(updated_at=F("created_at"))

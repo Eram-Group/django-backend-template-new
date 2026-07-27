@@ -8,7 +8,6 @@ import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
 
-from apps.notifications.models import Notification
 from apps.payments.models import Payment
 from apps.payments.models import Wallet
 from apps.payments.models import WalletTransaction
@@ -45,7 +44,6 @@ def test_seeds_the_whole_domain_graph_with_a_consistent_ledger() -> None:
     seeded = User.objects.filter(email__endswith=SEED_SUFFIX)
     assert Wallet.objects.filter(user__in=seeded).count() == seeded.count()
     assert Payment.objects.filter(user__in=seeded).exists()
-    assert Notification.objects.filter(recipient__in=seeded).exists()
 
     # Money invariant: every wallet's balance equals its last ledger
     # balance_after (or zero with an empty ledger), never negative.

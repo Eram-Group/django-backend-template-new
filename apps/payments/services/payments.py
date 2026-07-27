@@ -20,8 +20,6 @@ from django.utils.translation import gettext_lazy as _
 from apps.common.http import OutboundError
 from apps.common.http import OutboundStatusError
 from apps.common.http import OutboundTransportError
-from apps.notifications.constants import NotificationKind
-from apps.notifications.services import notification_send
 from apps.payments.constants import TERMINAL_STATUSES
 from apps.payments.constants import Currency
 from apps.payments.constants import PaymentKind
@@ -301,28 +299,14 @@ def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Pa
 
 
 def _on_paid(payment: Payment) -> None:
+    """Post-transition effects of a payment reaching PAID."""
     if payment.kind == PaymentKind.WALLET_TOPUP:
         wallet = _wallet_for(user=payment.user, currency=payment.currency)
-        entry = wallet_apply(
+        wallet_apply(
             wallet_id=wallet.pk,
             amount=payment.amount,
             kind=WalletTransactionKind.TOPUP,
             payment=payment,
-        )
-        notification_send(
-            recipient=payment.user,
-            kind=NotificationKind.WALLET_CREDITED,
-            context={
-                "amount": str(payment.amount),
-                "currency": payment.currency,
-                "balance": str(entry.balance_after),
-            },
-        )
-    else:
-        notification_send(
-            recipient=payment.user,
-            kind=NotificationKind.PAYMENT_PAID,
-            context={"amount": str(payment.amount), "currency": payment.currency},
         )
 
 

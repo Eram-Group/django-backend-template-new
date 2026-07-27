@@ -74,7 +74,7 @@ class User(BaseModel, AbstractUser):
     name = models.CharField(_("name"), max_length=255, blank=True)
     # Optional and NOT unique - email is the login identity. Stored E164 with
     # no default region: clients submit the country code (+966... / +20...).
-    # SMS delivery skips phone-less users; payments send it when present.
+    # Optional; payments pass it to the gateway as customer_phone when present.
     phone = PhoneNumberField(_("phone number"), blank=True)
     language = models.CharField(
         _("language"),

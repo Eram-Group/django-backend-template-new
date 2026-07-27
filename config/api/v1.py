@@ -21,5 +21,4 @@ register_exception_handlers(api)
 
 # Per-app routers - one line per app.
 api.add_router("/users", "apps.users.apis.router.router")
-api.add_router("/notifications", "apps.notifications.apis.router.router")
 api.add_router("/payments", "apps.payments.apis.router.router")

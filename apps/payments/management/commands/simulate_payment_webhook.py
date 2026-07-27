@@ -5,8 +5,8 @@
     manage.py simulate_payment_webhook <payment-pk> --save-card  # paid + card
 
 Drives the SAME transition service the real webhook endpoint calls
-(payment_apply_gateway_event), so wallet credit + notification fan-out run
-exactly as in production - Mailpit's role, for payments. Local-only.
+(payment_apply_gateway_event), so the wallet credit runs exactly as in
+production - Mailpit's role, for payments. Local-only.
 """
 
 from typing import Any

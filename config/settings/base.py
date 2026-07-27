@@ -58,7 +58,6 @@ INSTALLED_APPS = [
     # Local
     "apps.common",
     "apps.users",
-    "apps.notifications",
     "apps.payments",
 ]
 
@@ -312,29 +311,6 @@ UNFOLD = {
                 ],
             },
             {
-                "title": _("Notifications"),
-                "items": [
-                    {
-                        "title": _("Notifications"),
-                        "icon": "notifications",
-                        "link": reverse_lazy(
-                            "admin:notifications_notification_changelist"
-                        ),
-                        "permission": lambda request: request.user.has_perm(
-                            "notifications.view_notification"
-                        ),
-                    },
-                    {
-                        "title": _("Devices"),
-                        "icon": "smartphone",
-                        "link": reverse_lazy("admin:notifications_device_changelist"),
-                        "permission": lambda request: request.user.has_perm(
-                            "notifications.view_device"
-                        ),
-                    },
-                ],
-            },
-            {
                 "title": _("Payments"),
                 "items": [
                     {
@@ -410,19 +386,6 @@ EMAIL_TIMEOUT = 5
 DEFAULT_FROM_EMAIL = env.DEFAULT_FROM_EMAIL
 EMAIL_HOST = env.EMAIL_HOST
 EMAIL_PORT = env.EMAIL_PORT
-
-# --- Outbound clients: SMS + push (the EMAIL_BACKEND pattern) -----------------
-# Console backends log locally; production.py swaps in the real transports
-# (RoutingSmsBackend / FcmPushBackend) when deployed; test.py uses locmem.
-SMS_BACKEND = "apps.notifications.clients.sms.backends.ConsoleSmsBackend"
-PUSH_BACKEND = "apps.notifications.clients.push.backends.ConsolePushBackend"
-OURSMS_API_KEY = env.OURSMS_API_KEY
-OURSMS_SENDER = env.OURSMS_SENDER
-SMSMISR_USERNAME = env.SMSMISR_USERNAME
-SMSMISR_PASSWORD = env.SMSMISR_PASSWORD
-SMSMISR_SENDER = env.SMSMISR_SENDER
-SMSMISR_LIVE = False  # "1" live vs "2" test API mode; production.py decides
-FIREBASE_CREDENTIALS_B64 = env.FIREBASE_CREDENTIALS_B64
 
 # --- Payments: currency -> gateway class. One mapping for every environment;
 # the .env keys decide test vs live mode (locally: provider TEST keys + a

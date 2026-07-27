@@ -24,9 +24,9 @@ logger = structlog.get_logger(__name__)
 def saved_card_store(*, user: User, gateway: str, data: SavedCardData) -> SavedCard:
     """Idempotent upsert on (gateway, token).
 
-    A token resurfacing under a new account is REASSIGNED, mirroring
-    device_register: completing 3DS on the hosted page proves possession,
-    and one provider token maps to exactly one row.
+    A token resurfacing under a new account is REASSIGNED: completing 3DS on
+    the hosted page proves possession, and one provider token maps to exactly
+    one row.
     """
     card, _created = SavedCard.objects.update_or_create(
         gateway=gateway,
