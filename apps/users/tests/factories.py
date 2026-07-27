@@ -42,7 +42,7 @@ class UserFactory(DjangoModelFactory[User]):
     # seed_db's --seed calls factory.random.reseed_random for determinism.
     language = FuzzyChoice(LANGUAGE_WEIGHTS)
     name = LazyAttribute(lambda user: fake.full_name(user.language))
-    password = "!"  # noqa: S105 - unusable marker: regular users are passwordless
+    password = "!"
 
     class Params:
         staff = Trait(is_staff=True)

@@ -1,0 +1,94 @@
+"""Notification factories - factory_boy structure, mimesis values."""
+
+import uuid
+
+from factory.declarations import LazyAttribute
+from factory.declarations import Sequence
+from factory.declarations import SubFactory
+from factory.django import DjangoModelFactory
+
+from apps.common.tests import fake
+from apps.notifications.constants import Channel
+from apps.notifications.constants import DevicePlatform
+from apps.notifications.constants import NotificationKind
+from apps.notifications.models import Broadcast
+from apps.notifications.models import Device
+from apps.notifications.models import Notification
+from apps.notifications.models import NotificationChannelOverride
+from apps.notifications.models import NotificationDelivery
+from apps.users.tests.factories import UserFactory
+
+# Sequences restart at 0 per process, but --reuse-db keeps rows committed by
+# session fixtures in earlier runs - the tag keeps registration_id unique.
+_RUN_TAG = uuid.uuid4().hex[:6]
+
+
+def _context_for(kind: str, *, name: str) -> dict[str, str]:
+    """A context satisfying the catalog's context_keys for the kind."""
+    contexts: dict[str, dict[str, str]] = {
+        NotificationKind.WELCOME: {"name": name},
+        NotificationKind.ANNOUNCEMENT: {"message": "Scheduled maintenance tonight."},
+        NotificationKind.PAYMENT_PAID: {"amount": "100.00", "currency": "SAR"},
+        NotificationKind.WALLET_CREDITED: {
+            "amount": "100.00",
+            "currency": "SAR",
+            "balance": "250.00",
+        },
+    }
+    return contexts[NotificationKind(kind)]
+
+
+class DeviceFactory(DjangoModelFactory[Device]):
+    class Meta:
+        model = Device
+        skip_postgeneration_save = True
+
+    user = SubFactory(UserFactory)
+    registration_id = Sequence(lambda n: f"fcm-token-{_RUN_TAG}-{n:08d}")
+    platform = DevicePlatform.ANDROID
+
+
+class NotificationFactory(DjangoModelFactory[Notification]):
+    class Meta:
+        model = Notification
+        skip_postgeneration_save = True
+
+    recipient = SubFactory(UserFactory)
+    kind = NotificationKind.WELCOME
+    context = LazyAttribute(
+        lambda o: _context_for(o.kind, name=fake.full_name(o.recipient.language))
+    )
+
+
+class BroadcastFactory(DjangoModelFactory[Broadcast]):
+    class Meta:
+        model = Broadcast
+        skip_postgeneration_save = True
+
+    kind = NotificationKind.ANNOUNCEMENT
+    context = {"message": "Scheduled maintenance tonight."}
+    created_by = SubFactory(UserFactory)
+
+
+class NotificationDeliveryFactory(DjangoModelFactory[NotificationDelivery]):
+    class Meta:
+        model = NotificationDelivery
+        skip_postgeneration_save = True
+
+    notification = SubFactory(NotificationFactory)
+    # Keep the denormalized copy consistent with the parent notification.
+    broadcast = LazyAttribute(lambda o: o.notification.broadcast)
+    channel = Channel.PUSH
+
+
+class NotificationChannelOverrideFactory(
+    DjangoModelFactory[NotificationChannelOverride]
+):
+    class Meta:
+        model = NotificationChannelOverride
+        django_get_or_create = ["kind", "channel"]
+        skip_postgeneration_save = True
+
+    kind = NotificationKind.ANNOUNCEMENT
+    channel = Channel.SMS  # supported-but-not-default: a realistic operator pin
+    enabled = True

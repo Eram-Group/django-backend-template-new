@@ -74,6 +74,10 @@ shell *args:
 worker *args:
     TASKS_IMMEDIATE=false uv run manage.py db_worker {{ args }}
 
+# Drain the broadcast fan-out queue (scale by running several of these).
+worker-bulk *args:
+    TASKS_IMMEDIATE=false uv run manage.py db_worker --queue-name bulk {{ args }}
+
 # Idempotent superuser from DJANGO_SUPERUSER_* (.env locally, Secrets in AWS).
 superuser:
     uv run manage.py createsu

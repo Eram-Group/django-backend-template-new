@@ -12,6 +12,8 @@ from django.utils import timezone
 from pydantic import SecretStr
 
 from apps.common.http import OutboundTransportError
+from apps.notifications.constants import NotificationKind
+from apps.notifications.models import Notification
 from apps.payments import selectors
 from apps.payments import services
 from apps.payments.constants import Currency
@@ -174,6 +176,14 @@ def test_paid_topup_credits_wallet_and_notifies_exactly_once() -> None:
     wallet = payment.user.wallet
     assert wallet.balance == payment.amount
     assert wallet.transactions.count() == 1  # the replay did NOT double credit
+    notification = Notification.objects.get(
+        recipient=payment.user, kind=NotificationKind.WALLET_CREDITED
+    )  # get(): the replay did NOT double notify
+    assert notification.context == {
+        "amount": str(payment.amount),
+        "currency": payment.currency,
+        "balance": str(wallet.balance),  # wallet_apply's balance_after
+    }
 
 
 def test_paid_other_kind_leaves_wallet_untouched() -> None:
@@ -186,6 +196,13 @@ def test_paid_other_kind_leaves_wallet_untouched() -> None:
     wallet = payment.user.wallet  # provisioned at signup, never credited
     assert wallet.balance == Decimal(0)
     assert not wallet.transactions.exists()
+    notification = Notification.objects.get(
+        recipient=payment.user, kind=NotificationKind.PAYMENT_PAID
+    )
+    assert notification.context == {
+        "amount": str(payment.amount),
+        "currency": payment.currency,
+    }
 
 
 def test_failed_event_marks_failed() -> None:
@@ -603,7 +620,7 @@ def test_paid_event_with_card_payload_stores_saved_card() -> None:
     # admin-gate session fixture around (reconcile-test precedent).
     card = SavedCard.objects.get(user=payment.user)  # one despite the replay
     assert card.user == payment.user
-    assert card.token == "fake_card_A"  # noqa: S105 - test fixture value
+    assert card.token == "fake_card_A"
     assert card.gateway_agreement_id == "fake_agr_A"
     payment.refresh_from_db()
     assert payment.saved_card == card
@@ -748,7 +765,7 @@ def test_saved_card_store_is_idempotent_and_reassigns_owner() -> None:
         user=second_owner, gateway="fake", data=_card_data(last4="2222")
     )
 
-    cards = SavedCard.objects.filter(gateway="fake", token="fake_card_A")  # noqa: S106
+    cards = SavedCard.objects.filter(gateway="fake", token="fake_card_A")
     assert cards.count() == 1  # (gateway, token) upsert, no dupes
     assert card.user == second_owner  # 3DS on the token proves possession
     assert card.last4 == "2222"  # metadata refresh rides along
@@ -786,7 +803,7 @@ def test_saved_card_store_from_event_unknown_email_returns_none() -> None:
     stored = services.saved_card_store_from_event(gateway_name="fake", event=event)
 
     assert stored is None
-    assert not SavedCard.objects.filter(token="fake_card_A").exists()  # noqa: S106
+    assert not SavedCard.objects.filter(token="fake_card_A").exists()
 
 
 def test_saved_card_delete_removes_row() -> None:
@@ -847,4 +864,4 @@ def test_verify_persists_saved_card_from_charge_status(
     payment.refresh_from_db()
     assert payment.status == PaymentStatus.PAID
     assert payment.saved_card is not None
-    assert payment.saved_card.token == "fake_card_A"  # noqa: S105 - fixture value
+    assert payment.saved_card.token == "fake_card_A"

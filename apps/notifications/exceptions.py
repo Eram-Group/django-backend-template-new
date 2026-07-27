@@ -1,0 +1,21 @@
+from apps.common.exceptions import ApplicationError
+
+
+class NotificationError(ApplicationError):
+    """Base error for the notifications domain."""
+
+
+class NotificationNotFoundError(NotificationError):
+    status_code = 404
+
+
+class BroadcastStateError(NotificationError):
+    """The broadcast is not in a status that allows the requested move."""
+
+
+class BroadcastTooLargeForInlineError(NotificationError):
+    """Refuse to fan out a big audience on the inline (immediate) backend."""
+
+
+class NotificationWebhookRejectedError(NotificationError):
+    """Status webhook failed verification (bad/absent signature or config)."""

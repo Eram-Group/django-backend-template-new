@@ -12,7 +12,7 @@ docs/ARCHITECTURE.md explains the conventions in depth.
   `ignore_imports`. Importing another app's **model** is allowed only for
   passive ownership (FK target, read-only — e.g. `User` from payments).
   Anything with behavior or invariants goes through the owning app's
-  **service** (`notification_send`, `wallet_apply`) — never mutate another
+  **service** (e.g. `wallet_apply`) — never mutate another
   app's model directly. FKs use string refs (`"app.Model"`), no import.
 - **No signals** in first-party code — services call services. Third-party
   boundaries use the library's hooks (allauth adapter `save_user`, never

@@ -21,9 +21,9 @@ one envelope (below).
 
 ## App layout and layering
 
-Every domain app (`apps/users` is the reference, `apps/notifications` and
-`apps/payments` the built-out examples, `apps/example` the copy-me template)
-is a set of packages, one module per entity inside each:
+Every domain app (`apps/users` is the reference, `apps/payments` the
+built-out example, `apps/example` the copy-me template) is a set of
+packages, one module per entity inside each:
 
 ```
 apps/<app>/
@@ -66,7 +66,7 @@ apis | admin | management  →  services  →  tasks  →  selectors  →  model
 - `created_at` (indexed) / `updated_at`.
 
 `User` is email-login only: no username, single `name` field, `language`
-(ar/en) that drives every user-facing email/notification.
+(ar/en) that drives every user-facing email.
 
 ## Error contract
 
@@ -150,7 +150,7 @@ Conventions (see `apps/users/tasks/emails.py`):
   `prune_db_task_results --min-age-days 14`, plus app commands modeled on
   `sample_scheduled_job` (thin wrappers over services, safe to re-run).
 
-## Outbound clients (HTTP kernel, SMS, push, payments)
+## Outbound clients (HTTP kernel, payments)
 
 Every call to an external service goes through **one kernel**,
 `apps/common/http.py::request_json` — explicit `httpx.Timeout(10, connect=5)`,
@@ -161,46 +161,25 @@ truncated). Retry policies are chosen per call semantics:
 
 | Policy | Retries | Use for |
 |---|---|---|
-| `transient` | transport errors + 429/5xx | idempotent-enough calls: SMS sends, status GETs (duplicate beats dropped) |
+| `transient` | transport errors + 429/5xx | idempotent-enough calls: status GETs (duplicate beats dropped) |
 | `connect-only` | only errors raised before the request hit the wire | non-idempotent POSTs: payment charge/refund creation |
 | `none` | nothing | everything else |
 
 A 2xx with an error body is the **caller's** job: each provider module owns
-an allowlist success predicate (OurSMS accepted/rejected counts, SMSMisr
-`code == "1901"`) — unknown shapes fail loudly, never pass silently.
+an allowlist success predicate — unknown shapes fail loudly, never pass
+silently.
 
 **Transport selection = the `EMAIL_BACKEND` pattern** (settings string,
-resolved per call): `SMS_BACKEND` / `PUSH_BACKEND` (base + local = console
-backends with structlog lines; `production.py` swaps in the real transports
-only when `_DEPLOYED`) and `PAYMENT_GATEWAYS` (currency → gateway class —
-the same Tap SAR / Paymob EGP mapping in every environment; the `.env` keys
-pick test vs live mode, and local webhooks arrive through a tunnel such as
-ngrok with `BACKEND_BASE_URL` pointing at it). `test.py` = locmem outboxes
-(`apps/notifications/clients/*/backends.py::outbox` — the `mail.outbox`
-analogue) plus `FakeGateway` for every currency, so tests can never touch
-provider HTTP even with real creds in `.env`. Provider clients live in leaf packages
-(`apps/notifications/clients/`, `apps/payments/gateways/`) — unconstrained
-by the layer contract, called from services/tasks.
+resolved per call): `PAYMENT_GATEWAYS` (currency → gateway class — the same
+Tap SAR / Paymob EGP mapping in every environment; the `.env` keys pick test
+vs live mode, and local webhooks arrive through a tunnel such as ngrok with
+`BACKEND_BASE_URL` pointing at it). `test.py` pins `FakeGateway` for every
+currency, so tests can never touch provider HTTP even with real creds in
+`.env`. Provider clients live in a leaf package (`apps/payments/gateways/`)
+— unconstrained by the layer contract, called from services/tasks.
 
 Per-area notes:
 
-- **SMS** (OurSMS SA / SMSMisr EG): `RoutingSmsBackend` picks the provider
-  from the number's country (`PROVIDER_REGISTRY`); SMSMisr's `language` is
-  chosen per message body (Arabic codepoints → "2") and its live/test
-  `environment` comes from `ENVIRONMENT`. Adding a provider = one module
-  implementing `SmsBackend` + one registry entry.
-- **Push** (FCM via firebase-admin, HTTP v1): NOT fcm-django (hard DRF
-  dependency). Own `Device` model + `messaging.send_each` in 500-token
-  chunks; tokens Firebase reports unregistered come back in
-  `PushReport.invalid_tokens` and the delivery task deletes those rows.
-  Firebase init is lazy from `FIREBASE_CREDENTIALS_B64` (base64
-  service-account JSON). firebase-admin transports its own HTTP.
-- **Notifications**: per-recipient inbox rows store `(kind, context)`;
-  copy lives in the typed catalog (`apps/notifications/catalog.py`,
-  gettext) and renders at send/read time in the viewer's locale — never
-  stored pre-rendered. Delivery = `on_commit` tasks with `*_sent_at`
-  idempotency markers; a kind's channels are declared on its catalog entry
-  (`test_catalog` keeps `NotificationKind` ↔ `CATALOG` in lockstep).
 - **Payments** (Tap SAR / Paymob EGP): gateway Protocol + frozen DTOs in
   `apps/payments/gateways/`. Money is Decimal end-to-end; the wire uses
   integer minor units (`to_minor_units`). Charge creation plants
@@ -247,10 +226,9 @@ Per-area notes:
   history has the working implementation if it is ever wanted back.)
 
 **Cross-app decisions on record** (independence contract `ignore_imports`
-in `pyproject.toml`): notifications → users (rows belong to a User;
-delivery reads `user.phone`/`user.language`) and payments → users +
-payments → notifications (paid events call `notification_send`). Both are
-one-way; nothing imports payments.
+in `pyproject.toml`): payments → users (a payment belongs to a User — payer
+and wallet owner). One-way; users' runtime models/selectors never import
+payments.
 
 ## i18n and translated content
 
@@ -275,7 +253,7 @@ one-way; nothing imports payments.
   fixtures/factories must set the suffixed fields. `FieldPermissions` rules
   on a base field automatically govern its `_ar`/`_en` shadows — the admin
   framework expands them (`expand_translation_shadows`).
-- **Emails/notifications** render in `user.language`, not a request header.
+- **Emails** render in `user.language`, not a request header.
 - `.po` catalogs under `locale/`; `makemessages` / `compilemessages`
   (compile happens at image build once catalogs exist).
 

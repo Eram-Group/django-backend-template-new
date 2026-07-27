@@ -242,9 +242,9 @@ def test_webhook_token_event_stores_card(client: Client) -> None:
 
     assert response.status_code == 200
     assert response.json() == {"ok": True}
-    card = SavedCard.objects.get(token="tok_hosted_1")  # noqa: S106 - fixture
+    card = SavedCard.objects.get(token="tok_hosted_1")
     assert card.user == user
-    assert card.token == "tok_hosted_1"  # noqa: S105 - test fixture value
+    assert card.token == "tok_hosted_1"
 
 
 def test_webhook_token_event_with_bad_signature_is_400(client: Client) -> None:
@@ -256,4 +256,4 @@ def test_webhook_token_event_with_bad_signature_is_400(client: Client) -> None:
     )
 
     assert response.status_code == 400
-    assert not SavedCard.objects.filter(token="tok_hosted_1").exists()  # noqa: S106
+    assert not SavedCard.objects.filter(token="tok_hosted_1").exists()

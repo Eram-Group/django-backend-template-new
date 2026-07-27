@@ -1,0 +1,280 @@
+"""Delivery execution - the ONE pipeline single sends and broadcasts share.
+
+``deliver_notifications`` takes a list of delivery pks (a single send passes
+its 1-3 rows; broadcast batches pass ~200 channel-pure rows). The executor
+claims PENDING rows atomically (select_for_update skip_locked -> PROCESSING),
+so a double-enqueued or re-run task can never double-send - the unclaimed
+rows are simply skipped.
+
+Error policy (no auto-retry by design): a per-recipient provider rejection
+marks that row FAILED and the task continues; a systemic failure
+(*NotConfiguredError, OutboundTransportError/OutboundStatusError) escapes
+and fails the task loudly (FAILED task row + Sentry) - claimed rows stay
+PROCESSING and the sweep/resume path resets exactly that remainder.
+
+Rendering happens HERE, under each recipient's language (no request in a
+worker) - never at creation time.
+"""
+
+import uuid
+from collections import defaultdict
+from collections.abc import Iterable
+
+import structlog
+from django.db import transaction
+from django.db.models import F
+from django.tasks import task
+from django.utils import timezone
+from django.utils import translation
+
+from apps.notifications import selectors
+from apps.notifications.catalog import WHATSAPP_LANGUAGE_CODES
+from apps.notifications.catalog import catalog_entry
+from apps.notifications.catalog import notification_render
+from apps.notifications.clients.push import PushMessage
+from apps.notifications.clients.push import push_send_many
+from apps.notifications.clients.sms import sms_send_many
+from apps.notifications.clients.sms.base import SmsProviderError
+from apps.notifications.clients.whatsapp import whatsapp_send_template
+from apps.notifications.clients.whatsapp.base import WhatsAppProviderError
+from apps.notifications.constants import BroadcastStatus
+from apps.notifications.constants import Channel
+from apps.notifications.constants import DeliveryStatus
+from apps.notifications.constants import NotificationKind
+from apps.notifications.models import Broadcast
+from apps.notifications.models import Device
+from apps.notifications.models import NotificationDelivery
+
+logger = structlog.get_logger(__name__)
+
+WHATSAPP_PROVIDER = "whatsapp"
+
+
+@task()
+def deliver_notifications(delivery_ids: list[str]) -> None:
+    execute_deliveries(delivery_ids=delivery_ids)
+
+
+def execute_deliveries(*, delivery_ids: list[str]) -> None:
+    """Claim, send per channel, record outcomes, bump broadcast progress."""
+    claimed_ids = _claim(delivery_ids=delivery_ids)
+    if not claimed_ids:
+        return
+    rows = list(
+        NotificationDelivery.objects.filter(pk__in=claimed_ids).select_related(
+            "notification__recipient"
+        )
+    )
+    by_channel: dict[str, list[NotificationDelivery]] = defaultdict(list)
+    for row in rows:
+        by_channel[row.channel].append(row)
+    if Channel.PUSH in by_channel:
+        _deliver_push(by_channel[Channel.PUSH])
+    if Channel.SMS in by_channel:
+        _deliver_sms(by_channel[Channel.SMS])
+    if Channel.WHATSAPP in by_channel:
+        _deliver_whatsapp(by_channel[Channel.WHATSAPP])
+    _record_outcomes(rows)
+
+
+def _claim(*, delivery_ids: list[str]) -> list[uuid.UUID]:
+    """PENDING -> PROCESSING for exactly the rows THIS call now owns."""
+    now = timezone.now()
+    with transaction.atomic():
+        claimed = list(
+            NotificationDelivery.objects.select_for_update(skip_locked=True)
+            .filter(pk__in=delivery_ids, status=DeliveryStatus.PENDING)
+            .values_list("pk", flat=True)
+        )
+        if claimed:
+            NotificationDelivery.objects.filter(pk__in=claimed).update(
+                status=DeliveryStatus.PROCESSING,
+                attempts=F("attempts") + 1,
+                updated_at=now,
+            )
+    return claimed
+
+
+def _deliver_push(rows: list[NotificationDelivery]) -> None:
+    tokens_by_user = selectors.device_tokens_by_user_id(
+        user_ids={row.notification.recipient_id for row in rows}
+    )
+    now = timezone.now()
+    messages: list[PushMessage] = []
+    owners: list[NotificationDelivery] = []
+    for row in rows:
+        recipient = row.notification.recipient
+        tokens = tokens_by_user.get(recipient.pk, [])
+        if not tokens:
+            row.status = DeliveryStatus.SKIPPED
+            row.detail = "no devices"
+            continue
+        with translation.override(recipient.language):
+            message = notification_render(
+                kind=NotificationKind(row.notification.kind),
+                context=row.notification.context,
+            )
+        data = {
+            "notification_id": str(row.notification_id),
+            "kind": row.notification.kind,
+        }
+        for token_value in tokens:
+            messages.append(
+                PushMessage(
+                    token=token_value,
+                    title=message.title,
+                    body=message.body,
+                    data=data,
+                )
+            )
+            owners.append(row)
+    if not messages:
+        return
+    results = push_send_many(messages=messages)
+    delivered: set[uuid.UUID] = set()
+    failure_detail: dict[uuid.UUID, str] = {}
+    invalid_tokens: list[str] = []
+    for owner, result in zip(owners, results, strict=True):
+        if result.ok:
+            delivered.add(owner.pk)
+        else:
+            failure_detail.setdefault(owner.pk, result.detail)
+            if result.invalid:
+                invalid_tokens.append(result.token)
+    for row in rows:
+        if row.status == DeliveryStatus.SKIPPED:
+            continue
+        if row.pk in delivered:  # at least one device got it
+            row.status = DeliveryStatus.SENT
+            row.sent_at = now
+        else:
+            row.status = DeliveryStatus.FAILED
+            row.detail = failure_detail.get(row.pk, "all tokens failed")
+    if invalid_tokens:  # FCM says these tokens are dead - prune
+        Device.objects.filter(registration_id__in=invalid_tokens).delete()
+
+
+def _deliver_sms(rows: list[NotificationDelivery]) -> None:
+    """One provider call per rendered-body group (language + kind + context).
+
+    Bulk providers report counts, not per-number outcomes, so failure
+    granularity is the GROUP: a rejection fails every row in it.
+    """
+    now = timezone.now()
+    groups: dict[
+        tuple[str, str, tuple[tuple[str, str], ...]], list[NotificationDelivery]
+    ] = defaultdict(list)
+    for row in rows:
+        recipient = row.notification.recipient
+        if not recipient.phone:
+            row.status = DeliveryStatus.SKIPPED
+            row.detail = "no phone"
+            continue
+        key = (
+            recipient.language,
+            row.notification.kind,
+            tuple(sorted((k, str(v)) for k, v in row.notification.context.items())),
+        )
+        groups[key].append(row)
+    for (language, kind, _context_key), grouped in groups.items():
+        with translation.override(language):
+            body = notification_render(
+                kind=NotificationKind(kind), context=grouped[0].notification.context
+            ).body
+        numbers = [str(r.notification.recipient.phone) for r in grouped]
+        try:
+            sms_send_many(to=numbers, body=body)
+        except SmsProviderError as exc:
+            for row in grouped:
+                row.status = DeliveryStatus.FAILED
+                row.detail = str(exc)
+        else:
+            for row in grouped:
+                row.status = DeliveryStatus.SENT
+                row.sent_at = now
+
+
+def _deliver_whatsapp(rows: list[NotificationDelivery]) -> None:
+    now = timezone.now()
+    for row in rows:
+        recipient = row.notification.recipient
+        if not recipient.phone:
+            row.status = DeliveryStatus.SKIPPED
+            row.detail = "no phone"
+            continue
+        entry = catalog_entry(NotificationKind(row.notification.kind))
+        template = entry.whatsapp
+        if template is None:  # unreachable while override.clean holds
+            row.status = DeliveryStatus.FAILED
+            row.detail = "kind has no whatsapp template"
+            continue
+        variables = [str(row.notification.context[key]) for key in template.variables]
+        try:
+            result = whatsapp_send_template(
+                to=str(recipient.phone),
+                template_name=template.name,
+                language=WHATSAPP_LANGUAGE_CODES.get(recipient.language, "en"),
+                variables=variables,
+            )
+        except WhatsAppProviderError as exc:
+            row.status = DeliveryStatus.FAILED
+            row.detail = exc.detail
+        else:
+            row.status = DeliveryStatus.SENT
+            row.sent_at = now
+            row.provider = WHATSAPP_PROVIDER
+            row.provider_message_id = result.message_id
+
+
+def _record_outcomes(rows: list[NotificationDelivery]) -> None:
+    """One bulk write for the batch, then broadcast progress + completion."""
+    now = timezone.now()
+    for row in rows:
+        row.updated_at = now  # bulk_update bypasses auto_now
+    NotificationDelivery.objects.bulk_update(
+        rows,
+        [
+            "status",
+            "detail",
+            "sent_at",
+            "provider",
+            "provider_message_id",
+            "updated_at",
+        ],
+        batch_size=500,
+    )
+    per_broadcast: dict[uuid.UUID, dict[str, int]] = defaultdict(
+        lambda: {"sent": 0, "failed": 0, "skipped": 0}
+    )
+    for row in rows:
+        if row.broadcast_id is None:
+            continue
+        if row.status == DeliveryStatus.SENT:
+            per_broadcast[row.broadcast_id]["sent"] += 1
+        elif row.status == DeliveryStatus.FAILED:
+            per_broadcast[row.broadcast_id]["failed"] += 1
+        elif row.status == DeliveryStatus.SKIPPED:
+            per_broadcast[row.broadcast_id]["skipped"] += 1
+    for broadcast_id, counts in per_broadcast.items():
+        Broadcast.objects.filter(pk=broadcast_id).update(
+            sent_count=F("sent_count") + counts["sent"],
+            failed_count=F("failed_count") + counts["failed"],
+            skipped_count=F("skipped_count") + counts["skipped"],
+            updated_at=now,
+        )
+        maybe_complete_broadcast(broadcast_id=broadcast_id)
+
+
+def maybe_complete_broadcast(*, broadcast_id: uuid.UUID | str) -> None:
+    """DISPATCHED -> COMPLETED once no delivery is pending or in flight."""
+    Broadcast.objects.filter(
+        pk=broadcast_id, status=BroadcastStatus.DISPATCHED
+    ).exclude(
+        deliveries__status__in=[DeliveryStatus.PENDING, DeliveryStatus.PROCESSING]
+    ).update(status=BroadcastStatus.COMPLETED, updated_at=timezone.now())
+
+
+def chunk_ids[T](ids: list[T], *, size: int) -> Iterable[list[T]]:
+    """Slice a pk list into enqueue-sized chunks (shared with resume/sweep)."""
+    for start in range(0, len(ids), size):
+        yield ids[start : start + size]

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 13:24+0000\n"
+"POT-Creation-Date: 2026-07-27 19:06+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -27,62 +27,281 @@ msgstr ""
 msgid "Use English text only - Arabic letters are not allowed."
 msgstr ""
 
+#: apps/notifications/admin/broadcast/admin.py:70
+msgid "Dispatch"
+msgstr ""
+
+#: apps/notifications/admin/broadcast/admin.py:83
+msgid "Dispatch started - refresh to follow progress."
+msgstr ""
+
+#: apps/notifications/admin/broadcast/admin.py:101
+msgid "Resume incomplete"
+msgstr ""
+
+#: apps/notifications/admin/broadcast/admin.py:115
+#, python-format
+msgid "Resume enqueued: %(summary)s"
+msgstr ""
+
 #: apps/notifications/admin/device/list_view.py:9
 msgid "Search by user email or registration token."
 msgstr ""
 
-#: apps/notifications/admin/notification/list_view.py:20
+#: apps/notifications/admin/notification/list_view.py:13
 msgid "Search by recipient email."
 msgstr ""
 
-#: apps/notifications/catalog.py:36 apps/users/tasks/emails.py:16
+#: apps/notifications/admin/notificationdelivery/list_view.py:22
+msgid "Search by provider message id or recipient email."
+msgstr ""
+
+#: apps/notifications/admin/notificationpreference/list_view.py:9
+#: apps/payments/admin/wallet/list_view.py:9
+msgid "Search by user email."
+msgstr ""
+
+#: apps/notifications/apis/webhooks.py:49
+#: apps/notifications/apis/webhooks.py:86
+#: apps/notifications/apis/webhooks.py:95 apps/payments/apis/webhooks.py:45
+msgid "Webhook verification failed."
+msgstr ""
+
+#: apps/notifications/apis/webhooks.py:66
+msgid "Webhook payload is not valid JSON."
+msgstr ""
+
+#: apps/notifications/catalog.py:74 apps/users/tasks/emails.py:16
 msgid "Welcome!"
 msgstr ""
 
-#: apps/notifications/catalog.py:37
+#: apps/notifications/catalog.py:75
 #, python-brace-format
 msgid "Welcome aboard, {name}!"
 msgstr ""
 
-#: apps/notifications/catalog.py:42 apps/notifications/constants.py:11
+#: apps/notifications/catalog.py:82 apps/notifications/constants.py:9
 msgid "Announcement"
 msgstr ""
 
-#: apps/notifications/catalog.py:48 apps/notifications/constants.py:12
+#: apps/notifications/catalog.py:93 apps/notifications/constants.py:10
 msgid "Payment received"
 msgstr ""
 
-#: apps/notifications/catalog.py:49
+#: apps/notifications/catalog.py:94
 #, python-brace-format
 msgid "Your payment of {amount} {currency} was received."
 msgstr ""
 
-#: apps/notifications/catalog.py:54 apps/notifications/constants.py:13
+#: apps/notifications/catalog.py:101 apps/notifications/constants.py:11
 msgid "Wallet credited"
 msgstr ""
 
-#: apps/notifications/catalog.py:55
+#: apps/notifications/catalog.py:102
 #, python-brace-format
 msgid "{amount} {currency} was added to your wallet. New balance: {balance}."
 msgstr ""
 
-#: apps/notifications/constants.py:10
+#: apps/notifications/constants.py:8
 msgid "Welcome"
 msgstr ""
 
-#: apps/notifications/constants.py:24
+#: apps/notifications/constants.py:21
+msgid "Transactional"
+msgstr ""
+
+#: apps/notifications/constants.py:22
+msgid "Marketing"
+msgstr ""
+
+#: apps/notifications/constants.py:28
+msgid "Push"
+msgstr ""
+
+#: apps/notifications/constants.py:29
+msgid "SMS"
+msgstr ""
+
+#: apps/notifications/constants.py:30
+msgid "WhatsApp"
+msgstr ""
+
+#: apps/notifications/constants.py:42 apps/payments/constants.py:20
+msgid "Pending"
+msgstr ""
+
+#: apps/notifications/constants.py:43
+msgid "Processing"
+msgstr ""
+
+#: apps/notifications/constants.py:44
+msgid "Sent"
+msgstr ""
+
+#: apps/notifications/constants.py:45
+msgid "Delivered"
+msgstr ""
+
+#: apps/notifications/constants.py:46
+msgid "Read"
+msgstr ""
+
+#: apps/notifications/constants.py:47 apps/payments/constants.py:22
+msgid "Failed"
+msgstr ""
+
+#: apps/notifications/constants.py:48
+msgid "Skipped"
+msgstr ""
+
+#: apps/notifications/constants.py:54
+msgid "Draft"
+msgstr ""
+
+#: apps/notifications/constants.py:55
+msgid "Dispatching"
+msgstr ""
+
+#: apps/notifications/constants.py:56
+msgid "Dispatched"
+msgstr ""
+
+#: apps/notifications/constants.py:57
+msgid "Completed"
+msgstr ""
+
+#: apps/notifications/constants.py:61
 msgid "Android"
 msgstr ""
 
-#: apps/notifications/constants.py:25
+#: apps/notifications/constants.py:62
 msgid "iOS"
 msgstr ""
 
-#: apps/notifications/constants.py:26
+#: apps/notifications/constants.py:63
 msgid "Web"
 msgstr ""
 
-#: apps/notifications/models/device.py:21 apps/payments/models/payment.py:30
+#: apps/notifications/models/broadcast.py:23
+#: apps/notifications/models/channel_override.py:19
+#: apps/notifications/models/notification.py:25
+#: apps/payments/models/payment.py:32
+#: apps/payments/models/wallet_transaction.py:23
+msgid "kind"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:24
+#: apps/notifications/models/notification.py:26
+msgid "context"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:26
+#: apps/notifications/models/delivery.py:36 apps/payments/models/payment.py:42
+msgid "status"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:33
+msgid "language filter"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:39
+msgid "created by"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:41
+msgid "dispatch cursor"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:42
+msgid "total recipients"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:43
+msgid "total deliveries"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:44
+msgid "sent"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:45
+msgid "failed"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:46
+msgid "skipped"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:49
+#: apps/notifications/models/delivery.py:32
+#: apps/notifications/models/notification.py:34
+msgid "broadcast"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:50
+msgid "broadcasts"
+msgstr ""
+
+#: apps/notifications/models/channel_override.py:20
+#: apps/notifications/models/delivery.py:34
+#: apps/notifications/models/preference.py:30
+msgid "channel"
+msgstr ""
+
+#: apps/notifications/models/channel_override.py:21
+msgid "enabled"
+msgstr ""
+
+#: apps/notifications/models/channel_override.py:24
+msgid "channel override"
+msgstr ""
+
+#: apps/notifications/models/channel_override.py:25
+msgid "channel overrides"
+msgstr ""
+
+#: apps/notifications/models/channel_override.py:50
+#, python-format
+msgid ""
+"%(kind)s does not support %(channel)s. Supported channels: %(supported)s."
+msgstr ""
+
+#: apps/notifications/models/delivery.py:24
+#: apps/notifications/models/notification.py:38
+msgid "notification"
+msgstr ""
+
+#: apps/notifications/models/delivery.py:41
+msgid "provider"
+msgstr ""
+
+#: apps/notifications/models/delivery.py:43
+msgid "provider message id"
+msgstr ""
+
+#: apps/notifications/models/delivery.py:45
+msgid "detail"
+msgstr ""
+
+#: apps/notifications/models/delivery.py:46
+msgid "sent at"
+msgstr ""
+
+#: apps/notifications/models/delivery.py:47
+msgid "attempts"
+msgstr ""
+
+#: apps/notifications/models/delivery.py:50
+msgid "notification delivery"
+msgstr ""
+
+#: apps/notifications/models/delivery.py:51
+msgid "notification deliveries"
+msgstr ""
+
+#: apps/notifications/models/device.py:21
+#: apps/notifications/models/preference.py:25
+#: apps/payments/models/payment.py:30 apps/payments/models/saved_card.py:25
 #: apps/payments/models/wallet.py:23
 msgid "user"
 msgstr ""
@@ -103,70 +322,77 @@ msgstr ""
 msgid "devices"
 msgstr ""
 
-#: apps/notifications/models/notification.py:21
+#: apps/notifications/models/notification.py:23
 msgid "recipient"
 msgstr ""
 
-#: apps/notifications/models/notification.py:23
-#: apps/payments/models/payment.py:32
-#: apps/payments/models/wallet_transaction.py:23
-msgid "kind"
-msgstr ""
-
-#: apps/notifications/models/notification.py:24
-msgid "context"
-msgstr ""
-
-#: apps/notifications/models/notification.py:25
+#: apps/notifications/models/notification.py:27
 msgid "read at"
 msgstr ""
 
-#: apps/notifications/models/notification.py:26
-msgid "push sent at"
-msgstr ""
-
-#: apps/notifications/models/notification.py:27
-msgid "SMS sent at"
-msgstr ""
-
-#: apps/notifications/models/notification.py:30
-msgid "notification"
-msgstr ""
-
-#: apps/notifications/models/notification.py:31
+#: apps/notifications/models/notification.py:39
 msgid "notifications"
+msgstr ""
+
+#: apps/notifications/models/preference.py:28
+msgid "category"
+msgstr ""
+
+#: apps/notifications/models/preference.py:33
+msgid "notification preference"
+msgstr ""
+
+#: apps/notifications/models/preference.py:34
+msgid "notification preferences"
+msgstr ""
+
+#: apps/notifications/models/preference.py:48
+#: apps/notifications/services/preferences.py:25
+#: apps/notifications/services/preferences.py:55
+msgid "Transactional notifications cannot be opted out of."
 msgstr ""
 
 #: apps/notifications/selectors/notifications.py:21
 msgid "Notification not found."
 msgstr ""
 
-#: apps/payments/admin/payment/admin.py:59 apps/payments/constants.py:45
+#: apps/notifications/services/broadcasts.py:71
+msgid "Broadcast was already dispatched."
+msgstr ""
+
+#: apps/notifications/services/broadcasts.py:85
+msgid "Broadcast has not been dispatched."
+msgstr ""
+
+#: apps/notifications/services/broadcasts.py:124
+#, python-format
+msgid ""
+"Audience of %(audience)s exceeds the inline-backend limit of %(limit)s - run "
+"a real worker (TASKS_IMMEDIATE=false)."
+msgstr ""
+
+#: apps/payments/admin/payment/admin.py:60 apps/payments/constants.py:45
 msgid "Refund"
 msgstr ""
 
-#: apps/payments/admin/payment/admin.py:71
-msgid "Payment refunded."
+#: apps/payments/admin/payment/admin.py:77
+msgid "Refund started - refresh to see the final status."
 msgstr ""
 
 #: apps/payments/admin/payment/list_view.py:16
 msgid "Search by user email or gateway charge/transaction id."
 msgstr ""
 
-#: apps/payments/admin/wallet/list_view.py:9
-msgid "Search by user email."
+#: apps/payments/admin/savedcard/list_view.py:22
+msgid "Search by owner email or gateway token."
 msgstr ""
 
 #: apps/payments/admin/wallettransaction/list_view.py:13
 msgid "Search by wallet owner email."
 msgstr ""
 
-#: apps/payments/apis/webhooks.py:35
+#: apps/payments/apis/webhooks.py:39
 msgid "Unknown payment gateway."
-msgstr ""
-
-#: apps/payments/apis/webhooks.py:41
-msgid "Webhook verification failed."
 msgstr ""
 
 #: apps/payments/constants.py:6
@@ -185,16 +411,8 @@ msgstr ""
 msgid "Other"
 msgstr ""
 
-#: apps/payments/constants.py:20
-msgid "Pending"
-msgstr ""
-
 #: apps/payments/constants.py:21
 msgid "Paid"
-msgstr ""
-
-#: apps/payments/constants.py:22
-msgid "Failed"
 msgstr ""
 
 #: apps/payments/constants.py:25
@@ -238,49 +456,89 @@ msgstr ""
 msgid "currency"
 msgstr ""
 
-#: apps/payments/models/payment.py:42
-msgid "status"
-msgstr ""
-
-#: apps/payments/models/payment.py:47
+#: apps/payments/models/payment.py:47 apps/payments/models/saved_card.py:27
 msgid "gateway"
 msgstr ""
 
-#: apps/payments/models/payment.py:52
+#: apps/payments/models/payment.py:54 apps/payments/models/saved_card.py:47
+msgid "saved card"
+msgstr ""
+
+#: apps/payments/models/payment.py:62
+msgid "save card requested"
+msgstr ""
+
+#: apps/payments/models/payment.py:67
 msgid "idempotency key"
 msgstr ""
 
-#: apps/payments/models/payment.py:56
+#: apps/payments/models/payment.py:71
 msgid "gateway charge id"
 msgstr ""
 
-#: apps/payments/models/payment.py:61
+#: apps/payments/models/payment.py:76
 msgid "gateway transaction id"
 msgstr ""
 
-#: apps/payments/models/payment.py:63
+#: apps/payments/models/payment.py:78
 msgid "checkout URL"
 msgstr ""
 
-#: apps/payments/models/payment.py:65
+#: apps/payments/models/payment.py:80
 msgid "gateway response"
 msgstr ""
 
-#: apps/payments/models/payment.py:68
+#: apps/payments/models/payment.py:83
 msgid "gateway callback"
 msgstr ""
 
-#: apps/payments/models/payment.py:70
+#: apps/payments/models/payment.py:85
 msgid "paid at"
 msgstr ""
 
-#: apps/payments/models/payment.py:73
+#: apps/payments/models/payment.py:91
+msgid "refund attempted at"
+msgstr ""
+
+#: apps/payments/models/payment.py:95
 #: apps/payments/models/wallet_transaction.py:32
 msgid "payment"
 msgstr ""
 
-#: apps/payments/models/payment.py:74
+#: apps/payments/models/payment.py:96
 msgid "payments"
+msgstr ""
+
+#: apps/payments/models/saved_card.py:29
+msgid "token"
+msgstr ""
+
+#: apps/payments/models/saved_card.py:32
+msgid "gateway customer id"
+msgstr ""
+
+#: apps/payments/models/saved_card.py:37
+msgid "gateway agreement id"
+msgstr ""
+
+#: apps/payments/models/saved_card.py:39
+msgid "brand"
+msgstr ""
+
+#: apps/payments/models/saved_card.py:40
+msgid "last four digits"
+msgstr ""
+
+#: apps/payments/models/saved_card.py:42
+msgid "expiry month"
+msgstr ""
+
+#: apps/payments/models/saved_card.py:44
+msgid "expiry year"
+msgstr ""
+
+#: apps/payments/models/saved_card.py:48
+msgid "saved cards"
 msgstr ""
 
 #: apps/payments/models/wallet.py:26
@@ -317,34 +575,46 @@ msgid "wallet transactions"
 msgstr ""
 
 #: apps/payments/selectors/payments.py:21
-#: apps/payments/services/payments.py:128
+#: apps/payments/services/payments.py:262
 msgid "Payment not found."
+msgstr ""
+
+#: apps/payments/selectors/saved_cards.py:21
+#: apps/payments/services/payments.py:80
+#: apps/payments/services/saved_cards.py:81
+msgid "Saved card not found."
 msgstr ""
 
 #: apps/payments/selectors/wallets.py:17
 msgid "Wallet not found."
 msgstr ""
 
-#: apps/payments/services/payments.py:50
+#: apps/payments/services/payments.py:83
+msgid "This card cannot be used with this currency."
+msgstr ""
+
+#: apps/payments/services/payments.py:93
 msgid "Wallet currency does not match the payment currency."
 msgstr ""
 
-#: apps/payments/services/payments.py:103
-#: apps/payments/services/payments.py:200
-#: apps/payments/services/payments.py:262
+#: apps/payments/services/payments.py:166
+#: apps/payments/services/payments.py:241
+#: apps/payments/services/payments.py:348
+#: apps/payments/services/payments.py:464
 msgid "The payment provider is unavailable. Try again shortly."
 msgstr ""
 
-#: apps/payments/services/payments.py:192
-#: apps/payments/services/payments.py:234
+#: apps/payments/services/payments.py:340
+#: apps/payments/services/payments.py:381
+#: apps/payments/services/payments.py:434
 msgid "Payment gateway is not configured."
 msgstr ""
 
-#: apps/payments/services/payments.py:239
+#: apps/payments/services/payments.py:386
 msgid "Only paid payments can be refunded."
 msgstr ""
 
-#: apps/payments/services/payments.py:266
+#: apps/payments/services/payments.py:468
 msgid "The gateway rejected the refund."
 msgstr ""
 
@@ -364,11 +634,11 @@ msgstr ""
 msgid "Recent sessions"
 msgstr ""
 
-#: apps/users/constants.py:6 config/settings/base.py:184
+#: apps/users/constants.py:6 config/settings/base.py:193
 msgid "Arabic"
 msgstr ""
 
-#: apps/users/constants.py:7 config/settings/base.py:185
+#: apps/users/constants.py:7 config/settings/base.py:194
 msgid "English"
 msgstr ""
 
@@ -392,51 +662,67 @@ msgstr ""
 msgid "User not found."
 msgstr ""
 
-#: config/settings/base.py:272 config/settings/base.py:275
+#: config/settings/base.py:284 config/settings/base.py:287
 msgid "Users"
 msgstr ""
 
-#: config/settings/base.py:283
+#: config/settings/base.py:295
 msgid "Email addresses"
 msgstr ""
 
-#: config/settings/base.py:291
+#: config/settings/base.py:303
 msgid "Sessions"
 msgstr ""
 
-#: config/settings/base.py:301
+#: config/settings/base.py:313
 msgid "Groups"
 msgstr ""
 
-#: config/settings/base.py:311 config/settings/base.py:314
+#: config/settings/base.py:323 config/settings/base.py:326
 msgid "Notifications"
 msgstr ""
 
-#: config/settings/base.py:324
+#: config/settings/base.py:336
+msgid "Deliveries"
+msgstr ""
+
+#: config/settings/base.py:346
+msgid "Broadcasts"
+msgstr ""
+
+#: config/settings/base.py:356
 msgid "Devices"
 msgstr ""
 
-#: config/settings/base.py:334 config/settings/base.py:337
+#: config/settings/base.py:364
+msgid "Channel overrides"
+msgstr ""
+
+#: config/settings/base.py:374
+msgid "Preferences"
+msgstr ""
+
+#: config/settings/base.py:386 config/settings/base.py:389
 msgid "Payments"
 msgstr ""
 
-#: config/settings/base.py:345
+#: config/settings/base.py:397
 msgid "Wallets"
 msgstr ""
 
-#: config/settings/base.py:353
+#: config/settings/base.py:405
 msgid "Wallet transactions"
 msgstr ""
 
-#: config/settings/base.py:365
+#: config/settings/base.py:417
 msgid "Operations"
 msgstr ""
 
-#: config/settings/base.py:368
+#: config/settings/base.py:420
 msgid "Task results"
 msgstr ""
 
-#: config/settings/base.py:378
+#: config/settings/base.py:430
 msgid "Login attempts"
 msgstr ""
 

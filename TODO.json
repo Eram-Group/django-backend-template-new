@@ -4,14 +4,14 @@
   "created": "2026-07-11",
   "workflow": [
     "Groups run in array order; tasks run in array order within their group unless dependsOn says otherwise.",
-    "Completed work is removed from this file - done through the easy-sweep (2026-07-11): G00-G05, G08, G09, G10 (workflows verified green on GitHub 2026-07-18: remote created at omargawdat/django-backend-template, first real run exposed 5 defects invisible locally - unresolvable setup-uv@v8 tag, invalid `compose run --no-build` flag, TruffleHog flagging the repo's own dev creds, guard-migrations missing the pull-requests scope so it failed every PR without ever evaluating its rule, and a .env.example trailing comment parsed as the value; all fixed in PR #1, and the migration guard was then proven to reject a modified migration and to bypass on the allow-migration-edit label), superuser bootstrap, and the /users/me slice; G14 template-enhancement sweep fully adopted 2026-07-12 (wp1-wp8 commits); G15 external-client build complete 2026-07-12 (wp-a HTTP kernel, wp-b User.phone, wp-c apps/notifications, wp-d apps/payments, wp-e docs - plan in ~/.claude/plans/toasty-snuggling-gosling.md). Group ARRAY ORDER = execution order.",
+    "Completed work is removed from this file - done through the easy-sweep (2026-07-11): G00-G05, G08, G09, G10 (workflows verified green on GitHub 2026-07-18: remote created at omargawdat/django-backend-template, first real run exposed 5 defects invisible locally - unresolvable setup-uv@v8 tag, invalid `compose run --no-build` flag, TruffleHog flagging the repo's own dev creds, guard-migrations missing the pull-requests scope so it failed every PR without ever evaluating its rule, and a .env.example trailing comment parsed as the value; all fixed in PR #1, and the migration guard was then proven to reject a modified migration and to bypass on the allow-migration-edit label), superuser bootstrap, and the /users/me slice; G14 template-enhancement sweep fully adopted 2026-07-12 (wp1-wp8 commits); G15 external-client build complete 2026-07-12 (wp-a HTTP kernel, wp-b User.phone, wp-c apps/notifications, wp-d apps/payments, wp-e docs - plan in ~/.claude/plans/toasty-snuggling-gosling.md). Notifications v2 rebuilt 2026-07-27 on feat/notification-refactor (plan in ~/.claude/plans/please-plan-and-think-curious-glacier.md): SMS+WhatsApp+FCM channels behind settings-string triads, typed catalog + admin NotificationChannelOverride channel policy, NotificationDelivery idempotency/recovery log, Broadcast 100k fan-out on a dedicated bulk queue (worker-bulk), signed WhatsApp status webhook; Meta Cloud API connector and SMS DLR ingestion deferred as follow-up PRs. Group ARRAY ORDER = execution order.",
     "2026-07-18 regroup (user request): remaining work reorganized into thematic groups G16-G20 (authentication / testing incl. factories / cron jobs / AWS instructions / Claude structure). Empty shells G07, G11, G12 removed - their tasks were already swept; G07's gate requirements live on in G17's checkpoint. G13's deferred-review intent (reviews don't block build work) carries on in the review tasks' tips unchanged.",
     "One task = one working session. Set status=in_progress before starting; set done only when the endGoal is observed, not assumed.",
     "Never start a task whose dependsOn are not all done.",
     "After the last task of a group: run the group's checkpoint, fix any fallout, then `git commit -m \"checkpoint(<groupId>): <group title>\"`.",
     "Tips are guidance, not prescriptions - decide from context; PLAN.md wins over any tip; record resolutions by appending to the task's tips.",
     "Any task that adds an Env field updates config/env.py AND .env.example in the same task.",
-    "From G03 onward ruff+mypy must be green at every checkpoint. Since 2026-07-18 the remote exists and CI runs for real, so GitHub is a gate alongside the local checkpoint - not a substitute: CI is the only place `cp .env.example .env` happens, which is exactly how the FIREBASE_CREDENTIALS_B64 comment-as-value bug surfaced.",
+    "From G03 onward ruff+mypy must be green at every checkpoint. Since 2026-07-18 the remote exists and CI runs for real, so GitHub is a gate alongside the local checkpoint - not a substitute: CI is the only place `cp .env.example .env` happens, which is exactly how the .env.example comment-as-value bug surfaced.",
     "2026-07-18 saved cards built (user request; plan in ~/.claude/plans/curious-bubbling-kernighan.md): SavedCard vault + opt-in save at checkout + one-click CIT + service-only MIT (payment_charge_saved) + cards API + admin, Tap tokens->charge with payment_agreement, Paymob TOKEN callback (own 8-field HMAC) + card_tokens CIT + MOTO payments/pay; local suites green - the live test-mode proof is G22. Simplified later the same day (user request): save is always-on (save_card left the API), and the add-card-without-payment flow (Tap authorize+auto-void, Paymob Verification intention - both live-verified) was removed; git history keeps the working implementation."
   ],
   "groups": [
@@ -24,8 +24,8 @@
     {
       "id": "G17",
       "title": "Testing & factories",
-      "rationale": "The test suite and its data layer reviewed together: factory_boy structure, mimesis values, registry coverage gate, seed pipeline - plus end-to-end proof that the external-gateway flows (payments, SMS) actually work, not just pass unit tests.",
-      "checkpoint": "Factories review signed off; payment + SMS end-to-end flows demonstrated and evidence recorded in the task's tips; uv run pytest green including the factory-coverage and cross-app gates; coverage >= 80%; commit."
+      "rationale": "The test suite and its data layer reviewed together: factory_boy structure, mimesis values, registry coverage gate, seed pipeline - plus end-to-end proof that the payment-gateway flows actually work, not just pass unit tests.",
+      "checkpoint": "Factories review signed off; payment end-to-end flow demonstrated and evidence recorded in the task's tips; uv run pytest green including the factory-coverage and cross-app gates; coverage >= 80%; commit."
     },
     {
       "id": "G18",
@@ -76,7 +76,9 @@
       "group": "G16",
       "title": "USER REVIEW: deep-dive into the implemented authentication",
       "endGoal": "Omar has reviewed the IMPLEMENTED auth stack in detail and signed off; decisions/changes recorded here. Scope unchanged: passwordless email-code flow, browser vs X-Session-Token clients, HEADLESS_ONLY + frontend URLs + served auth spec, adapter hooks, Google/Apple social + auto-connect, usersessions, kill-switch, axes/ratelimit posture, optional secure_admin_login.",
-      "dependsOn": ["social-providers"],
+      "dependsOn": [
+        "social-providers"
+      ],
       "tips": [
         "USER INVESTIGATION (requested 2026-07-11): Omar leads this; agent supports with research/prototypes on request. G04 implementation must not be finalized before sign-off.",
         "References: allauth headless docs (openapi spec + client types), Gawdat_Django_Template config/helpers/account_adapter.py (6-digit codes, skip-OTP-for-social) and allauth_adapter.py (headless user payload), PLAN.md Auth row.",
@@ -100,14 +102,13 @@
     {
       "id": "gateways-e2e-verify",
       "group": "G17",
-      "title": "Verify payment + SMS gateway workflows end-to-end",
-      "endGoal": "Both external-gateway flows observed working end-to-end, evidence recorded here: (1) payments - create payment -> gateway redirect/charge -> webhook callback -> payment status transition -> wallet applied, including a rejected invalid-HMAC webhook; (2) SMS - notification send -> routing selects provider by destination -> delivery task executes on the worker -> provider client called and delivery recorded on the Notification row.",
+      "title": "Verify payment gateway workflows end-to-end",
+      "endGoal": "The payments flow observed working end-to-end, evidence recorded here: create payment -> gateway redirect/charge -> webhook callback -> payment status transition -> wallet applied, including a rejected invalid-HMAC webhook.",
       "tips": [
         "Run the whole flow through the real seams, not mocked services: worker running (`just worker`), webhook hit over HTTP (curl or test client against the running app), state verified in DB/admin afterwards.",
-        "Local tier uses the built-in doubles: gateways/fake.py for payments and the SMS backend equivalent - this proves the wiring (services -> tasks -> clients -> models) without external creds.",
-        "Real-provider tier needs sandbox credentials (Paymob, Tap, OurSMS, SMSMisr) that may not exist yet - if absent, record that explicitly here and verify the fake tier only; do NOT let missing creds silently pass as verified (same convention as social-providers).",
+        "Local tier uses the built-in double gateways/fake.py - this proves the wiring (services -> tasks -> gateways -> models) without external creds.",
+        "Real-provider tier needs sandbox credentials (Paymob, Tap) that may not exist yet - if absent, record that explicitly here and verify the fake tier only; do NOT let missing creds silently pass as verified (same convention as social-providers).",
         "Webhook security is a first-class case: 9018b26 made blank-secret HMAC fail closed - exercise both a valid-signature accept and an invalid/missing-signature reject.",
-        "SMS routing: cover one Saudi number (-> oursms) and one Egyptian number (-> smsmisr) so clients/sms/routing.py is actually observed choosing.",
         "Idempotency: replay the same webhook twice - second delivery must not double-apply the wallet transaction."
       ],
       "status": "pending"
@@ -151,7 +152,7 @@
       "tips": [
         "Requested by Omar 2026-07-18. Current state: Currency enum = SAR/EGP only (apps/payments/constants.py), one wallet per user fixed at signup in DEFAULT_CURRENCY=SAR, topups reject currency mismatch at initiate AND credit time.",
         "Known hardcoded spots from the 2026-07-18 payments review: _MINOR_UNIT_EXPONENT in gateways/base.py maps only SAR/EGP (=2) - a 3-decimal (KWD/BHD) or 0-decimal currency needs an entry; tap.py _format_amount hardcodes 2 decimals; PAYMENT_GATEWAYS needs an entry per currency (missing = clean 503).",
-        "Design decisions to make and record here: one wallet per user vs wallet-per-currency; where country lives (User field? phone-derived? request locale?); FX/conversion explicitly in or out of scope; whether SMS routing (clients/sms/routing.py picks provider by phone country) generalizes with the same country registry.",
+        "Design decisions to make and record here: one wallet per user vs wallet-per-currency; where country lives (User field? phone-derived? request locale?); FX/conversion explicitly in or out of scope.",
         "Arabic-first rule already covers locale; check mimesis locales in apps/common/tests/fake.py if new locales ship."
       ],
       "status": "pending"
@@ -190,7 +191,9 @@
         "Paymob support ask (merchant 1014916, TEST mode): a MOTO integration id (unlocks MIT -> PAYMOB_MOTO_INTEGRATION_ID) and a Card-on-File id (narrows the one-click page to card-only -> PAYMOB_COF_INTEGRATION_ID). Until CoF exists, card_tokens rides the normal-3DS fallback, which works but shows the Wallet tab.",
         "mada test cards are the ones that matter for Tap MIT in KSA - verify at least one mada and one Visa/MC saved-card charge."
       ],
-      "dependsOn": ["gateways-e2e-verify"],
+      "dependsOn": [
+        "gateways-e2e-verify"
+      ],
       "status": "pending"
     }
   ]

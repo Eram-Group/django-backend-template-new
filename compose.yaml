@@ -53,6 +53,17 @@ services:
       timeout: 5s
       retries: 3
 
+  # Broadcast fan-out lane - scale during campaigns:
+  #   docker compose up -d --scale worker-bulk=4
+  worker-bulk:
+    <<: *app
+    command: ['python', 'manage.py', 'db_worker', '--queue-name', 'bulk']
+    healthcheck:
+      test: ['CMD', 'python', '-c', 'import sys; sys.exit(0)']  # process-alive
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
   postgres:
     image: postgres:18
     volumes:
