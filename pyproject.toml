@@ -37,7 +37,7 @@ dependencies = [
   "openpyxl>=3.1.5",
   "psycopg[binary,pool]>=3.3.4",
   "pydantic-settings>=2.14.2",
-  "sentry-sdk>=2.66",
+  "sentry-sdk>=2.66.1",
   "stamina>=26.1",
 ]
 
@@ -54,7 +54,7 @@ dev = [
   "ipdb>=0.13.13",
   "mimesis>=21",
   "mypy>=2.3",
-  "pre-commit>=4.6",
+  "pre-commit>=4.6.1",
   "pytest>=9.1",
   "pytest-cov>=7.1.0",
   "pytest-django>=4.12",
@@ -62,7 +62,7 @@ dev = [
   "pytest-sugar>=1.1.1",
   "pytest-xdist>=3.8.0",
   "respx>=0.23",
-  "ruff>=0.15",
+  "ruff>=0.16.0",
   "werkzeug[watchdog]>=3.1.8",
 ]
 
