@@ -17,5 +17,13 @@ class BroadcastTooLargeForInlineError(NotificationError):
     """Refuse to fan out a big audience on the inline (immediate) backend."""
 
 
+class BroadcastAudienceError(NotificationError):
+    """The requested audience or channel selection is not coherent."""
+
+
+class NotificationConfigError(NotificationError):
+    """The requested notification-action config change is not allowed."""
+
+
 class NotificationWebhookRejectedError(NotificationError):
     """Status webhook failed verification (bad/absent signature or config)."""

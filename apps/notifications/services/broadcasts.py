@@ -11,6 +11,8 @@ stale PROCESSING resets, plus FAILED when asked). At-least-once in crash
 windows is accepted and documented.
 """
 
+from collections.abc import Sequence
+from datetime import date
 from datetime import timedelta
 from functools import partial
 from typing import Any
@@ -22,10 +24,12 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.notifications import selectors
+from apps.notifications.catalog import MessageTemplate
 from apps.notifications.catalog import catalog_entry
 from apps.notifications.constants import BroadcastStatus
 from apps.notifications.constants import DeliveryStatus
 from apps.notifications.constants import NotificationKind
+from apps.notifications.exceptions import BroadcastAudienceError
 from apps.notifications.exceptions import BroadcastStateError
 from apps.notifications.exceptions import BroadcastTooLargeForInlineError
 from apps.notifications.models import Broadcast
@@ -47,18 +51,56 @@ def notification_broadcast(
     kind: NotificationKind,
     context: dict[str, Any] | None = None,
     language: str = "",
+    require_device: bool = False,
+    joined_after: date | None = None,
+    joined_before: date | None = None,
+    channels: Sequence[str] | None = None,
     actor: User,
 ) -> Broadcast:
     """Author a DRAFT broadcast; nothing sends until broadcast_dispatch."""
     entry = catalog_entry(kind)
     resolved_context = dict(context or {})
     _validate_context(kind=kind, entry=entry, context=resolved_context)
+    resolved_channels = _validate_channels(entry=entry, channels=channels)
+    if joined_after and joined_before and joined_after > joined_before:
+        raise BroadcastAudienceError(
+            str(_("The joined-after date must not be later than joined-before."))
+        )
     broadcast = Broadcast(
-        kind=kind, context=resolved_context, language=language, created_by=actor
+        kind=kind,
+        context=resolved_context,
+        language=language,
+        require_device=require_device,
+        joined_after=joined_after,
+        joined_before=joined_before,
+        channels=resolved_channels,
+        created_by=actor,
     )
     broadcast.full_clean()
     broadcast.save()
     return broadcast
+
+
+def _validate_channels(
+    *, entry: MessageTemplate, channels: Sequence[str] | None
+) -> list[str]:
+    """Empty selection = defer to the kind's policy; otherwise a real subset.
+
+    Unlike ``_validate_context`` (a programming error, no envelope) this one is
+    operator input, so it raises an ApplicationError and surfaces as a message.
+    """
+    if not channels:
+        return []
+    supported = {str(channel) for channel in entry.supported_channels}
+    unsupported = sorted(set(map(str, channels)) - supported)
+    if unsupported:
+        raise BroadcastAudienceError(
+            str(
+                _("This notification kind cannot be sent on: %(channels)s.")
+                % {"channels": ", ".join(unsupported)}
+            )
+        )
+    return sorted(set(map(str, channels)))
 
 
 def broadcast_dispatch(*, broadcast: Broadcast) -> Broadcast:

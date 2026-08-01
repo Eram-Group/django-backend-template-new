@@ -30,7 +30,6 @@ from django.utils import translation
 from apps.notifications import selectors
 from apps.notifications.catalog import WHATSAPP_LANGUAGE_CODES
 from apps.notifications.catalog import catalog_entry
-from apps.notifications.catalog import notification_render
 from apps.notifications.clients.push import PushMessage
 from apps.notifications.clients.push import push_send_many
 from apps.notifications.clients.sms import sms_send_many
@@ -68,10 +67,12 @@ def execute_deliveries(*, delivery_ids: list[str]) -> None:
     by_channel: dict[str, list[NotificationDelivery]] = defaultdict(list)
     for row in rows:
         by_channel[row.channel].append(row)
+    # One config query for the whole batch - rendering per row must not be.
+    configs = selectors.notification_config_map()
     if Channel.PUSH in by_channel:
-        _deliver_push(by_channel[Channel.PUSH])
+        _deliver_push(by_channel[Channel.PUSH], configs=configs)
     if Channel.SMS in by_channel:
-        _deliver_sms(by_channel[Channel.SMS])
+        _deliver_sms(by_channel[Channel.SMS], configs=configs)
     if Channel.WHATSAPP in by_channel:
         _deliver_whatsapp(by_channel[Channel.WHATSAPP])
     _record_outcomes(rows)
@@ -95,7 +96,9 @@ def _claim(*, delivery_ids: list[str]) -> list[uuid.UUID]:
     return claimed
 
 
-def _deliver_push(rows: list[NotificationDelivery]) -> None:
+def _deliver_push(
+    rows: list[NotificationDelivery], *, configs: selectors.ConfigMap
+) -> None:
     tokens_by_user = selectors.device_tokens_by_user_id(
         user_ids={row.notification.recipient_id for row in rows}
     )
@@ -110,9 +113,10 @@ def _deliver_push(rows: list[NotificationDelivery]) -> None:
             row.detail = "no devices"
             continue
         with translation.override(recipient.language):
-            message = notification_render(
+            message = selectors.notification_render(
                 kind=NotificationKind(row.notification.kind),
                 context=row.notification.context,
+                configs=configs,
             )
         data = {
             "notification_id": str(row.notification_id),
@@ -154,7 +158,9 @@ def _deliver_push(rows: list[NotificationDelivery]) -> None:
         Device.objects.filter(registration_id__in=invalid_tokens).delete()
 
 
-def _deliver_sms(rows: list[NotificationDelivery]) -> None:
+def _deliver_sms(
+    rows: list[NotificationDelivery], *, configs: selectors.ConfigMap
+) -> None:
     """One provider call per rendered-body group (language + kind + context).
 
     Bulk providers report counts, not per-number outcomes, so failure
@@ -178,8 +184,10 @@ def _deliver_sms(rows: list[NotificationDelivery]) -> None:
         groups[key].append(row)
     for (language, kind, _context_key), grouped in groups.items():
         with translation.override(language):
-            body = notification_render(
-                kind=NotificationKind(kind), context=grouped[0].notification.context
+            body = selectors.notification_render(
+                kind=NotificationKind(kind),
+                context=grouped[0].notification.context,
+                configs=configs,
             ).body
         numbers = [str(r.notification.recipient.phone) for r in grouped]
         try:
@@ -204,7 +212,7 @@ def _deliver_whatsapp(rows: list[NotificationDelivery]) -> None:
             continue
         entry = catalog_entry(NotificationKind(row.notification.kind))
         template = entry.whatsapp
-        if template is None:  # unreachable while override.clean holds
+        if template is None:  # unreachable while kind-config clean holds
             row.status = DeliveryStatus.FAILED
             row.detail = "kind has no whatsapp template"
             continue

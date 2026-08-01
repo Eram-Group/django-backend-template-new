@@ -1,0 +1,182 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{# Presentation only. Django's add_view still owns POST -> validate ->
+   save_model -> redirect; this template just lays the same form out as a
+   composer. CSS and JS are static files, not inline: SECURE_CSP allows
+   `style-src` unsafe-inline but `script-src` is self+nonce only, so an inline
+   <script> would be blocked in production. #}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'css/broadcast_compose.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script src="{% static 'js/broadcast_compose.js' %}" defer></script>
+{% endblock %}
+
+{% block content %}
+  <div class="bc"
+       data-estimate-url="{{ audience_estimate_url }}"
+       data-title-limit="{{ title_limit }}"
+       data-message-limit="{{ message_limit }}"
+       data-empty-title="{% translate 'Your title' %}"
+       data-empty-body="{% translate 'Your message body appears here.' %}"
+       data-text-recipients="{% translate ':n recipients' %}"
+       data-text-devices="{% translate ':n devices reachable' %}"
+       data-text-calculating="{% translate 'Calculating reach…' %}"
+       data-text-failed="{% translate 'Could not estimate reach.' %}"
+       data-text-empty="{% translate 'This audience is empty — nothing would be sent.' %}"
+       data-text-confirm="{% translate 'Reaching :recipients recipients across :devices devices.' %}">
+
+    <div class="bc-head">
+      <h1>{% translate "New broadcast" %}</h1>
+      <p>
+        {% translate "Compose once, deliver to every targeted recipient. Nothing sends until you dispatch the draft from the broadcast page." %}
+      </p>
+    </div>
+
+    {% if adminform.form.errors %}
+      <div class="bc-errors">
+        <ul>
+          {% for error in adminform.form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+          {% for field in adminform.form %}
+            {% for error in field.errors %}<li>{{ field.label }}: {{ error }}</li>{% endfor %}
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
+
+    <form method="post" id="bc-form" novalidate>
+      {% csrf_token %}
+      <div class="bc-grid">
+        <div>
+          <section class="bc-card">
+            <h2>{% translate "Message" %}</h2>
+
+            <div class="bc-field">
+              <div class="bc-label">
+                <span>{{ adminform.form.title.label }}</span>
+                <span class="bc-count" id="bc-title-count"></span>
+              </div>
+              {{ adminform.form.title }}
+              <p class="bc-hint">{{ adminform.form.title.help_text }}</p>
+            </div>
+
+            <div class="bc-field">
+              <div class="bc-label">
+                <span>{{ adminform.form.message.label }}</span>
+                <span class="bc-count" id="bc-message-count"></span>
+              </div>
+              {{ adminform.form.message }}
+              <p class="bc-hint">{{ adminform.form.message.help_text }}</p>
+            </div>
+          </section>
+
+          <section class="bc-card">
+            <h2>{% translate "Audience" %}</h2>
+            <p class="bc-hint bc-hint-lead">
+              {% translate "Leave every filter unset to reach all active users." %}
+            </p>
+
+            <div class="bc-group">
+              <div class="bc-subhead">{{ adminform.form.language.label }}</div>
+              <div class="bc-chips">
+                {% for radio in adminform.form.language %}
+                  <label class="bc-chip">{{ radio.tag }}{{ radio.choice_label }}</label>
+                {% endfor %}
+              </div>
+            </div>
+
+            <label class="bc-toggle">
+              <span class="bc-toggle-body">
+                <span class="bc-toggle-title">{{ adminform.form.require_device.label }}</span>
+                <span class="bc-toggle-hint">{{ adminform.form.require_device.help_text }}</span>
+              </span>
+              {{ adminform.form.require_device }}
+              <span class="bc-switch" aria-hidden="true"></span>
+            </label>
+
+            <div class="bc-group bc-group-spaced">
+              <div class="bc-subhead">{% translate "Signed up between" %}</div>
+              <div class="bc-dates">
+                {{ adminform.form.joined_after }}
+                <span class="bc-dates-sep">{% translate "and" %}</span>
+                {{ adminform.form.joined_before }}
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <aside class="bc-side">
+          <section class="bc-card">
+            <h2>{% translate "Preview" %}</h2>
+            <div class="bc-preview">
+              <div class="bc-push">
+                <div class="bc-push-icon" aria-hidden="true">{% translate "APP" %}</div>
+                <div class="bc-push-body">
+                  <div class="bc-push-title" id="bc-preview-title">{% translate "Your title" %}</div>
+                  <div class="bc-push-text" id="bc-preview-body">{% translate "Your message body appears here." %}</div>
+                </div>
+              </div>
+              <p class="bc-preview-hint">{% translate "Approximate — each platform truncates differently." %}</p>
+            </div>
+          </section>
+
+          <section class="bc-card">
+            <h2>{% translate "Send to" %}</h2>
+            <div class="bc-reach" id="bc-reach">
+              <div class="bc-reach-value" id="bc-reach-count">—</div>
+              <div class="bc-reach-label" id="bc-reach-devices">{% translate "Calculating reach…" %}</div>
+            </div>
+
+            {% for row in adminform.form.channel_rows %}
+              <label class="bc-toggle" data-channel="{{ row.value }}">
+                <span class="bc-toggle-body">
+                  <span class="bc-toggle-title">{{ row.label }}</span>
+                  <span class="bc-toggle-hint">{{ row.hint }}</span>
+                </span>
+                {{ row.tag }}
+                <span class="bc-switch" aria-hidden="true"></span>
+              </label>
+            {% endfor %}
+
+            <div class="bc-warning" id="bc-sms-warning">
+              {% translate "SMS is billed per message. Check the reach above before creating this draft." %}
+            </div>
+
+            <p class="bc-hint bc-hint-spaced">{{ adminform.form.channels.help_text }}</p>
+
+            <div class="bc-actions">
+              <button type="submit" name="_save" class="bc-btn is-primary" id="bc-save">
+                {% translate "Create draft" %}
+              </button>
+            </div>
+            <div class="bc-status" id="bc-note"></div>
+            <a class="bc-btn bc-btn-quiet" href="{{ changelist_url }}">
+              {% translate "Back to broadcasts" %}
+            </a>
+          </section>
+        </aside>
+      </div>
+    </form>
+  </div>
+
+  <div class="bc-modal" id="bc-modal">
+    <div class="bc-modal-card">
+      <h3>{% translate "Create this broadcast?" %}</h3>
+      <p id="bc-modal-text"></p>
+      <p class="bc-modal-note">
+        {% translate "Creates a draft only. You dispatch it from the broadcast page." %}
+      </p>
+      <div class="bc-actions">
+        <button type="button" class="bc-btn" id="bc-cancel">{% translate "Cancel" %}</button>
+        <button type="button" class="bc-btn is-primary" id="bc-confirm">
+          {% translate "Create draft" %}
+        </button>
+      </div>
+    </div>
+  </div>
+{% endblock %}

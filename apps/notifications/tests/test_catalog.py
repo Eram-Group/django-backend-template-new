@@ -3,14 +3,12 @@
 import string
 
 import pytest
-from django.utils import translation
 
 from apps.notifications.catalog import CATALOG
 from apps.notifications.catalog import WHATSAPP_LANGUAGE_CODES
 from apps.notifications.catalog import MessageTemplate
 from apps.notifications.catalog import WhatsAppTemplate
 from apps.notifications.catalog import catalog_entry
-from apps.notifications.catalog import notification_render
 from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationCategory
 from apps.notifications.constants import NotificationKind
@@ -28,24 +26,23 @@ def test_every_kind_has_a_catalog_entry() -> None:
     assert not missing, f"kinds without catalog entries: {missing}"
 
 
-def test_template_placeholders_match_context_keys() -> None:
+def test_seed_placeholders_match_context_keys() -> None:
+    """The seed copy respects the same contract config rows are validated
+    against - a fresh row starts placeholder-clean."""
     for kind, entry in CATALOG.items():
         found = _placeholders(str(entry.title)) | _placeholders(str(entry.body))
         assert found == entry.context_keys, kind
 
 
-def test_render_with_exact_context_keys_succeeds_in_both_locales() -> None:
-    for kind, entry in CATALOG.items():
-        context = dict.fromkeys(entry.context_keys, "placeholder")
-        for language in ("ar", "en"):
-            with translation.override(language):
-                message = notification_render(kind=kind, context=context)
-            assert message.title, kind
-            assert message.body, kind
-
-
 def test_every_user_language_has_a_whatsapp_language_code() -> None:
     assert set(WHATSAPP_LANGUAGE_CODES) == set(Language.values)
+
+
+def test_only_announcement_is_authored_per_send() -> None:
+    """The composer is the only per-send authoring surface; every other kind's
+    message is operator-editable config, not per-send input."""
+    authored = {kind for kind, entry in CATALOG.items() if entry.authored_per_send}
+    assert authored == {NotificationKind.ANNOUNCEMENT}
 
 
 def test_missing_catalog_entry_is_loud(monkeypatch: pytest.MonkeyPatch) -> None:

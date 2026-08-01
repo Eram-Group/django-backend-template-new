@@ -16,17 +16,23 @@ def _clear_client_outboxes() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _deterministic_channel_policy(request: pytest.FixtureRequest) -> None:
-    """Channel resolution starts from catalog defaults in every DB test.
+def _catalog_seed_config(request: pytest.FixtureRequest) -> None:
+    """Every DB test starts from catalog-seeded config rows.
 
-    --reuse-db keeps rows committed by earlier runs; a leftover override row
-    would silently flip channels for every test that sends. Tests that WANT
-    overrides create them after this fixture ran. Client-only tests (no
-    django_db marker) skip the query entirely.
+    --reuse-db keeps edits committed by earlier runs, and rendering has no
+    code fallback - so each test restores the exact state migration 0004
+    wrote (which also self-heals a reused DB that predates the rows). Tests
+    that WANT different channels or copy edit rows after this ran.
+    Client-only tests (no django_db marker) skip the queries entirely.
     """
     if request.node.get_closest_marker("django_db") is None:
         return
     request.getfixturevalue("db")
-    from apps.notifications.models import NotificationChannelOverride
+    from apps.notifications.constants import NotificationKind
+    from apps.notifications.models import NotificationKindConfig
+    from apps.notifications.tests.factories import kind_config_seed
 
-    NotificationChannelOverride.objects.all().delete()
+    for kind in NotificationKind:
+        NotificationKindConfig.objects.update_or_create(
+            kind=kind, defaults=kind_config_seed(kind)
+        )

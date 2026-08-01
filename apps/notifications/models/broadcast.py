@@ -28,10 +28,26 @@ class Broadcast(BaseModel):
         choices=BroadcastStatus,
         default=BroadcastStatus.DRAFT,
     )
-    # Optional audience filter; blank = every active user.
+    # Audience filters; every one unset = every active user. The queryset that
+    # reads them lives in selectors/broadcasts.py - both the dispatcher's
+    # paging and the inline-backend guard's counting go through it.
     language = models.CharField(
         _("language filter"), max_length=2, choices=Language, blank=True
     )
+    require_device = models.BooleanField(
+        _("registered device required"),
+        default=False,
+        help_text=_(
+            "Skip users with no registered device. They would receive an inbox "
+            "entry but no push."
+        ),
+    )
+    joined_after = models.DateField(_("joined on or after"), null=True, blank=True)
+    joined_before = models.DateField(_("joined on or before"), null=True, blank=True)
+    # Empty = fall back to the kind's channel policy (its NotificationKindConfig
+    # row). A non-empty list overrides it for this send only, so one
+    # announcement can add SMS without changing policy for every announcement.
+    channels = models.JSONField(_("channels"), default=list, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

@@ -54,7 +54,7 @@ def _dispatch_one_page(*, broadcast_id: str) -> bool:
         if broadcast.status != BroadcastStatus.DISPATCHING:
             return False
         kind = NotificationKind(broadcast.kind)
-        channels = sorted(selectors.effective_channels(kind=kind))
+        channels = sorted(selectors.effective_channels(kind=kind, broadcast=broadcast))
         audience = (
             selectors.broadcast_audience(broadcast=broadcast)
             .order_by("pk")

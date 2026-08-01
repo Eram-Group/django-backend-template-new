@@ -12,8 +12,8 @@ from apps.notifications.constants import DevicePlatform
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import Device
 from apps.notifications.models import NotificationDelivery
+from apps.notifications.models import NotificationKindConfig
 from apps.notifications.tests.factories import DeviceFactory
-from apps.notifications.tests.factories import NotificationChannelOverrideFactory
 from apps.notifications.tests.factories import NotificationDeliveryFactory
 from apps.notifications.tests.factories import NotificationFactory
 from apps.users.tests.factories import UserFactory
@@ -54,11 +54,11 @@ def test_send_validates_context_keys() -> None:
         )
 
 
-def test_send_honors_channel_overrides(
+def test_send_honors_the_kind_config_channels(
     django_capture_on_commit_callbacks: Any,
 ) -> None:
-    NotificationChannelOverrideFactory.create(
-        kind=NotificationKind.PAYMENT_PAID, channel=Channel.PUSH, enabled=False
+    NotificationKindConfig.objects.filter(kind=NotificationKind.PAYMENT_PAID).update(
+        channels=[]
     )
     user = UserFactory.create()
 

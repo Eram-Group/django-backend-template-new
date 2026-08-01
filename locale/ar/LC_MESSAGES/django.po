@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-27 19:06+0000\n"
+"POT-Creation-Date: 2026-07-28 16:00+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -27,21 +27,80 @@ msgstr ""
 msgid "Use English text only - Arabic letters are not allowed."
 msgstr ""
 
-#: apps/notifications/admin/broadcast/admin.py:70
+#: apps/notifications/admin/broadcast/admin.py:177
 msgid "Dispatch"
 msgstr ""
 
-#: apps/notifications/admin/broadcast/admin.py:83
+#: apps/notifications/admin/broadcast/admin.py:190
 msgid "Dispatch started - refresh to follow progress."
 msgstr ""
 
-#: apps/notifications/admin/broadcast/admin.py:101
+#: apps/notifications/admin/broadcast/admin.py:208
 msgid "Resume incomplete"
 msgstr ""
 
-#: apps/notifications/admin/broadcast/admin.py:115
+#: apps/notifications/admin/broadcast/admin.py:222
 #, python-format
 msgid "Resume enqueued: %(summary)s"
+msgstr ""
+
+#: apps/notifications/admin/broadcast/change_view.py:11
+#: templates/admin/notifications/broadcast/compose.html:79
+msgid "Audience"
+msgstr ""
+
+#: apps/notifications/admin/broadcast/change_view.py:14
+#: templates/admin/notifications/broadcast/compose.html:81
+msgid "Leave every filter unset to reach all active users."
+msgstr ""
+
+#: apps/notifications/admin/broadcast/change_view.py:17
+#: apps/notifications/admin/broadcast/form.py:138
+#: apps/notifications/admin/notificationkindconfig/form.py:30
+#: templates/admin/notifications/notificationkindconfig/change_list.html:95
+msgid "Channels"
+msgstr ""
+
+#: apps/notifications/admin/broadcast/form.py:41
+msgid "Every registered device."
+msgstr ""
+
+#: apps/notifications/admin/broadcast/form.py:42
+msgid "Billed per message."
+msgstr ""
+
+#: apps/notifications/admin/broadcast/form.py:43
+msgid "Sent through the approved template."
+msgstr ""
+
+#: apps/notifications/admin/broadcast/form.py:89
+msgid "All languages"
+msgstr ""
+
+#: apps/notifications/admin/broadcast/form.py:102
+msgid "Must be on or after the joined-after date."
+msgstr ""
+
+#: apps/notifications/admin/broadcast/form.py:127
+msgid "Title"
+msgstr ""
+
+#: apps/notifications/admin/broadcast/form.py:130
+msgid "The headline recipients see in the notification tray."
+msgstr ""
+
+#: apps/notifications/admin/broadcast/form.py:133
+msgid "Body"
+msgstr ""
+
+#: apps/notifications/admin/broadcast/form.py:135
+msgid "The text every recipient sees. Sent as-is, in one piece."
+msgstr ""
+
+#: apps/notifications/admin/broadcast/form.py:142
+msgid ""
+"Leave every channel off to use this kind's configured policy. Turning any on "
+"overrides that policy for this broadcast only."
 msgstr ""
 
 #: apps/notifications/admin/device/list_view.py:9
@@ -56,9 +115,33 @@ msgstr ""
 msgid "Search by provider message id or recipient email."
 msgstr ""
 
-#: apps/notifications/admin/notificationpreference/list_view.py:9
-#: apps/payments/admin/wallet/list_view.py:9
-msgid "Search by user email."
+#: apps/notifications/admin/notificationkindconfig/admin.py:126
+msgid "Unknown action."
+msgstr ""
+
+#: apps/notifications/admin/notificationkindconfig/form.py:45
+msgid "Title (Arabic)"
+msgstr ""
+
+#: apps/notifications/admin/notificationkindconfig/form.py:46
+msgid "Title (English)"
+msgstr ""
+
+#: apps/notifications/admin/notificationkindconfig/form.py:47
+msgid "Body (Arabic)"
+msgstr ""
+
+#: apps/notifications/admin/notificationkindconfig/form.py:48
+msgid "Body (English)"
+msgstr ""
+
+#: apps/notifications/admin/notificationkindconfig/form.py:90
+msgid "Not available for this action."
+msgstr ""
+
+#: apps/notifications/admin/notificationkindconfig/form.py:113
+#, python-format
+msgid "WhatsApp sends the Meta-approved template \"%(name)s\"."
 msgstr ""
 
 #: apps/notifications/apis/webhooks.py:49
@@ -71,39 +154,39 @@ msgstr ""
 msgid "Webhook payload is not valid JSON."
 msgstr ""
 
-#: apps/notifications/catalog.py:74 apps/users/tasks/emails.py:16
+#: apps/notifications/catalog.py:78 apps/users/tasks/emails.py:16
 msgid "Welcome!"
 msgstr ""
 
-#: apps/notifications/catalog.py:75
+#: apps/notifications/catalog.py:79
 #, python-brace-format
 msgid "Welcome aboard, {name}!"
 msgstr ""
 
-#: apps/notifications/catalog.py:82 apps/notifications/constants.py:9
-msgid "Announcement"
-msgstr ""
-
-#: apps/notifications/catalog.py:93 apps/notifications/constants.py:10
+#: apps/notifications/catalog.py:104 apps/notifications/constants.py:10
 msgid "Payment received"
 msgstr ""
 
-#: apps/notifications/catalog.py:94
+#: apps/notifications/catalog.py:105
 #, python-brace-format
 msgid "Your payment of {amount} {currency} was received."
 msgstr ""
 
-#: apps/notifications/catalog.py:101 apps/notifications/constants.py:11
+#: apps/notifications/catalog.py:112 apps/notifications/constants.py:11
 msgid "Wallet credited"
 msgstr ""
 
-#: apps/notifications/catalog.py:102
+#: apps/notifications/catalog.py:113
 #, python-brace-format
 msgid "{amount} {currency} was added to your wallet. New balance: {balance}."
 msgstr ""
 
 #: apps/notifications/constants.py:8
 msgid "Welcome"
+msgstr ""
+
+#: apps/notifications/constants.py:9
+msgid "Announcement"
 msgstr ""
 
 #: apps/notifications/constants.py:21
@@ -183,7 +266,6 @@ msgid "Web"
 msgstr ""
 
 #: apps/notifications/models/broadcast.py:23
-#: apps/notifications/models/channel_override.py:19
 #: apps/notifications/models/notification.py:25
 #: apps/payments/models/payment.py:32
 #: apps/payments/models/wallet_transaction.py:23
@@ -200,75 +282,78 @@ msgstr ""
 msgid "status"
 msgstr ""
 
-#: apps/notifications/models/broadcast.py:33
+#: apps/notifications/models/broadcast.py:35
 msgid "language filter"
 msgstr ""
 
-#: apps/notifications/models/broadcast.py:39
-msgid "created by"
+#: apps/notifications/models/broadcast.py:38
+msgid "registered device required"
 msgstr ""
 
 #: apps/notifications/models/broadcast.py:41
-msgid "dispatch cursor"
-msgstr ""
-
-#: apps/notifications/models/broadcast.py:42
-msgid "total recipients"
-msgstr ""
-
-#: apps/notifications/models/broadcast.py:43
-msgid "total deliveries"
-msgstr ""
-
-#: apps/notifications/models/broadcast.py:44
-msgid "sent"
+msgid ""
+"Skip users with no registered device. They would receive an inbox entry but "
+"no push."
 msgstr ""
 
 #: apps/notifications/models/broadcast.py:45
-msgid "failed"
+msgid "joined on or after"
 msgstr ""
 
 #: apps/notifications/models/broadcast.py:46
+msgid "joined on or before"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:50
+#: apps/notifications/models/kind_config.py:45
+msgid "channels"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:55
+msgid "created by"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:57
+msgid "dispatch cursor"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:58
+msgid "total recipients"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:59
+msgid "total deliveries"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:60
+msgid "sent"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:61
+msgid "failed"
+msgstr ""
+
+#: apps/notifications/models/broadcast.py:62
 msgid "skipped"
 msgstr ""
 
-#: apps/notifications/models/broadcast.py:49
+#: apps/notifications/models/broadcast.py:65
 #: apps/notifications/models/delivery.py:32
 #: apps/notifications/models/notification.py:34
 msgid "broadcast"
 msgstr ""
 
-#: apps/notifications/models/broadcast.py:50
+#: apps/notifications/models/broadcast.py:66
 msgid "broadcasts"
-msgstr ""
-
-#: apps/notifications/models/channel_override.py:20
-#: apps/notifications/models/delivery.py:34
-#: apps/notifications/models/preference.py:30
-msgid "channel"
-msgstr ""
-
-#: apps/notifications/models/channel_override.py:21
-msgid "enabled"
-msgstr ""
-
-#: apps/notifications/models/channel_override.py:24
-msgid "channel override"
-msgstr ""
-
-#: apps/notifications/models/channel_override.py:25
-msgid "channel overrides"
-msgstr ""
-
-#: apps/notifications/models/channel_override.py:50
-#, python-format
-msgid ""
-"%(kind)s does not support %(channel)s. Supported channels: %(supported)s."
 msgstr ""
 
 #: apps/notifications/models/delivery.py:24
 #: apps/notifications/models/notification.py:38
 msgid "notification"
+msgstr ""
+
+#: apps/notifications/models/delivery.py:34
+msgid "channel"
 msgstr ""
 
 #: apps/notifications/models/delivery.py:41
@@ -299,10 +384,8 @@ msgstr ""
 msgid "notification deliveries"
 msgstr ""
 
-#: apps/notifications/models/device.py:21
-#: apps/notifications/models/preference.py:25
-#: apps/payments/models/payment.py:30 apps/payments/models/saved_card.py:25
-#: apps/payments/models/wallet.py:23
+#: apps/notifications/models/device.py:21 apps/payments/models/payment.py:30
+#: apps/payments/models/saved_card.py:25 apps/payments/models/wallet.py:23
 msgid "user"
 msgstr ""
 
@@ -322,6 +405,41 @@ msgstr ""
 msgid "devices"
 msgstr ""
 
+#: apps/notifications/models/kind_config.py:42
+msgid "action"
+msgstr ""
+
+#: apps/notifications/models/kind_config.py:46
+msgid "title"
+msgstr ""
+
+#: apps/notifications/models/kind_config.py:47
+msgid "body"
+msgstr ""
+
+#: apps/notifications/models/kind_config.py:59
+msgid "notification action"
+msgstr ""
+
+#: apps/notifications/models/kind_config.py:60
+msgid "notification actions"
+msgstr ""
+
+#: apps/notifications/models/kind_config.py:83
+msgid "Must be a list of channel names."
+msgstr ""
+
+#: apps/notifications/models/kind_config.py:89
+#, python-format
+msgid ""
+"%(kind)s does not support: %(channels)s. Supported channels: %(supported)s."
+msgstr ""
+
+#: apps/notifications/models/kind_config.py:106
+#, python-format
+msgid "Unknown placeholders: %(unknown)s. This action provides: %(keys)s."
+msgstr ""
+
 #: apps/notifications/models/notification.py:23
 msgid "recipient"
 msgstr ""
@@ -334,41 +452,38 @@ msgstr ""
 msgid "notifications"
 msgstr ""
 
-#: apps/notifications/models/preference.py:28
-msgid "category"
-msgstr ""
-
-#: apps/notifications/models/preference.py:33
-msgid "notification preference"
-msgstr ""
-
-#: apps/notifications/models/preference.py:34
-msgid "notification preferences"
-msgstr ""
-
-#: apps/notifications/models/preference.py:48
-#: apps/notifications/services/preferences.py:25
-#: apps/notifications/services/preferences.py:55
-msgid "Transactional notifications cannot be opted out of."
-msgstr ""
-
 #: apps/notifications/selectors/notifications.py:21
 msgid "Notification not found."
 msgstr ""
 
-#: apps/notifications/services/broadcasts.py:71
+#: apps/notifications/services/broadcasts.py:67
+msgid "The joined-after date must not be later than joined-before."
+msgstr ""
+
+#: apps/notifications/services/broadcasts.py:99
+#, python-format
+msgid "This notification kind cannot be sent on: %(channels)s."
+msgstr ""
+
+#: apps/notifications/services/broadcasts.py:113
 msgid "Broadcast was already dispatched."
 msgstr ""
 
-#: apps/notifications/services/broadcasts.py:85
+#: apps/notifications/services/broadcasts.py:127
 msgid "Broadcast has not been dispatched."
 msgstr ""
 
-#: apps/notifications/services/broadcasts.py:124
+#: apps/notifications/services/broadcasts.py:166
 #, python-format
 msgid ""
 "Audience of %(audience)s exceeds the inline-backend limit of %(limit)s - run "
 "a real worker (TASKS_IMMEDIATE=false)."
+msgstr ""
+
+#: apps/notifications/services/config.py:48
+msgid ""
+"This action's message is authored per broadcast - compose it from the "
+"Broadcasts page."
 msgstr ""
 
 #: apps/payments/admin/payment/admin.py:60 apps/payments/constants.py:45
@@ -385,6 +500,10 @@ msgstr ""
 
 #: apps/payments/admin/savedcard/list_view.py:22
 msgid "Search by owner email or gateway token."
+msgstr ""
+
+#: apps/payments/admin/wallet/list_view.py:9
+msgid "Search by user email."
 msgstr ""
 
 #: apps/payments/admin/wallettransaction/list_view.py:13
@@ -695,34 +814,31 @@ msgid "Devices"
 msgstr ""
 
 #: config/settings/base.py:364
-msgid "Channel overrides"
+#: templates/admin/notifications/notificationkindconfig/change_list.html:31
+msgid "Notification actions"
 msgstr ""
 
-#: config/settings/base.py:374
-msgid "Preferences"
-msgstr ""
-
-#: config/settings/base.py:386 config/settings/base.py:389
+#: config/settings/base.py:376 config/settings/base.py:379
 msgid "Payments"
 msgstr ""
 
-#: config/settings/base.py:397
+#: config/settings/base.py:387
 msgid "Wallets"
 msgstr ""
 
-#: config/settings/base.py:405
+#: config/settings/base.py:395
 msgid "Wallet transactions"
 msgstr ""
 
-#: config/settings/base.py:417
+#: config/settings/base.py:407
 msgid "Operations"
 msgstr ""
 
-#: config/settings/base.py:420
+#: config/settings/base.py:410
 msgid "Task results"
 msgstr ""
 
-#: config/settings/base.py:430
+#: config/settings/base.py:420
 msgid "Login attempts"
 msgstr ""
 
@@ -760,6 +876,173 @@ msgstr ""
 #: templates/account/email/login_code_message.html:11
 #, python-format
 msgid "This code expires in %(minutes)s minutes."
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:25
+#: templates/admin/notifications/broadcast/compose.html:120
+msgid "Your title"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:26
+#: templates/admin/notifications/broadcast/compose.html:121
+msgid "Your message body appears here."
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:27
+msgid ":n recipients"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:28
+msgid ":n devices reachable"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:29
+#: templates/admin/notifications/broadcast/compose.html:132
+msgid "Calculating reach…"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:30
+msgid "Could not estimate reach."
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:31
+msgid "This audience is empty — nothing would be sent."
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:32
+msgid "Reaching :recipients recipients across :devices devices."
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:35
+msgid "New broadcast"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:37
+msgid ""
+"Compose once, deliver to every targeted recipient. Nothing sends until you "
+"dispatch the draft from the broadcast page."
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:57
+msgid "Message"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:103
+msgid "Signed up between"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:106
+msgid "and"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:115
+#: templates/admin/notifications/notificationkindconfig/change_list.html:127
+msgid "Preview"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:118
+#: templates/admin/notifications/notificationkindconfig/change_list.html:134
+msgid "APP"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:124
+msgid "Approximate — each platform truncates differently."
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:129
+msgid "Send to"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:147
+msgid ""
+"SMS is billed per message. Check the reach above before creating this draft."
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:154
+#: templates/admin/notifications/broadcast/compose.html:177
+msgid "Create draft"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:159
+msgid "Back to broadcasts"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:169
+msgid "Create this broadcast?"
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:172
+msgid "Creates a draft only. You dispatch it from the broadcast page."
+msgstr ""
+
+#: templates/admin/notifications/broadcast/compose.html:175
+msgid "Cancel"
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:24
+msgid "Saving…"
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:25
+msgid "Saved — live for the next send."
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:26
+msgid "Could not save."
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:27
+msgid "Fix the highlighted fields."
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:28
+msgid "Unsaved changes."
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:33
+msgid ""
+"Each action declares the channels it sends on and the message it sends. "
+"Changes apply to the very next send — nothing is cached."
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:49
+msgid "Message authored per broadcast"
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:53
+msgid "Provides:"
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:57
+msgid "no variables"
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:67
+msgid ""
+"The operator writes this message when composing each broadcast — title and "
+"body pass through exactly as typed."
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:70
+msgid "Go to broadcasts"
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:89
+msgid ""
+"Placeholders in braces are replaced per recipient. Only the variables listed "
+"above are available."
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:121
+msgid "Everything off = inbox only. The in-app entry is always written."
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:146
+msgid "Save"
+msgstr ""
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:152
+msgid "Open full form"
 msgstr ""
 
 #: templates/emails/welcome.html:4

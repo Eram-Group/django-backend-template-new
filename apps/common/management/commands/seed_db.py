@@ -321,7 +321,10 @@ class Command(BaseCommand):
                 notif_specs.append(
                     (
                         NotificationKind.ANNOUNCEMENT,
-                        {"message": f"Seed announcement {uuid.uuid4().hex[:6]}"},
+                        {
+                            "title": "Seed announcement",
+                            "message": f"Seed announcement {uuid.uuid4().hex[:6]}",
+                        },
                     )
                 )
             plans.append((user, balance, tx_specs, notif_specs))
@@ -389,9 +392,9 @@ class Command(BaseCommand):
         ]
         Notification.objects.bulk_create(notifications, batch_size=BATCH)
         # Replicates notification_send + the executor: one delivery row per
-        # catalog-DEFAULT channel (the seeder never reads operator override
-        # rows), SENT when the user has a device, SKIPPED otherwise, with a
-        # sprinkle of FAILED for realism.
+        # catalog-SEED channel (the seeder never reads operator-edited config
+        # rows - fresh DBs are identical either way), SENT when the user has a
+        # device, SKIPPED otherwise, with a sprinkle of FAILED for realism.
         deliveries = []
         for notification in notifications:
             entry = CATALOG[NotificationKind(notification.kind)]
@@ -475,7 +478,10 @@ class Command(BaseCommand):
         for status, audience, delivery_status in specs:
             broadcast = Broadcast(
                 kind=NotificationKind.ANNOUNCEMENT,
-                context={"message": f"Seed broadcast {uuid.uuid4().hex[:6]}"},
+                context={
+                    "title": "Seed broadcast",
+                    "message": f"Seed broadcast {uuid.uuid4().hex[:6]}",
+                },
                 status=status,
                 created_by=sample[0],
                 dispatch_cursor=audience[-1].pk,

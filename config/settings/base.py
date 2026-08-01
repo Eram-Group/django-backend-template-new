@@ -361,13 +361,13 @@ UNFOLD = {
                         ),
                     },
                     {
-                        "title": _("Channel overrides"),
+                        "title": _("Notification actions"),
                         "icon": "tune",
                         "link": reverse_lazy(
-                            "admin:notifications_notificationchanneloverride_changelist"
+                            "admin:notifications_notificationkindconfig_changelist"
                         ),
                         "permission": lambda request: request.user.has_perm(
-                            "notifications.view_notificationchanneloverride"
+                            "notifications.view_notificationkindconfig"
                         ),
                     },
                 ],

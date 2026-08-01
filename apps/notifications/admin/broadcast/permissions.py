@@ -19,6 +19,12 @@ FIELD_PERMISSIONS = FieldPermissions(
         "kind": on_change,
         "context": on_change,
         "language": on_change,
+        # Audience and channels freeze with the content: a dispatched
+        # broadcast must keep showing who it actually went to and how.
+        "require_device": on_change,
+        "joined_after": on_change,
+        "joined_before": on_change,
+        "channels": on_change,
         "created_by": always,  # stamped from request.user, never typed
         "status": always,
         "dispatch_cursor": always,

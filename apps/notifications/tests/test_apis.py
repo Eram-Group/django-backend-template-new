@@ -1,11 +1,13 @@
-"""Inbox + device + preference endpoints."""
+"""Inbox + device endpoints."""
 
 import pytest
 from django.test import Client
 
+from apps.notifications.constants import NotificationKind
 from apps.notifications.models import Device
 from apps.notifications.models import Notification
 from apps.notifications.models import NotificationDelivery
+from apps.notifications.models import NotificationKindConfig
 from apps.notifications.tests.factories import NotificationDeliveryFactory
 from apps.notifications.tests.factories import NotificationFactory
 from apps.users.tests.factories import UserFactory
@@ -49,10 +51,27 @@ def test_inbox_lists_only_own_rows_rendered(client: Client) -> None:
 
     assert len(body["items"]) == 2
     item = body["items"][0]
-    assert item["title"]  # rendered from the catalog, not stored
+    assert item["title"]  # rendered from the kind's config row, not stored
     assert "Omar" in item["body"]
     assert item["read_at"] is None
     assert "next_cursor" in body
+
+
+def test_inbox_renders_edited_copy_per_request_locale(client: Client) -> None:
+    """Render-at-read against the LIVE config row: an admin edit shows up in
+    old inbox rows immediately, in the requester's language."""
+    NotificationKindConfig.objects.filter(kind=NotificationKind.WELCOME).update(
+        body_ar="أهلاً {name}", body_en="Hey {name}"
+    )
+    user = UserFactory.create()
+    NotificationFactory.create(recipient=user, context={"name": "Omar"})
+    client.force_login(user)
+
+    english = client.get(f"{LIST}/", headers={"Accept-Language": "en"}).json()
+    arabic = client.get(f"{LIST}/", headers={"Accept-Language": "ar"}).json()
+
+    assert english["items"][0]["body"] == "Hey Omar"
+    assert arabic["items"][0]["body"] == "أهلاً Omar"
 
 
 def test_unread_count_and_read_flow(client: Client) -> None:

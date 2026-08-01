@@ -5,7 +5,6 @@ from typing import Any
 import pytest
 from django.utils import translation
 
-from apps.notifications.catalog import notification_render
 from apps.notifications.clients.push import backends as push_backends
 from apps.notifications.clients.sms import backends as sms_backends
 from apps.notifications.clients.whatsapp import backends as whatsapp_backends
@@ -14,6 +13,7 @@ from apps.notifications.constants import Channel
 from apps.notifications.constants import DeliveryStatus
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import Device
+from apps.notifications.selectors import notification_render
 from apps.notifications.tasks.delivery import deliver_notifications
 from apps.notifications.tasks.delivery import execute_deliveries
 from apps.notifications.tests.factories import DeviceFactory
