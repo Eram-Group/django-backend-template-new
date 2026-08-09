@@ -19,20 +19,17 @@ router = Router(tags=["users"])
 
 @router.get("/me", response=UserDetail, summary="Current user")
 def user_me(request: AuthedRequest[User]) -> User:
-    return request.auth  # ninja auth already loaded this row
+    return request.auth 
 
 
 @router.patch("/me", response=UserDetail, summary="Update current user")
 def user_me_update(
     request: AuthedRequest[User], payload: PatchDict[UserUpdateIn]
 ) -> User:
-    # PatchDict delivers only the keys the client sent.
     return services.user_update(user=request.auth, data=payload)
 
 
 @router.delete("/me", response={204: None}, summary="Deactivate current user")
 def user_me_deactivate(request: AuthedRequest[User]) -> Status[None]:
-    """In-app account removal (store policy): deactivates and revokes every
-    session - this request's credentials stop working immediately."""
     services.user_deactivate(user=request.auth)
     return Status(204, None)
