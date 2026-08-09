@@ -27,20 +27,15 @@ CODE_ALPHABET = "0123456789"
 
 class AccountAdapter(DefaultAccountAdapter):
     def is_open_for_signup(self, request: HttpRequest) -> bool:
-        """Signup kill-switch driven by the ACCOUNT_ALLOW_REGISTRATION env flag."""
         return env.ACCOUNT_ALLOW_REGISTRATION
 
     def generate_login_code(self) -> str:
-        """6-digit numeric login codes (allauth default is dashed alphanumeric)."""
         return get_random_string(length=CODE_LENGTH, allowed_chars=CODE_ALPHABET)
 
     def generate_email_verification_code(self) -> str:
-        """6-digit numeric email verification codes."""
         return get_random_string(length=CODE_LENGTH, allowed_chars=CODE_ALPHABET)
 
     def send_mail(self, template_prefix: str, email: str, context: Any) -> None:
-        """The login-code template renders its expiry from the real setting -
-        hardcoded copy drifts (learned from the reference template)."""
         if template_prefix == "account/email/login_code":
             context = {
                 **context,
@@ -55,15 +50,9 @@ class AccountAdapter(DefaultAccountAdapter):
         form: Any,
         commit: bool = True,
     ) -> User:
-        """Run post-signup side effects once the user row actually exists."""
-        # First-touchpoint localization: the welcome email renders in
-        # user.language, which defaults to Arabic - capture the client's
-        # Accept-Language (constrained to LANGUAGES by Django) before the
-        # post-signup task enqueues.
+        
         user.language = get_language_from_request(request)
         saved: User = super().save_user(request, user, form, commit=commit)
         if commit:
-            # Social signups reach here with commit=False (no pk yet); the
-            # social adapter triggers user_post_signup after ITS save (G04).
             user_post_signup(user=saved)
         return saved

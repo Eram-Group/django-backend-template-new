@@ -1,4 +1,4 @@
-from apps.users.selectors.users import user_get
-from apps.users.selectors.users import user_list
+from apps.users.selectors.users import get_user_by_id
+from apps.users.selectors.users import get_user_list
 
-__all__ = ["user_get", "user_list"]
+__all__ = ["get_user_by_id", "get_user_list"]
