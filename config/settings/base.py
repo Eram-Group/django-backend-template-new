@@ -21,6 +21,9 @@ from config.env import env
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 
 # --- Core ---------------------------------------------------------------
+# Surfaced as a setting (rather than read from env directly) so system checks
+# and tests can reason about the deployment environment via override_settings.
+ENVIRONMENT = env.ENVIRONMENT
 SECRET_KEY = env.SECRET_KEY.get_secret_value()
 SECRET_KEY_FALLBACKS = [key.get_secret_value() for key in env.SECRET_KEY_FALLBACKS]
 DEBUG = False  # local.py turns it on
