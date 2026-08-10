@@ -14,15 +14,6 @@ from apps.payments.constants import PaymentStatus
 
 
 class Payment(BaseModel):
-    """One checkout attempt against a payment gateway.
-
-    Status transitions happen ONLY in services (webhook/verify/refund);
-    money is plain Decimal + a currency column - integer minor units exist
-    only on the wire (gateways.base.to_minor_units).
-    """
-
-    # PROTECT: financial history outlives everything; account "deletion" is
-    # deactivation (users.user_deactivate), never a row delete.
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -45,8 +36,6 @@ class Payment(BaseModel):
         default=PaymentStatus.PENDING,
     )
     gateway = models.CharField(_("gateway"), max_length=10, choices=GatewayName)
-    # SET_NULL: deleting a saved card must never 500 payment history; the
-    # audit trail survives in gateway_response/gateway_callback.
     saved_card = models.ForeignKey(
         "payments.SavedCard",
         on_delete=models.SET_NULL,
@@ -55,23 +44,13 @@ class Payment(BaseModel):
         null=True,
         blank=True,
     )
-    # Consent gate: the customer ticked "save my card" on THIS checkout.
-    # Card payloads on gateway events are persisted only when set (Paymob's
-    # standalone TOKEN callback bypasses it - its hosted checkbox is the
-    # consent).
     save_card_requested = models.BooleanField(_("save card requested"), default=False)
-    # The reference WE plant at the gateway (Tap reference.transaction /
-    # Paymob special_reference) - stable across create retries, and how
-    # webhooks find their Payment row.
     idempotency_key = models.UUIDField(
         _("idempotency key"), default=uuid.uuid4, unique=True, editable=False
     )
-    # Checkout-time id (Tap charge id / Paymob intention id) ...
     gateway_charge_id = models.CharField(
         _("gateway charge id"), max_length=255, blank=True
     )
-    # ... vs the settled transaction id reported by the webhook (refunds
-    # target this one on Paymob).
     gateway_transaction_id = models.CharField(
         _("gateway transaction id"), max_length=255, blank=True
     )
@@ -83,10 +62,6 @@ class Payment(BaseModel):
         _("gateway callback"), null=True, blank=True
     )
     paid_at = models.DateTimeField(_("paid at"), null=True, blank=True)
-    # Write-ahead marker for the refund executor: stamped (and committed)
-    # BEFORE the provider refund call, which is NOT idempotent at Tap/Paymob.
-    # A REFUND_PENDING row with this set must never re-hit the gateway -
-    # it needs manual reconciliation against the provider dashboard.
     refund_attempted_at = models.DateTimeField(
         _("refund attempted at"), null=True, blank=True, editable=False
     )
@@ -99,8 +74,6 @@ class Payment(BaseModel):
             models.Index(fields=["gateway_charge_id"]),
         ]
         constraints = [
-            # DB backstop for the MinValueValidator - guards any write path
-            # that bypasses full_clean (raw SQL, bulk updates).
             models.CheckConstraint(
                 condition=models.Q(amount__gt=0),
                 name="payment_amount_positive",

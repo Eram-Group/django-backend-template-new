@@ -4,17 +4,6 @@ from django.db.models.functions import Now
 
 
 class BaseModel(models.Model):
-    """Abstract base for every concrete model in the project (including User).
-
-    The pk is a UUIDv7 generated IN the database (PG18-native uuidv7()), so
-    inserts outside Django (fixtures, raw SQL) get correct pks too; Django's
-    INSERT ... RETURNING populates the value on save. The timestamps carry
-    db_default=Now() for the same reason - an out-of-Django INSERT that
-    omits them must not hit NOT NULL. updated_at keeps auto_now on top
-    because Postgres has no declarative on-update default (that would need
-    a trigger); bulk .update() calls must set it explicitly.
-    """
-
     id = models.UUIDField(
         primary_key=True,
         editable=False,
