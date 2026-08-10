@@ -7,17 +7,6 @@ from apps.payments.constants import GatewayName
 
 
 class SavedCard(BaseModel):
-    """A gateway-stored card-on-file, saved with the customer's consent.
-
-    Only opaque provider references live here - PAN and expiry stay at the
-    provider (PCI scope stays SAQ-A); brand/last4/expiry are display data.
-    Rows are created by gateway webhooks (services.saved_cards) and deleted
-    through saved_card_delete, which also detaches the card at the gateway
-    where the provider supports it.
-    """
-
-    # PROTECT: app norm - account "deletion" is deactivation, never a row
-    # delete; a stored charge credential must not vanish silently either.
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
@@ -25,14 +14,10 @@ class SavedCard(BaseModel):
         verbose_name=_("user"),
     )
     gateway = models.CharField(_("gateway"), max_length=10, choices=GatewayName)
-    # The chargeable reference: Tap card_id ("card_...") / Paymob card token.
     token = models.CharField(_("token"), max_length=255)
-    # Tap "cus_..." - Tap charges/deletes need it; blank for Paymob.
     gateway_customer_id = models.CharField(
         _("gateway customer id"), max_length=255, blank=True
     )
-    # Tap "payment_agreement_..." - required for non-3DS (MIT) charges;
-    # blank for Paymob.
     gateway_agreement_id = models.CharField(
         _("gateway agreement id"), max_length=255, blank=True
     )
@@ -47,8 +32,6 @@ class SavedCard(BaseModel):
         verbose_name = _("saved card")
         verbose_name_plural = _("saved cards")
         constraints = [
-            # A provider token exists once; a token resurfacing under another
-            # account is reassigned by the upsert, never duplicated.
             models.UniqueConstraint(
                 fields=["gateway", "token"], name="savedcard_gateway_token_unique"
             ),

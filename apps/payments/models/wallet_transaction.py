@@ -7,13 +7,6 @@ from apps.payments.constants import WalletTransactionKind
 
 
 class WalletTransaction(BaseModel):
-    """Append-only ledger row - the audit trail for every balance movement.
-
-    ``amount`` is signed (credit > 0, debit < 0); ``balance_after`` snapshots
-    the post-movement balance so drift is detectable by replaying the chain.
-    Rows are only created by services.wallet_apply, never edited or deleted.
-    """
-
     wallet = models.ForeignKey(
         "payments.Wallet",
         on_delete=models.PROTECT,
