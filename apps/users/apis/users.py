@@ -19,7 +19,7 @@ router = Router(tags=["users"])
 
 @router.get("/me", response=UserDetail, summary="Current user")
 def user_me(request: AuthedRequest[User]) -> User:
-    return request.auth 
+    return request.auth
 
 
 @router.patch("/me", response=UserDetail, summary="Update current user")

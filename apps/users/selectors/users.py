@@ -3,7 +3,6 @@ import uuid
 from django.db.models import QuerySet
 from django.utils.translation import gettext_lazy as _
 
-
 from apps.users.exceptions import UserNotFoundError
 from apps.users.models import User
 
@@ -20,6 +19,7 @@ def get_user_list(*, is_active: bool | None = None) -> QuerySet[User]:
     if is_active is not None:
         users = users.filter(is_active=is_active)
     return users
+
 
 def get_user_count(*, is_active: bool | None = None) -> int:
     return get_user_list(is_active=is_active).count()

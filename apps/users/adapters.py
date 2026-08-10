@@ -50,7 +50,7 @@ class AccountAdapter(DefaultAccountAdapter):
         form: Any,
         commit: bool = True,
     ) -> User:
-        
+
         user.language = get_language_from_request(request)
         saved: User = super().save_user(request, user, form, commit=commit)
         if commit:

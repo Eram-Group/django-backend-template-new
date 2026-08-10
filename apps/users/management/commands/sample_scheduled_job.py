@@ -8,7 +8,6 @@ from typing import Any
 
 from django.core.management.base import BaseCommand
 
-from apps.users.selectors import get_user_list
 from apps.users.selectors.users import get_user_count
 
 
