@@ -7,13 +7,6 @@ from apps.notifications.constants import NotificationKind
 
 
 class Notification(BaseModel):
-    """One in-app inbox row per recipient (per-recipient read state).
-
-    Content is (kind, context) rendered from the catalog at send/read time
-    in the viewer's locale - never pre-rendered text. The *_sent_at markers
-    make delivery tasks idempotent and manual re-enqueues safe.
-    """
-
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

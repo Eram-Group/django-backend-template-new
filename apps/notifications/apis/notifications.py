@@ -22,12 +22,12 @@ router = Router(tags=["notifications"])
 @router.get("", response=list[NotificationSummary], summary="My notifications")
 @paginate(CursorPagination)
 def notification_list(request: AuthedRequest[User]) -> QuerySet[Notification]:
-    return selectors.notification_list(user=request.auth)
+    return selectors.list_user_notifications(user=request.auth)
 
 
 @router.get("/unread-count", response=UnreadCountOut, summary="Unread count")
 def notification_unread_count(request: AuthedRequest[User]) -> dict[str, int]:
-    return {"unread": selectors.notification_unread_count(user=request.auth)}
+    return {"unread": selectors.get_unread_notification_count(user=request.auth)}
 
 
 @router.post("/read-all", response=ReadAllOut, summary="Mark all read")

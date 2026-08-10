@@ -64,7 +64,7 @@ def notification_send(
 
 
 def notification_mark_read(*, user: User, pk: uuid.UUID) -> Notification:
-    notification = selectors.notification_get(user=user, pk=pk)
+    notification = selectors.get_notification_for_user(user=user, pk=pk)
     if notification.read_at is None:
         notification.read_at = timezone.now()
         notification.full_clean()
