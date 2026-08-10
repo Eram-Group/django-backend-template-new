@@ -104,24 +104,6 @@ def payment_initiate(
     description: str = "",
     saved_card: SavedCard | None = None,
 ) -> Payment:
-    """Create the PENDING row, then ask the gateway for a checkout URL.
-
-    The client waits for checkout_url, so the gateway call is synchronous
-    (kernel timeout 10s < gunicorn's 30s); the idempotency key is planted at
-    the gateway, so a retried initiate can never double-charge.
-
-    Every new-card checkout requests vaulting (saving is not
-    client-optional; a stored card cannot be re-saved). ``saved_card`` pays
-    one-click WITH a stored card: Paymob still returns a checkout_url
-    (hosted CVV entry); Tap charges server-side and may settle
-    synchronously - the response is then already terminal with an empty
-    checkout_url, or carries a 3DS-challenge URL to redirect to.
-
-    Accepted risk: under ATOMIC_REQUESTS the PENDING row becomes visible to
-    webhooks only when the request commits, so a webhook racing the commit
-    404s - the gateway's webhook retry, ``payment_verify``, and the
-    ``reconcile_payments`` sweep all pick it up.
-    """
     if kind == PaymentKind.WALLET_TOPUP:
         # Fail before the provider charges: waiting for the credit path to
         # reject the mismatch would strand already-captured money.
@@ -195,14 +177,6 @@ def payment_charge_saved(
     kind: PaymentKind | str = PaymentKind.OTHER,
     description: str = "",
 ) -> Payment:
-    """MIT: charge a stored card server-side, no customer present.
-
-    Never auto-retry a failure here - a merchant-initiated charge that ran
-    twice is a double-charge, not a retry. The gateways always plant our
-    reference AND the webhook URL, so a crash between the provider call and
-    the row update self-heals when the webhook lands; FAILED is non-terminal,
-    so a late CAPTURED webhook corrects a wrongly-FAILED row too.
-    """
     if kind == PaymentKind.WALLET_TOPUP:
         _wallet_for(user=user, currency=str(currency))
     gateway = gateway_for_currency(str(currency))
