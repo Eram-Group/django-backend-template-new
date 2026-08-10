@@ -1,5 +1,3 @@
-"""Push-token registration endpoints."""
-
 from ninja import Router
 from ninja.responses import Status
 

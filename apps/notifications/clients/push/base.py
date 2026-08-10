@@ -1,5 +1,3 @@
-"""Push transport contract + error taxonomy (leaf - importable everywhere)."""
-
 from collections.abc import Mapping
 from collections.abc import Sequence
 from dataclasses import dataclass

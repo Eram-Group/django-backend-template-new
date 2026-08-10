@@ -19,8 +19,6 @@ class SentPush:
     data: Mapping[str, str]
 
 
-#: The ``mail.outbox`` analogue - LocmemPushBackend appends here; the
-#: notifications test conftest clears it between tests.
 outbox: list[SentPush] = []
 
 

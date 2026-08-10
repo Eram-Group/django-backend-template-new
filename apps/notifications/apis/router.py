@@ -1,5 +1,3 @@
-"""The notifications app's public router - mounted at /notifications/."""
-
 from ninja import Router
 
 from apps.notifications.apis.devices import router as devices_router
