@@ -10,11 +10,11 @@ from apps.payments.models import Payment
 from apps.users.models import User
 
 
-def payment_list(*, user: User) -> QuerySet[Payment]:
+def list_user_payments(*, user: User) -> QuerySet[Payment]:
     return Payment.objects.filter(user=user)
 
 
-def payment_get(*, user: User, pk: uuid.UUID) -> Payment:
+def get_user_payment(*, user: User, pk: uuid.UUID) -> Payment:
     try:
         return Payment.objects.get(user=user, pk=pk)
     except Payment.DoesNotExist as exc:

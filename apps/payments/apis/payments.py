@@ -29,7 +29,7 @@ def payment_create(request: AuthedRequest[User], payload: PaymentCreateIn) -> Pa
     terminal (paid/failed).
     """
     saved_card = (
-        selectors.saved_card_get(user=request.auth, pk=payload.saved_card_id)
+        selectors.get_saved_card(user=request.auth, pk=payload.saved_card_id)
         if payload.saved_card_id
         else None
     )
@@ -46,13 +46,13 @@ def payment_create(request: AuthedRequest[User], payload: PaymentCreateIn) -> Pa
 @router.get("", response=list[PaymentSummary], summary="My payments")
 @paginate(CursorPagination)
 def payment_list(request: AuthedRequest[User]) -> QuerySet[Payment]:
-    return selectors.payment_list(user=request.auth)
+    return selectors.list_user_payments(user=request.auth)
 
 
 @router.get("/{payment_id}", response=PaymentDetail, summary="Payment status")
 def payment_detail(request: AuthedRequest[User], payment_id: uuid.UUID) -> Payment:
     """DB read only - the webhook is the source of truth."""
-    return selectors.payment_get(user=request.auth, pk=payment_id)
+    return selectors.get_user_payment(user=request.auth, pk=payment_id)
 
 
 @router.post(
@@ -61,5 +61,5 @@ def payment_detail(request: AuthedRequest[User], payment_id: uuid.UUID) -> Payme
 def payment_verify(request: AuthedRequest[User], payment_id: uuid.UUID) -> Payment:
     """On-demand re-query of the gateway - the fallback when the user
     returned from checkout but the webhook has not arrived yet."""
-    payment = selectors.payment_get(user=request.auth, pk=payment_id)
+    payment = selectors.get_user_payment(user=request.auth, pk=payment_id)
     return services.payment_verify(payment=payment)

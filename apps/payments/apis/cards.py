@@ -21,7 +21,7 @@ router = Router(tags=["payments"])
 @router.get("/cards", response=list[SavedCardSummary], summary="My saved cards")
 @paginate(CursorPagination)
 def saved_card_list(request: AuthedRequest[User]) -> QuerySet[SavedCard]:
-    return selectors.saved_card_list(user=request.auth)
+    return selectors.list_saved_cards(user=request.auth)
 
 
 @router.delete(
@@ -31,6 +31,6 @@ def saved_card_list(request: AuthedRequest[User]) -> QuerySet[SavedCard]:
 )
 def saved_card_delete(request: AuthedRequest[User], card_id: uuid.UUID) -> Status[None]:
     """Removes the card here and best-effort detaches it at the gateway."""
-    card = selectors.saved_card_get(user=request.auth, pk=card_id)
+    card = selectors.get_saved_card(user=request.auth, pk=card_id)
     services.saved_card_delete(user=request.auth, saved_card=card)
     return Status(204, None)

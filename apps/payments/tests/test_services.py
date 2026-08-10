@@ -434,7 +434,7 @@ def test_wallet_get_requires_provisioned_wallet() -> None:
     Wallet.objects.filter(user=user).delete()  # break the signup invariant
 
     with pytest.raises(WalletNotFoundError):
-        selectors.wallet_get(user=user)
+        selectors.get_user_wallet(user=user)
 
 
 def test_initiate_topup_rejects_mismatched_wallet_currency() -> None:

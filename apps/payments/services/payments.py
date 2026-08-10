@@ -44,7 +44,7 @@ from apps.payments.gateways.base import WebhookEvent
 from apps.payments.models import Payment
 from apps.payments.models import SavedCard
 from apps.payments.models import Wallet
-from apps.payments.selectors.wallets import wallet_get
+from apps.payments.selectors.wallets import get_user_wallet
 from apps.payments.services.saved_cards import saved_card_store
 from apps.payments.services.wallets import wallet_apply
 from apps.payments.tasks.refunds import process_payment_refund
@@ -87,7 +87,7 @@ def _validate_saved_card(
 def _wallet_for(*, user: User, currency: str) -> Wallet:
     """Resolve the user's signup-provisioned wallet for a payment in
     ``currency``, rejecting a currency mismatch before any money moves."""
-    wallet = wallet_get(user=user)
+    wallet = get_user_wallet(user=user)
     if wallet.currency != currency:
         raise WalletCurrencyMismatchError(
             str(_("Wallet currency does not match the payment currency."))
@@ -356,22 +356,6 @@ def payment_verify(*, payment: Payment) -> Payment:
 
 
 def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
-    """Refund phase 1, the interlock - the provider is NOT called here.
-
-    Full refund only (partial refunds: extend with an amount arg + partial
-    ledger). Locks the row, requires PAID (a concurrent second refund fails
-    this check before ever reaching the gateway), debits the wallet for
-    top-ups (a spent credit raises InsufficientBalanceError before the
-    provider is contacted), flips to REFUND_PENDING, and enqueues
-    ``process_payment_refund`` on commit.
-
-    The provider call lives in the worker task on purpose: request handlers
-    run under ATOMIC_REQUESTS, which would turn the executor's transactions
-    into savepoints - holding the Payment+Wallet row locks across outbound
-    HTTP and rolling the interlock back to PAID on a crash even after the
-    provider refunded. Committing REFUND_PENDING with the request and doing
-    the rest in the worker closes both holes.
-    """
     if gateway_by_name(payment.gateway) is None:
         raise PaymentNotFoundError(str(_("Payment gateway is not configured.")))
     with transaction.atomic():
@@ -404,22 +388,6 @@ def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
 def payment_refund_execute(
     *, payment_id: uuid.UUID, actor: User | None = None
 ) -> Payment:
-    """Refund phases 2+3: provider call + finalization. Worker/sweep only -
-    never call from a request handler (ATOMIC_REQUESTS would reopen the
-    crash window the start/execute split exists to close).
-
-    Safe to re-run: a row no longer REFUND_PENDING is a no-op, and a row
-    whose ``refund_attempted_at`` marker is already set is never re-sent to
-    the provider (``gateway.refund`` is not idempotent at Tap/Paymob) - it
-    is logged for manual reconciliation instead.
-
-    Error contract: ``PaymentGatewayUnavailableError`` /
-    ``PaymentRefundFailedError`` mean the interlock was reverted (row back
-    to PAID, wallet compensated - safe to retry). A raw ``OutboundError`` /
-    ``GatewayResponseError`` escaping means the provider MAY have processed
-    the refund: the row stays REFUND_PENDING with the marker set, the task
-    fails loudly, and a human reconciles against the provider dashboard.
-    """
     with transaction.atomic():
         locked = Payment.objects.select_for_update().get(pk=payment_id)
         if locked.status != PaymentStatus.REFUND_PENDING:

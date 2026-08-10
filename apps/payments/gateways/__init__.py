@@ -28,11 +28,6 @@ def gateway_for_currency(currency: str) -> PaymentGateway:
 
 
 def gateway_by_name(name: str) -> PaymentGateway | None:
-    """Resolve a configured gateway by its ``name`` (webhook URL segment).
-
-    ``name`` is a class attribute, so matching needs no instantiation -
-    only the matched gateway is constructed (constructors read secrets).
-    """
     for path in set(settings.PAYMENT_GATEWAYS.values()):
         gateway_cls: type[PaymentGateway] = import_string(path)
         if gateway_cls.name == name:

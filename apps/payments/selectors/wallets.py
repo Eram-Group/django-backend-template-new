@@ -9,13 +9,12 @@ from apps.payments.models import WalletTransaction
 from apps.users.models import User
 
 
-def wallet_get(*, user: User) -> Wallet:
-    """The user's wallet - provisioned at signup, so absence is a 404."""
+def get_user_wallet(*, user: User) -> Wallet:
     try:
         return Wallet.objects.get(user=user)
     except Wallet.DoesNotExist as exc:
         raise WalletNotFoundError(str(_("Wallet not found."))) from exc
 
 
-def wallet_transaction_list(*, user: User) -> QuerySet[WalletTransaction]:
+def get_user_wallet_transactions(*, user: User) -> QuerySet[WalletTransaction]:
     return WalletTransaction.objects.filter(wallet__user=user)

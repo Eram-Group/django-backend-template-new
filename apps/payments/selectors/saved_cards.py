@@ -10,11 +10,11 @@ from apps.payments.models import SavedCard
 from apps.users.models import User
 
 
-def saved_card_list(*, user: User) -> QuerySet[SavedCard]:
+def list_saved_cards(*, user: User) -> QuerySet[SavedCard]:
     return SavedCard.objects.filter(user=user)
 
 
-def saved_card_get(*, user: User, pk: uuid.UUID) -> SavedCard:
+def get_saved_card(*, user: User, pk: uuid.UUID) -> SavedCard:
     try:
         return SavedCard.objects.get(user=user, pk=pk)
     except SavedCard.DoesNotExist as exc:

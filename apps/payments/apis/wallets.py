@@ -18,7 +18,7 @@ router = Router(tags=["payments"])
 
 @router.get("/wallet", response=WalletDetail, summary="My wallet")
 def wallet_detail(request: AuthedRequest[User]) -> Wallet:
-    return selectors.wallet_get(user=request.auth)
+    return selectors.get_user_wallet(user=request.auth)
 
 
 @router.get(
@@ -28,4 +28,4 @@ def wallet_detail(request: AuthedRequest[User]) -> Wallet:
 )
 @paginate(CursorPagination)
 def wallet_transactions(request: AuthedRequest[User]) -> QuerySet[WalletTransaction]:
-    return selectors.wallet_transaction_list(user=request.auth)
+    return selectors.get_user_wallet_transactions(user=request.auth)
