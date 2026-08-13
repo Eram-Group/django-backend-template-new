@@ -21,8 +21,7 @@ class UserManager(DjangoUserManager["User"]):
         **extra_fields: Any,
     ) -> User:
         if not email:
-            msg = "The email address must be set."
-            raise ValueError(msg)
+            raise ValueError("The email address must be set.")
         email = self.normalize_email(email)
         user = self.model(email=email, **extra_fields)
         if password:
@@ -51,30 +50,19 @@ class UserManager(DjangoUserManager["User"]):
         extra_fields.setdefault("is_staff", True)
         extra_fields.setdefault("is_superuser", True)
         if extra_fields["is_staff"] is not True:
-            msg = "Superuser must have is_staff=True."
-            raise ValueError(msg)
+            raise ValueError("Superuser must have is_staff=True.")
         if extra_fields["is_superuser"] is not True:
-            msg = "Superuser must have is_superuser=True."
-            raise ValueError(msg)
+            raise ValueError("Superuser must have is_superuser=True.")
         return self._create_user(email, password, **extra_fields)
 
 
 class User(BaseModel, AbstractUser):
-    """Application user: email login, single name field, passwordless by default.
-
-    Staff/superusers keep (Argon2) passwords for admin login; regular users
-    authenticate via email codes / social login only.
-    """
-
     username = None  # type: ignore[assignment]
     first_name = None  # type: ignore[assignment]
     last_name = None  # type: ignore[assignment]
 
     email = models.EmailField(_("email address"), unique=True)
     name = models.CharField(_("name"), max_length=255, blank=True)
-    # Optional and NOT unique - email is the login identity. Stored E164 with
-    # no default region: clients submit the country code (+966... / +20...).
-    # SMS delivery skips phone-less users; payments send it when present.
     phone = PhoneNumberField(_("phone number"), blank=True)
     language = models.CharField(
         _("language"),
@@ -91,8 +79,6 @@ class User(BaseModel, AbstractUser):
     def __str__(self) -> str:
         return self.email
 
-    # AbstractUser builds these from first_name/last_name, which are removed
-    # above - inherited versions would render the literal string "None None".
     def get_full_name(self) -> str:
         return self.name
 
