@@ -8,7 +8,8 @@ task queue), one Docker image deployed as two ECS services. Arabic-first
 (ar/en).
 
 How the code is organized: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md);
-how clients authenticate: [docs/AUTH_API.md](docs/AUTH_API.md). The
+how clients authenticate: [docs/AUTH_API.md](docs/AUTH_API.md); how the
+lint rule set is chosen: [docs/LINTING.md](docs/LINTING.md). The
 authoritative design document is [PLAN.md](PLAN.md); the remaining build
 sequence lives in [TODO.json](TODO.json).
 
