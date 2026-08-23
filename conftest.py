@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 import stamina
-from pytest_django.fixtures import SettingsWrapper
+from pytest_django import Settings
 
 from apps.users.models import User
 from apps.users.tests.factories import UserFactory
@@ -24,7 +24,7 @@ def _stamina_testing() -> Iterator[None]:
 
 
 @pytest.fixture(autouse=True)
-def _tmp_media_root(settings: SettingsWrapper, tmp_path: Path) -> None:
+def _tmp_media_root(settings: Settings, tmp_path: Path) -> None:
     """Tests never write into the real media/ directory."""
     settings.MEDIA_ROOT = tmp_path / "media"
 

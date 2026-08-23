@@ -33,9 +33,10 @@ updates:
         patterns: ["*"]
         update-types: ["minor", "patch"]
     ignore:
-      # Stay on 6.0.x until the 6.1/6.2-LTS hop is planned.
+      # Stay on 6.1.x until the 6.2-LTS hop is planned. The 6.0 -> 6.1 hop
+      # landed 2026-08-23 (MAILERS migration); 6.2 LTS is the next one.
       - dependency-name: "django"
-        versions: [">=6.1"]
+        versions: [">=6.2"]
 
   # Workflow action versions. Majors land as individual PRs on purpose: the
   # G10 sweep showed a bad pin breaks every job at once (setup-uv@v8 did not

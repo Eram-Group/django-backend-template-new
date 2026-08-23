@@ -1,4 +1,4 @@
-"""Gateway resolution - the EMAIL_BACKEND pattern, keyed by currency.
+"""Gateway resolution - the mail-backend pattern, keyed by currency.
 
 ``settings.PAYMENT_GATEWAYS`` maps currency -> dotted gateway class; base
 and test settings point every currency at the FakeGateway, production.py

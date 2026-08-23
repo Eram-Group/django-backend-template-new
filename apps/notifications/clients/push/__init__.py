@@ -2,7 +2,7 @@
 
 Console in base/local, FcmPushBackend (firebase-admin, HTTP v1) when
 deployed, Locmem in tests (``backends.outbox``). Same settings-string switch
-as SMS_BACKEND / EMAIL_BACKEND.
+as SMS_BACKEND / Django's own mail backend.
 """
 
 from collections.abc import Mapping

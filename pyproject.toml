@@ -15,7 +15,7 @@ classifiers = [
 dependencies = [
   "argon2-cffi>=25.1",
   "dj-database-url>=3.1.2",
-  "django>=6.0,<6.1",
+  "django>=6.1,<6.2",
   "django-allauth[headless-spec,socialaccount]>=65.18",
   "django-anymail[amazon-ses]>=15.0",
   "django-axes>=8.3.1",
@@ -127,7 +127,7 @@ overrides = [
   # Django migrations should not produce any errors:
   { module = "*.migrations.*", ignore_errors = true },
   # Third-party packages without type stubs / py.typed:
-  { module = [ "allauth.*", "health_check.*", "django_ratelimit.*", "unfold.*", "import_export.*", "phonenumber_field.*", "firebase_admin.*" ], ignore_missing_imports = true },
+  { module = [ "allauth.*", "axes.*", "health_check.*", "django_ratelimit.*", "unfold.*", "import_export.*", "phonenumber_field.*", "firebase_admin.*" ], ignore_missing_imports = true },
   # The framework wraps unfold/import-export (untyped) once; per-entity
   # admins subclass OUR typed classes and need no exemption:
   { module = "apps.common.admin.*", disallow_subclassing_any = false },

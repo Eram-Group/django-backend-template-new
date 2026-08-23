@@ -169,8 +169,8 @@ A 2xx with an error body is the **caller's** job: each provider module owns
 an allowlist success predicate (OurSMS accepted/rejected counts, SMSMisr
 `code == "1901"`) — unknown shapes fail loudly, never pass silently.
 
-**Transport selection = the `EMAIL_BACKEND` pattern** (settings string,
-resolved per call): `SMS_BACKEND` / `PUSH_BACKEND` (base + local = console
+**Transport selection = the mail-backend pattern** (settings string,
+resolved per call — what Django itself now spells `MAILERS`): `SMS_BACKEND` / `PUSH_BACKEND` (base + local = console
 backends with structlog lines; `production.py` swaps in the real transports
 only when `_DEPLOYED`) and `PAYMENT_GATEWAYS` (currency → gateway class —
 the same Tap SAR / Paymob EGP mapping in every environment; the `.env` keys

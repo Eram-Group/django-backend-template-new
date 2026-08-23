@@ -137,8 +137,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Exact pin - no floating `v8` tag exists upstream (see ci.yml).
-      - uses: astral-sh/setup-uv@v8.3.2
+      # Exact pin - no floating major tag past `v7` upstream (see ci.yml).
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 

@@ -70,7 +70,7 @@ if _DEPLOYED:
 
 # --- Email via SES (Anymail); compose containers keep SMTP -> Mailpit ------------
 if _DEPLOYED:
-    EMAIL_BACKEND = "anymail.backends.amazon_ses.EmailBackend"
+    MAILERS = {"default": {"BACKEND": "anymail.backends.amazon_ses.EmailBackend"}}
     ANYMAIL = {
         "AMAZON_SES_CLIENT_PARAMS": {"region_name": env.AWS_SES_REGION},
     }

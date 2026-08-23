@@ -93,6 +93,11 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                # Publishes {{ csp_nonce }} to templates. Required by
+                # SECURE_CSP's script-src CSP.NONCE - without it the nonce
+                # only reaches the header, never the rendered <script>, and
+                # nonce-gating silently does nothing (Django 6.1 security.W027).
+                "django.template.context_processors.csp",
             ],
         },
     },
@@ -199,7 +204,8 @@ MODELTRANSLATION_FALLBACK_LANGUAGES = ("ar", "en")
 
 def environment_callback(request: Any) -> list[str]:
     """Colored header badge - the wrong-environment guard. The Literal env
-    field keeps this mapping exhaustive."""
+    field keeps this mapping exhaustive.
+    """
     return {
         "production": ["PRODUCTION", "danger"],
         "dev": ["DEV", "warning"],
@@ -406,12 +412,26 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # --- Email ------------------------------------------------------------------
-EMAIL_TIMEOUT = 5
+# Django 6.1 deprecated every EMAIL_* setting in favour of MAILERS (removal in
+# 7.0). Defining MAILERS makes those names ILLEGAL anywhere in the settings
+# chain - Django raises ImproperlyConfigured on any leftover, so a new mailer
+# option goes in OPTIONS, never back into an EMAIL_* global. DEFAULT_FROM_EMAIL
+# is not part of that deprecation and stays put.
+# Default = SMTP at whatever env points to (Mailpit locally); test.py swaps in
+# locmem, production.py swaps in SES once deployed.
 DEFAULT_FROM_EMAIL = env.DEFAULT_FROM_EMAIL
-EMAIL_HOST = env.EMAIL_HOST
-EMAIL_PORT = env.EMAIL_PORT
+MAILERS = {
+    "default": {
+        "BACKEND": "django.core.mail.backends.smtp.EmailBackend",
+        "OPTIONS": {
+            "host": env.EMAIL_HOST,
+            "port": env.EMAIL_PORT,
+            "timeout": 5,
+        },
+    }
+}
 
-# --- Outbound clients: SMS + push (the EMAIL_BACKEND pattern) -----------------
+# --- Outbound clients: SMS + push (the mail-backend pattern) ------------------
 # Console backends log locally; production.py swaps in the real transports
 # (RoutingSmsBackend / FcmPushBackend) when deployed; test.py uses locmem.
 SMS_BACKEND = "apps.notifications.clients.sms.backends.ConsoleSmsBackend"

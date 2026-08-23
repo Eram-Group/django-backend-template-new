@@ -14,7 +14,7 @@ sequence lives in [TODO.json](TODO.json).
 
 | | |
 |---|---|
-| Runtime | Python 3.14, Django 6.0, django-ninja (API at `/api/v1/`), allauth headless (`/_allauth/`) |
+| Runtime | Python 3.14, Django 6.1, django-ninja (API at `/api/v1/`), allauth headless (`/_allauth/`) |
 | Data | PostgreSQL 18 (db-generated uuidv7 pks, DatabaseCache, db sessions, django.tasks db backend) |
 | Storage / email | S3 + CloudFront via django-storages; SES via Anymail (Mailpit locally) |
 | Quality | ruff, mypy --strict, pytest (coverage gate ≥ 80%), import-linter contracts, pre-commit |
