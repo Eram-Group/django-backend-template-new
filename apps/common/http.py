@@ -42,7 +42,7 @@ _client_lock = threading.Lock()
 
 
 def _get_client() -> httpx.Client:
-    global _client  # process-wide connection pool
+    global _client  # noqa: PLW0603 - process-wide pool, guarded by _client_lock
     if _client is None:
         with _client_lock:
             if _client is None:

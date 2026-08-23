@@ -447,7 +447,7 @@ def payment_refund_execute(
         )
     except (OutboundError, GatewayResponseError) as exc:
         if _refund_outcome_unknown(exc):
-            logger.error(
+            logger.exception(
                 "payment_refund_needs_reconciliation",
                 payment_id=str(locked.pk),
                 gateway=locked.gateway,
