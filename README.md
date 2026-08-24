@@ -27,7 +27,7 @@ Prerequisites: [uv](https://docs.astral.sh/uv/), [just](https://just.systems),
 Docker (for Postgres + Mailpit).
 
 ```bash
-just bootstrap   # deps, .env, git hooks, postgres:18 + mailpit, migrate + cache table
+just bootstrap   # (alias: install, setup) deps, .env, git hooks, postgres:18 + mailpit, migrate + cache table
 just superuser   # admin@example.com / admin (from .env, idempotent)
 just seed        # ~300 realistic fake users (see "Seed data" below)
 just run         # dev server on http://localhost:8000

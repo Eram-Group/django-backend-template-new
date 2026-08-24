@@ -9,6 +9,9 @@ set dotenv-load := true
 default:
     @just --list
 
+alias install := bootstrap
+alias setup := bootstrap
+
 # One-time setup: deps, .env, git hooks, infra, release step.
 bootstrap:
     uv sync
