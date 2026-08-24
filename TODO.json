@@ -193,6 +193,16 @@
       ],
       "dependsOn": ["gateways-e2e-verify"],
       "status": "pending"
+    },
+    {
+      "id": "wallet-credit-expiry",
+      "group": "G21",
+      "title": "Wallet transactions with optional expiration (expiring credits)",
+      "endGoal": "Wallet transactions can optionally expire.",
+      "tips": [
+        "Requested by Omar 2026-08-24."
+      ],
+      "status": "pending"
     }
   ]
 }
