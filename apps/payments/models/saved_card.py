@@ -36,6 +36,10 @@ class SavedCard(BaseModel):
     gateway_agreement_id = models.CharField(
         _("gateway agreement id"), max_length=255, blank=True
     )
+    # Tap "fingerprint" - the provider's hash of the card number. The same
+    # physical card keeps it across tokens/customers, so it is the dedup key;
+    # blank when the provider has none (Paymob) or the lookup failed.
+    fingerprint = models.CharField(_("fingerprint"), max_length=128, blank=True)
     brand = models.CharField(_("brand"), max_length=50, blank=True)
     last4 = models.CharField(_("last four digits"), max_length=4, blank=True)
     exp_month = models.PositiveSmallIntegerField(
@@ -51,6 +55,13 @@ class SavedCard(BaseModel):
             # account is reassigned by the upsert, never duplicated.
             models.UniqueConstraint(
                 fields=["gateway", "token"], name="savedcard_gateway_token_unique"
+            ),
+            # One row per physical card per user - saved_card_store folds a
+            # re-vaulted card (new token, same fingerprint) into the old row.
+            models.UniqueConstraint(
+                fields=["user", "gateway", "fingerprint"],
+                condition=~models.Q(fingerprint=""),
+                name="savedcard_user_gateway_fingerprint_unique",
             ),
         ]
         indexes = [models.Index(fields=["user", "gateway"])]

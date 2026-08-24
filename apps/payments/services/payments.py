@@ -47,6 +47,7 @@ from apps.payments.gateways.base import to_minor_units
 from apps.payments.models import Payment
 from apps.payments.models import SavedCard
 from apps.payments.models import Wallet
+from apps.payments.selectors.saved_cards import saved_card_gateway_customer_id
 from apps.payments.selectors.wallets import wallet_get
 from apps.payments.services.saved_cards import saved_card_store
 from apps.payments.services.wallets import wallet_apply
@@ -164,6 +165,13 @@ def payment_initiate(
         ),
         redirect_url=f"{settings.FRONTEND_BASE_URL}/payments/{payment.pk}/return",
         saved_card=_card_ref(saved_card) if saved_card is not None else None,
+        # A new card is filed under the customer the user's other cards use,
+        # so re-entering a card yields the same provider card, not a copy.
+        customer_id=(
+            saved_card_gateway_customer_id(user=user, gateway=gateway.name)
+            if saved_card is None
+            else ""
+        ),
     )
     try:
         session = gateway.create_checkout(request=request)

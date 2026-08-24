@@ -49,6 +49,7 @@ class SavedCardFactory(DjangoModelFactory[SavedCard]):
     token = Sequence(lambda n: f"fake_card_{_RUN_TAG}_{n}")
     gateway_customer_id = Sequence(lambda n: f"fake_cus_{_RUN_TAG}_{n}")
     gateway_agreement_id = Sequence(lambda n: f"fake_agr_{_RUN_TAG}_{n}")
+    fingerprint = Sequence(lambda n: f"fake_fp_{_RUN_TAG}_{n}")
     brand = "VISA"
     last4 = "4242"
     exp_month = 12

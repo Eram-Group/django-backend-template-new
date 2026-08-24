@@ -278,6 +278,10 @@ class PaymobGateway:
         """Local-only: Paymob documents no public token-delete endpoint."""
         return True
 
+    def saved_card_fingerprint(self, *, saved_card: SavedCardRef) -> str:
+        """Paymob exposes no card fingerprint; tokens dedupe on their own."""
+        return ""
+
     def _intention_body(
         self, *, request: CheckoutRequest, payment_methods: list[int]
     ) -> dict[str, Any]:

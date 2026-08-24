@@ -235,8 +235,12 @@ Per-area notes:
   drives the same transition service (Mailpit's role, for payments).
 - **Saved cards** (built 2026-07-18): `SavedCard` stores only opaque
   provider references (Tap card/customer/agreement ids, Paymob token) —
-  PAN and expiry never touch our servers. Saving is always-on, not
-  client-optional: every new-card checkout requests vaulting
+  PAN and expiry never touch our servers. One row per physical card: Tap
+  checkouts reuse the customer id the user's cards already live under
+  (`saved_card_gateway_customer_id`), and `saved_card_store` dedupes on
+  Tap's card `fingerprint` (fetched from the Card API when the webhook
+  omits it), repointing the row and detaching the superseded card.
+  Saving is always-on, not client-optional: every new-card checkout requests vaulting
   (`Payment.save_card_requested`, which still gates persisting the card
   payload Tap echoes on webhooks — one-click rows never re-vault); on
   Paymob the hosted checkout's Save-Card checkbox governs, arriving as a
