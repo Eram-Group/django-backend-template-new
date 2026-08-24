@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import pytest
 from django.test import Client
+from structlog.testing import capture_logs
 
 from apps.payments.constants import PaymentKind
 from apps.payments.constants import PaymentStatus
@@ -103,41 +104,63 @@ def test_webhook_marks_paid_and_credits_wallet_once(client: Client) -> None:
     assert wallet.transactions.count() == 1
 
 
-def test_webhook_with_bad_signature_is_400(client: Client) -> None:
+def test_webhook_with_bad_signature_is_400_and_logged(client: Client) -> None:
+    """A rejected callback is money we did not record: it must be an ERROR
+    log event (Sentry), not just a 400 in the access log."""
     payment = PaymentFactory.create()
 
-    response = client.post(
-        FAKE_WEBHOOK,
-        _webhook_body(payment),
-        content_type="application/json",
-        headers={"X-Fake-Signature": "forged"},
-    )
+    with capture_logs() as logs:
+        response = client.post(
+            FAKE_WEBHOOK,
+            _webhook_body(payment),
+            content_type="application/json",
+            headers={"X-Fake-Signature": "forged"},
+        )
 
     assert response.status_code == 400
     assert response.json()["extra"]["code"] == "webhook_rejected"
     payment.refresh_from_db()
     assert payment.status == PaymentStatus.PENDING
+    rejected = [log for log in logs if log["event"] == "payment_webhook_rejected"]
+    assert len(rejected) == 1
+    assert rejected[0]["log_level"] == "error"
+    assert rejected[0]["gateway"] == "fake"
+    assert rejected[0]["reason"]
+    assert "forged" not in str(rejected[0])  # never echo the posted signature
 
 
-def test_webhook_for_unknown_gateway_is_400(client: Client) -> None:
-    response = client.post(
-        f"{PAYMENTS}/webhooks/nope",
-        "{}",
-        content_type="application/json",
-    )
+def test_webhook_for_unknown_gateway_is_400_and_logged(client: Client) -> None:
+    with capture_logs() as logs:
+        response = client.post(
+            f"{PAYMENTS}/webhooks/nope",
+            "{}",
+            content_type="application/json",
+        )
 
     assert response.status_code == 400
+    rejected = [log for log in logs if log["event"] == "payment_webhook_rejected"]
+    assert len(rejected) == 1
+    assert rejected[0]["log_level"] == "error"
+    assert rejected[0]["gateway"] == "nope"
+    assert rejected[0]["reason"] == "unknown gateway"
 
 
-def test_webhook_for_unknown_payment_is_404(client: Client) -> None:
-    response = client.post(
-        FAKE_WEBHOOK,
-        json.dumps({"reference": "ghost", "paid": True}),
-        content_type="application/json",
-        headers=SIGNATURE,
-    )
+def test_webhook_for_unknown_payment_is_404_and_logged(client: Client) -> None:
+    with capture_logs() as logs:
+        response = client.post(
+            FAKE_WEBHOOK,
+            json.dumps({"reference": "ghost", "paid": True}),
+            content_type="application/json",
+            headers=SIGNATURE,
+        )
 
     assert response.status_code == 404
+    unknown = [log for log in logs if log["event"] == "payment_webhook_unknown_payment"]
+    assert len(unknown) == 1
+    assert unknown[0]["log_level"] == "warning"
+    assert unknown[0]["gateway"] == "fake"
+    assert unknown[0]["reference"] == "ghost"
+    assert not [log for log in logs if log["event"] == "payment_webhook_rejected"]
 
 
 # --- wallet ----------------------------------------------------------------------

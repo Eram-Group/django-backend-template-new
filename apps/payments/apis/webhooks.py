@@ -13,16 +13,19 @@ stored against the user by billing email. Both ack with ``{"ok": true}`` -
 gateways only read the status code.
 """
 
+import structlog
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 from ninja import Router
 
 from apps.payments import services
+from apps.payments.exceptions import PaymentNotFoundError
 from apps.payments.exceptions import WebhookRejectedError
 from apps.payments.gateways import gateway_by_name
 from apps.payments.gateways.base import WebhookEventKind
 from apps.payments.gateways.base import WebhookVerificationError
 
+logger = structlog.get_logger(__name__)
 router = Router(tags=["payments-webhooks"])
 
 
@@ -34,17 +37,36 @@ router = Router(tags=["payments-webhooks"])
     include_in_schema=False,
 )
 def payment_webhook(request: HttpRequest, gateway_name: str) -> dict[str, bool]:
+    # A rejected webhook is money the provider took and we did not record -
+    # ERROR so it reaches Sentry instead of hiding in the access log (a wrong
+    # HMAC secret on a fresh deployment rejects every callback this way).
     gateway = gateway_by_name(gateway_name)
     if gateway is None:
+        logger.error(
+            "payment_webhook_rejected", gateway=gateway_name, reason="unknown gateway"
+        )
         raise WebhookRejectedError(str(_("Unknown payment gateway.")))
     try:
         event = gateway.parse_webhook(
             headers=request.headers, params=request.GET, body=request.body
         )
     except WebhookVerificationError as exc:
+        # str(exc) is one of the gateway's fixed reason strings - never the
+        # posted signature or body.
+        logger.error(  # noqa: TRY400 - the reason string is the signal; a traceback into hmac.compare_digest adds nothing
+            "payment_webhook_rejected", gateway=gateway_name, reason=str(exc)
+        )
         raise WebhookRejectedError(str(_("Webhook verification failed."))) from exc
     if event.kind == WebhookEventKind.CARD_TOKEN:
         services.saved_card_store_from_event(gateway_name=gateway_name, event=event)
-    else:
+        return {"ok": True}
+    try:
         services.payment_apply_gateway_event(gateway_name=gateway_name, event=event)
+    except PaymentNotFoundError:
+        logger.warning(
+            "payment_webhook_unknown_payment",
+            gateway=gateway_name,
+            reference=event.reference,
+        )
+        raise
     return {"ok": True}

@@ -291,6 +291,17 @@ def test_webhook_without_hmac_param_is_rejected() -> None:
         )
 
 
+@pytest.mark.parametrize("body", [b"[]", b"null", b'"text"', b"42"])
+def test_webhook_with_non_object_body_is_rejected(body: bytes) -> None:
+    """Valid JSON that is not an object must be a clean rejection, not an
+    AttributeError 500 that makes the gateway retry a body it can never
+    verify."""
+    with pytest.raises(WebhookVerificationError):
+        PaymobGateway().parse_webhook(
+            headers={}, params={"hmac": _sign(_webhook_obj())}, body=body
+        )
+
+
 @pytest.mark.parametrize("blank", ["", "   ", "\t"])
 def test_webhook_with_blank_secret_fails_closed(settings: Any, blank: str) -> None:
     """A blank signing secret must refuse the webhook, never sign with it.

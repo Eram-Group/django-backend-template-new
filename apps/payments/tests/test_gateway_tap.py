@@ -165,6 +165,15 @@ def test_webhook_without_hashstring_is_rejected() -> None:
         )
 
 
+@pytest.mark.parametrize("body", [b"[]", b"null", b'"text"', b"42"])
+def test_webhook_with_non_object_body_is_rejected(body: bytes) -> None:
+    """Valid JSON that is not an object is a clean rejection, not a 500."""
+    with pytest.raises(WebhookVerificationError):
+        TapGateway().parse_webhook(
+            headers={"hashstring": _sign(_webhook_payload())}, params={}, body=body
+        )
+
+
 @respx.mock
 def test_fetch_status_maps_captured() -> None:
     respx.get(f"{CHARGES.rstrip('/')}/chg_1").mock(

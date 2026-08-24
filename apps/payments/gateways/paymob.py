@@ -334,6 +334,9 @@ class PaymobGateway:
         except ValueError as exc:
             msg = "webhook body is not JSON"
             raise WebhookVerificationError(msg) from exc
+        if not isinstance(payload, dict):
+            msg = "webhook body is not a JSON object"
+            raise WebhookVerificationError(msg)
         obj = payload.get("obj", {})
         if not isinstance(obj, dict):
             obj = {}

@@ -221,6 +221,9 @@ class TapGateway:
         except ValueError as exc:
             msg = "webhook body is not JSON"
             raise WebhookVerificationError(msg) from exc
+        if not isinstance(payload, dict):
+            msg = "webhook body is not a JSON object"
+            raise WebhookVerificationError(msg)
         if not hmac.compare_digest(_expected_hashstring(payload), posted):
             msg = "hashstring mismatch"
             raise WebhookVerificationError(msg)
