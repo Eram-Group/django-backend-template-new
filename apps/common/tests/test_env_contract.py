@@ -6,6 +6,7 @@ the other fails here (same-change rule from CLAUDE.md).
 """
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 from pydantic import SecretStr
@@ -104,3 +105,47 @@ def test_blank_normalisation_leaves_lists_and_required_fields_alone() -> None:
     # A required field is left untouched by the normaliser (blank-vs-missing
     # for required fields is a separate, pre-existing question).
     assert Env(_env_file=str(ENV_EXAMPLE), ADMIN_URL="admin/").ADMIN_URL == "admin/"
+
+
+@pytest.mark.parametrize(
+    ("environment", "field", "value"),
+    [
+        ("production", "TAP_SECRET_KEY", "sk_live_abc"),
+        ("production", "PAYMOB_SECRET_KEY", "egy_sk_live_abc"),
+        ("production", "PAYMOB_PUBLIC_KEY", "egy_pk_live_abc"),
+        ("local", "TAP_SECRET_KEY", "sk_test_abc"),
+        ("local", "PAYMOB_SECRET_KEY", "egy_sk_test_abc"),
+        ("dev", "PAYMOB_PUBLIC_KEY", "egy_pk_test_abc"),
+    ],
+)
+def test_payment_key_matching_environment_is_accepted(
+    environment: str, field: str, value: str
+) -> None:
+    overrides: dict[str, Any] = {"ENVIRONMENT": environment, field: value}
+    env = Env(_env_file=str(ENV_EXAMPLE), **overrides)
+    assert getattr(env, field) is not None
+
+
+@pytest.mark.parametrize(
+    ("environment", "field", "value", "mode"),
+    [
+        # Test keys deployed: every checkout a sandbox no-op nobody notices.
+        ("production", "TAP_SECRET_KEY", "sk_test_abc", "live"),
+        ("production", "PAYMOB_SECRET_KEY", "egy_sk_test_abc", "live"),
+        ("production", "PAYMOB_PUBLIC_KEY", "egy_pk_test_abc", "live"),
+        # Live keys on a laptop / dev box: real charges.
+        ("local", "TAP_SECRET_KEY", "sk_live_abc", "test"),
+        ("local", "PAYMOB_SECRET_KEY", "egy_sk_live_abc", "test"),
+        ("dev", "PAYMOB_PUBLIC_KEY", "egy_pk_live_abc", "test"),
+        # Says neither: refused as well.
+        ("production", "TAP_SECRET_KEY", "not-a-key", "live"),
+    ],
+)
+def test_payment_key_mismatching_environment_is_refused(
+    environment: str, field: str, value: str, mode: str
+) -> None:
+    """Fails at import, names the field, and never echoes the key."""
+    overrides: dict[str, Any] = {"ENVIRONMENT": environment, field: value}
+    with pytest.raises(ValueError, match=f"{field} is not a {mode} key") as excinfo:
+        Env(_env_file=str(ENV_EXAMPLE), **overrides)
+    assert value not in str(excinfo.value)
