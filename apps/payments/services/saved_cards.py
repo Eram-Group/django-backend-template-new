@@ -64,10 +64,20 @@ def saved_card_store_from_event(
     user = User.objects.filter(email__iexact=data.email).first()
     if user is None:
         logger.warning(
-            "saved_card_user_not_found", gateway=gateway_name, email=data.email
+            "saved_card_user_not_found",
+            gateway=gateway_name,
+            email=_mask_email(data.email),
         )
         return None
     return saved_card_store(user=user, gateway=gateway_name, data=data)
+
+
+def _mask_email(email: str) -> str:
+    """``omar@example.com`` -> ``o***@example.com`` (logs carry no PII)."""
+    local, sep, domain = email.partition("@")
+    if not sep:
+        return "***"
+    return f"{local[:1]}***@{domain}"
 
 
 def saved_card_delete(*, user: User, saved_card: SavedCard) -> None:

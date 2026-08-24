@@ -210,13 +210,29 @@ Per-area notes:
   `select_for_update`, never overwriting terminal statuses (replays ack
   with 200 and cannot re-credit). Webhooks REALLY verify: Tap `hashstring`
   HMAC-SHA256, Paymob `hmac` HMAC-SHA512 over its 20 documented fields,
-  constant-time compares. The webhook route
-  (`/api/v1/payments/webhooks/{gateway}`) is the API's one deliberate
-  `auth=None` surface — signature IS the authentication. Wallet balance
-  moves only through `wallet_apply` (Wallet row lock + append-only
-  `WalletTransaction` ledger with `balance_after`). Local flow:
-  `manage.py simulate_payment_webhook <pk> [--fail] [--save-card]` drives
-  the same transition service (Mailpit's role, for payments).
+  constant-time compares. After the signature, the service cross-checks
+  the signed `amount_minor`/`currency` against the row
+  (`PaymentEventMismatchError`, nothing written on a mismatch). Only two
+  event shapes ever transition a row — paid and declined; everything else
+  is `is_pending` (still in flight on the bank's OTP page, an
+  authorization we never capture, or a refund/void/capture CHILD
+  transaction on the same order) and is recorded without touching status
+  or the settled `gateway_transaction_id`. A provider-side reversal on a
+  PAID row is logged for manual reconciliation, never auto-debited. The
+  webhook route (`/api/v1/payments/webhooks/{gateway}`) is the API's one
+  deliberate `auth=None` surface — signature IS the authentication.
+  Paymob publishes no webhook retry policy, so `payment_verify` (Paymob:
+  `transaction_inquiry`, authenticated with an `auth_token` minted from
+  `PAYMOB_API_KEY` and cached 50 min; an order with no transaction is
+  "still pending", not an outage) and the `reconcile_payments` sweep are
+  the recovery path; the sweep also expires PENDING checkouts older than
+  `constants.PENDING_EXPIRY` (2 h, above Paymob's 1 h intention
+  `expiration`) to FAILED so abandoned rows stop clogging its oldest-first
+  window — FAILED is non-terminal, so a late webhook still heals one.
+  Wallet balance moves only through `wallet_apply` (Wallet row lock +
+  append-only `WalletTransaction` ledger with `balance_after`). Local
+  flow: `manage.py simulate_payment_webhook <pk> [--fail] [--save-card]`
+  drives the same transition service (Mailpit's role, for payments).
 - **Saved cards** (built 2026-07-18): `SavedCard` stores only opaque
   provider references (Tap card/customer/agreement ids, Paymob token) —
   PAN and expiry never touch our servers. Saving is always-on, not
@@ -347,7 +363,7 @@ signals, services, strict mypy).
 
 | Need | Path | Blueprint (Gawdat_Django_Template/) |
 |---|---|---|
-| Audit history (who changed what) | django-simple-history on the models that need it | `apps/payment/models/` (registration), `apps/users/admin/*/admin.py` (SimpleHistoryAdmin MRO) |
+| Audit history (who changed what) | django-simple-history on the models that need it | `apps/payments/models/` (registration), `apps/users/admin/*/admin.py` (SimpleHistoryAdmin MRO) |
 | Recoverable delete (user-facing rows kept for history, e.g. addresses referenced by orders) | `deleted_at` pattern or django-softdelete — a DIFFERENT need than audit history; decide the lib when first needed | `apps/location/models/address.py` |
 | Direct-to-S3 uploads | presigned-URL endpoint in a service; client uploads, API stores the key | — |
 | Embedded mini-schemas | add the `Ref` tier per entity alongside Summary/Detail | — |

@@ -21,6 +21,7 @@ from apps.payments.constants import PaymentKind
 from apps.payments.constants import PaymentStatus
 from apps.payments.constants import WalletTransactionKind
 from apps.payments.exceptions import InsufficientBalanceError
+from apps.payments.exceptions import PaymentEventMismatchError
 from apps.payments.exceptions import PaymentGatewayUnavailableError
 from apps.payments.exceptions import PaymentNotFoundError
 from apps.payments.exceptions import PaymentNotRefundableError
@@ -859,3 +860,189 @@ def test_verify_persists_saved_card_from_charge_status(
     assert payment.status == PaymentStatus.PAID
     assert payment.saved_card is not None
     assert payment.saved_card.token == "fake_card_A"  # noqa: S105 - fixture value
+
+
+# --- gateway events: signed-amount cross-check, informational events, expiry ----
+
+
+def _event(payment: Payment, **overrides: Any) -> WebhookEvent:
+    fields: dict[str, Any] = {
+        "reference": str(payment.idempotency_key),
+        "transaction_id": "txn_1",
+        "is_paid": True,
+        "status": "PAID",
+        "raw": {"probe": True},
+    }
+    fields.update(overrides)
+    return WebhookEvent(**fields)
+
+
+def test_event_with_matching_signed_amount_applies() -> None:
+    payment = PaymentFactory.create(kind=PaymentKind.WALLET_TOPUP)  # 50.00 SAR
+
+    services.payment_apply_gateway_event(
+        gateway_name="fake", event=_event(payment, amount_minor=5000, currency="SAR")
+    )
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.PAID
+    assert payment.user.wallet.balance == payment.amount
+
+
+@pytest.mark.parametrize(("amount_minor", "currency"), [(4999, "SAR"), (5000, "EGP")])
+def test_event_with_mismatched_amount_or_currency_is_never_applied(
+    amount_minor: int, currency: str
+) -> None:
+    """The signature proves the gateway sent it; the cross-check proves it is
+    about THIS payment at THIS price. Nothing is written on a mismatch."""
+    payment = PaymentFactory.create(kind=PaymentKind.WALLET_TOPUP)
+
+    with pytest.raises(PaymentEventMismatchError):
+        services.payment_apply_gateway_event(
+            gateway_name="fake",
+            event=_event(payment, amount_minor=amount_minor, currency=currency),
+        )
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.PENDING
+    assert payment.gateway_callback is None
+    assert payment.user.wallet.balance == Decimal(0)
+
+
+def test_pending_event_is_recorded_but_never_transitions() -> None:
+    """Customer on the bank's OTP page: the row stays PENDING (not FAILED),
+    the callback is kept for audit, the wallet is untouched."""
+    payment = PaymentFactory.create(kind=PaymentKind.WALLET_TOPUP)
+
+    services.payment_apply_gateway_event(
+        gateway_name="fake",
+        event=_event(
+            payment, is_paid=False, is_pending=True, status="pending", raw={"otp": 1}
+        ),
+    )
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.PENDING
+    assert payment.gateway_callback == {"otp": 1}
+    assert payment.gateway_transaction_id == "txn_1"
+    assert payment.user.wallet.balance == Decimal(0)
+
+
+def test_child_action_event_keeps_the_settled_transaction_id() -> None:
+    """A refund/void child callback on a PAID row: recorded, PAID kept, the
+    settled id (what OUR refund targets) never replaced, wallet never
+    auto-debited - a human reconciles the provider-side action."""
+    payment = _paid_topup()
+    assert payment.gateway_transaction_id == "txn_1"
+
+    services.payment_apply_gateway_event(
+        gateway_name="fake",
+        event=_event(
+            payment,
+            transaction_id="",
+            is_paid=False,
+            is_pending=True,
+            status="refund",
+            raw={"child": True},
+        ),
+    )
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.PAID
+    assert payment.gateway_transaction_id == "txn_1"
+    assert payment.gateway_callback == {"child": True}
+    assert payment.user.wallet.balance == payment.amount
+
+
+def test_verify_cross_checks_the_provider_amount(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payment = PaymentFactory.create(kind=PaymentKind.WALLET_TOPUP)
+    monkeypatch.setattr(
+        FakeGateway,
+        "fetch_status",
+        lambda self, **kwargs: ChargeStatus(
+            transaction_id="txn_9",
+            is_paid=True,
+            status="CAPTURED",
+            raw={},
+            amount_minor=100,
+            currency="SAR",
+        ),
+    )
+
+    with pytest.raises(PaymentEventMismatchError):
+        services.payment_verify(payment=payment)
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.PENDING
+
+
+def _backdate(payment: Payment, *, hours: int) -> None:
+    stamp = timezone.now() - timedelta(hours=hours)
+    Payment.objects.filter(pk=payment.pk).update(created_at=stamp, updated_at=stamp)
+
+
+def test_expire_fails_an_abandoned_checkout() -> None:
+    payment = PaymentFactory.create()
+    _backdate(payment, hours=3)
+
+    assert services.payment_expire(payment=payment).status == PaymentStatus.FAILED
+
+
+@pytest.mark.parametrize("hours", [0, 1])
+def test_expire_leaves_a_checkout_the_customer_can_still_complete(hours: int) -> None:
+    payment = PaymentFactory.create()
+    _backdate(payment, hours=hours)
+
+    assert services.payment_expire(payment=payment).status == PaymentStatus.PENDING
+
+
+def test_expire_never_touches_a_paid_row() -> None:
+    payment = _paid_topup()
+    _backdate(payment, hours=3)
+
+    assert services.payment_expire(payment=payment).status == PaymentStatus.PAID
+
+
+def test_late_webhook_heals_an_expired_row() -> None:
+    payment = PaymentFactory.create(kind=PaymentKind.WALLET_TOPUP)
+    _backdate(payment, hours=3)
+    services.payment_expire(payment=payment)
+
+    services.payment_apply_gateway_event(
+        gateway_name="fake", event=_paid_event(payment)
+    )
+
+    payment.refresh_from_db()
+    assert payment.status == PaymentStatus.PAID
+    assert payment.user.wallet.balance == payment.amount
+
+
+def test_reconcile_expires_abandoned_pending_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Abandoned checkouts must leave PENDING, or the sweep's oldest-first
+    window fills up with them and newer stale rows are never re-checked."""
+    abandoned = PaymentFactory.create()
+    _backdate(abandoned, hours=3)
+    stale_but_live = PaymentFactory.create()
+    _age(stale_but_live, minutes=60)  # updated_at only - created just now
+    monkeypatch.setattr(
+        FakeGateway,
+        "fetch_status",
+        lambda self, **kwargs: ChargeStatus(
+            transaction_id="",
+            is_paid=False,
+            status="no_transaction",
+            raw={},
+            is_pending=True,
+        ),
+    )
+
+    call_command("reconcile_payments")
+
+    abandoned.refresh_from_db()
+    stale_but_live.refresh_from_db()
+    assert abandoned.status == PaymentStatus.FAILED
+    assert stale_but_live.status == PaymentStatus.PENDING

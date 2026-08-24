@@ -89,6 +89,9 @@ def test_blank_optional_secret_normalises_to_none(blank: str) -> None:
     env = Env(_env_file=str(ENV_EXAMPLE), PAYMOB_HMAC_SECRET=blank)
     assert env.PAYMOB_HMAC_SECRET is None
 
+    env = Env(_env_file=str(ENV_EXAMPLE), PAYMOB_API_KEY=blank)
+    assert env.PAYMOB_API_KEY is None
+
 
 def test_blank_normalisation_leaves_lists_and_required_fields_alone() -> None:
     """Only optional fields normalise - lists still collapse, required stay strict."""

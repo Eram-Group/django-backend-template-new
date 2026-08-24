@@ -87,12 +87,19 @@ class CheckoutSession:
 @dataclass(frozen=True, slots=True)
 class WebhookEvent:
     reference: str  # the planted idempotency key, echoed back
-    transaction_id: str
+    transaction_id: str  # "" = do not touch Payment.gateway_transaction_id
     is_paid: bool
     status: str  # gateway-native status string (audit/logging)
     raw: dict[str, Any]
     kind: WebhookEventKind = WebhookEventKind.PAYMENT
     saved_card: SavedCardData | None = None
+    #: The event is informational (still in flight, or a refund/void/capture
+    #: child transaction): record the callback, never transition the row.
+    is_pending: bool = False
+    #: What the gateway says was charged, in minor units - set when the
+    #: provider signs these fields so the service can cross-check the row.
+    amount_minor: int | None = None
+    currency: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +110,9 @@ class ChargeStatus:
     raw: dict[str, Any]
     #: Lets payment_verify persist a card when the webhook was lost.
     saved_card: SavedCardData | None = None
+    is_pending: bool = False
+    amount_minor: int | None = None
+    currency: str = ""
 
 
 @dataclass(frozen=True, slots=True)

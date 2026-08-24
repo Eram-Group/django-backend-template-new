@@ -107,6 +107,9 @@ class Env(BaseSettings):
     PAYMOB_SECRET_KEY: SecretStr | None = None
     PAYMOB_PUBLIC_KEY: str | None = None
     PAYMOB_HMAC_SECRET: SecretStr | None = None
+    # Dashboard API key (same for test/live) -> auth token for the transaction
+    # inquiry API; unset = payment_verify/reconcile refuse loudly on paymob.
+    PAYMOB_API_KEY: SecretStr | None = None
     PAYMOB_INTEGRATION_IDS: CommaSeparated[int] = Field(default_factory=list)
     # Card-on-file: one-click CIT checkout (unset = fall back to
     # PAYMOB_INTEGRATION_IDS, which works in Paymob test mode) and MOTO for

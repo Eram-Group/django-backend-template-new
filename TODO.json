@@ -108,7 +108,8 @@
         "Real-provider tier needs sandbox credentials (Paymob, Tap, OurSMS, SMSMisr) that may not exist yet - if absent, record that explicitly here and verify the fake tier only; do NOT let missing creds silently pass as verified (same convention as social-providers).",
         "Webhook security is a first-class case: 9018b26 made blank-secret HMAC fail closed - exercise both a valid-signature accept and an invalid/missing-signature reject.",
         "SMS routing: cover one Saudi number (-> oursms) and one Egyptian number (-> smsmisr) so clients/sms/routing.py is actually observed choosing.",
-        "Idempotency: replay the same webhook twice - second delivery must not double-apply the wallet transaction."
+        "Idempotency: replay the same webhook twice - second delivery must not double-apply the wallet transaction.",
+        "Paymob docs review 2026-08-24 (aligned code, not yet observed live): (a) the transaction-inquiry fallback now authenticates with an auth_token minted from PAYMOB_API_KEY in the body - POST /payments/{id}/verify on an UNPAID intention must return the PENDING row, not 503, and on a paid one must settle it; (b) the checkout URL is now https://eg.checkout.paymob.com/?publicKey=..&clientSecret=.. - confirm the hosted page opens without the 302 from the old accept.paymob.com/unifiedcheckout/ path; (c) a same-day refund from the admin: if Paymob rejects a pre-settlement refund, add /api/acceptance/void_refund/void as the fallback INSIDE the same write-ahead-marked attempt (never a second attempt); (d) observe a refund child callback (has_parent_transaction) landing on a REFUNDED row without changing gateway_transaction_id."
       ],
       "status": "pending"
     },
@@ -186,7 +187,7 @@
       "title": "Finish the saved-card live verification (Paymob CIT settle + MIT, Tap mada)",
       "endGoal": "The remaining unobserved saved-card behaviors are proven against live test-mode gateways: (1) a Paymob one-click (card_tokens) payment SETTLES via its transaction webhook; (2) Paymob MIT - MOTO intention + payments/pay - charges with no customer present; (3) at least one mada-card save + MIT on Tap; (4) a forged Paymob TOKEN hmac observed rejected as 400 over HTTP. Everything else (Tap save/one-click/MIT/delete, Paymob save + TOKEN callback + CIT page) was verified live 2026-07-18/19 - evidence in this file's git history (a5d6c0c and earlier).",
       "tips": [
-        "Retest drill (~5 min): ngrok http 8000, set BACKEND_BASE_URL + ALLOWED_HOSTS in .env (procedure comment in .env), runserver, mint the flow via services in manage.py shell, watch the webhook log. Paymob checkout sessions expire ~1h - hand the user the link immediately. Paymob test card 5123456789012346 12/29 cvv 123; Tap 5123450000000008 01/39 cvv 100.",
+        "Retest drill (~5 min): ngrok http 8000, set BACKEND_BASE_URL + ALLOWED_HOSTS in .env (procedure comment in .env), runserver, mint the flow via services in manage.py shell, watch the webhook log. Paymob checkout sessions expire ~1h - hand the user the link immediately. Paymob test card 5123456789012346 01/39 cvv 123 (docs, Jun 2026 - the old 12/29 expiry is stale); Tap 5123450000000008 01/39 cvv 100.",
         "Paymob support ask (merchant 1014916, TEST mode): a MOTO integration id (unlocks MIT -> PAYMOB_MOTO_INTEGRATION_ID) and a Card-on-File id (narrows the one-click page to card-only -> PAYMOB_COF_INTEGRATION_ID). Until CoF exists, card_tokens rides the normal-3DS fallback, which works but shows the Wallet tab.",
         "mada test cards are the ones that matter for Tap MIT in KSA - verify at least one mada and one Visa/MC saved-card charge."
       ],

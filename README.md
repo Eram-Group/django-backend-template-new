@@ -232,8 +232,13 @@ Migrations are append-only, enforced by `guard-migrations.yml`
   `base64 -i service-account.json` into `FIREBASE_CREDENTIALS_B64`.
   **Tap** — dashboard secret key into `TAP_SECRET_KEY`; register the webhook
   URL `…/api/v1/payments/webhooks/tap`. **Paymob** — secret/public keys +
-  the dashboard HMAC secret + checkout integration ids
-  (`PAYMOB_INTEGRATION_IDS`, comma-separated); webhook
-  `…/api/v1/payments/webhooks/paymob`. **SMS** — OurSMS API key + sender
+  the dashboard HMAC secret + the dashboard API key (`PAYMOB_API_KEY`, the
+  transaction-inquiry fallback authenticates with it) + checkout
+  integration ids (`PAYMOB_INTEGRATION_IDS`, comma-separated); webhook
+  `…/api/v1/payments/webhooks/paymob` — set it BOTH as each integration
+  id's "Transaction processed callback" in the dashboard and leave it as the
+  per-intention `notification_url` the code sends: Paymob's regional docs
+  disagree on which one receives the card-token callback, and the
+  per-intention URL only applies to card integrations. **SMS** — OurSMS API key + sender
   name; SMSMisr username/password/sender (live mode activates only when
   `ENVIRONMENT=production`).

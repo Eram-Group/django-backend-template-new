@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -32,6 +34,13 @@ class PaymentStatus(models.TextChoices):
 TERMINAL_STATUSES = frozenset(
     {PaymentStatus.PAID, PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED}
 )
+
+#: How long a PENDING checkout may stay open before the reconcile sweep
+#: marks it FAILED (abandoned). Must exceed every gateway's hosted-session
+#: lifetime (Paymob intentions live at most one hour) so a checkout that is
+#: still payable is never expired underneath the customer. FAILED stays
+#: non-terminal, so a late webhook still heals a wrongly-expired row.
+PENDING_EXPIRY = timedelta(hours=2)
 
 
 class GatewayName(models.TextChoices):

@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 import pytest
 import respx
+from django.core.cache import cache
 from pydantic import SecretStr
 
 from apps.payments.gateways.base import CheckoutRequest
@@ -20,8 +21,11 @@ from apps.payments.gateways.paymob import PaymobGateway
 
 SECRET = "skey_test_paymob"  # noqa: S105 - test fixture value
 HMAC_SECRET = "hmac_test_secret"  # noqa: S105 - test fixture value
+API_KEY = "api_test_paymob"
 INTENTION = "https://accept.paymob.com/v1/intention/"
 PAY = "https://accept.paymob.com/api/acceptance/payments/pay"
+AUTH_TOKENS = "https://accept.paymob.com/api/auth/tokens"
+INQUIRY = "https://accept.paymob.com/api/ecommerce/orders/transaction_inquiry"
 CARD_TOKEN = "tok_saved_paymob_1"  # noqa: S105 - test fixture; gitleaks:allow
 
 
@@ -30,7 +34,9 @@ def _paymob_creds(settings: Any) -> None:
     settings.PAYMOB_SECRET_KEY = SecretStr(SECRET)
     settings.PAYMOB_PUBLIC_KEY = "pk_test_paymob"
     settings.PAYMOB_HMAC_SECRET = SecretStr(HMAC_SECRET)
+    settings.PAYMOB_API_KEY = SecretStr(API_KEY)
     settings.PAYMOB_INTEGRATION_IDS = [11, 22]
+    cache.clear()  # the auth-token cache must not leak between tests
 
 
 def _request() -> CheckoutRequest:
@@ -63,8 +69,38 @@ def test_create_checkout_uses_minor_units_and_special_reference() -> None:
     assert payload["amount"] == 7550  # integer minor units, never float math
     assert payload["special_reference"] == "ref-456"  # idempotent at Paymob
     assert payload["payment_methods"] == [11, 22]
-    assert "publicKey=pk_test_paymob" in session.checkout_url
-    assert "clientSecret=cs_abc" in session.checkout_url
+    assert payload["expiration"] == 3600  # documented maximum, sent explicitly
+    assert payload["billing_data"]["first_name"] == "Omar"
+    assert payload["billing_data"]["last_name"] == "-"  # required, no surname
+    # Unified Checkout lives on the per-region host since July 2026.
+    assert session.checkout_url == (
+        "https://eg.checkout.paymob.com/?publicKey=pk_test_paymob&clientSecret=cs_abc"
+    )
+
+
+@respx.mock
+def test_create_checkout_splits_full_name_into_billing_fields() -> None:
+    route = respx.post(INTENTION).mock(
+        return_value=httpx.Response(200, json={"id": "int_1", "client_secret": "cs"})
+    )
+    request = CheckoutRequest(
+        reference="ref-456",
+        amount=Decimal("10.00"),
+        currency="EGP",
+        description="",
+        customer_email="omar@example.com",
+        customer_name="Omar Ahmed Gawdat",
+        customer_phone="",
+        webhook_url="https://backend.example.com/hook",
+        redirect_url="https://app.example.com/return",
+    )
+
+    PaymobGateway().create_checkout(request=request)
+
+    billing = json.loads(route.calls.last.request.content)["billing_data"]
+    assert billing["first_name"] == "Omar"
+    assert billing["last_name"] == "Ahmed Gawdat"
+    assert billing["phone_number"] == "+20000000000"  # Paymob rejects a blank
 
 
 def test_create_checkout_without_integration_ids_is_loud(settings: Any) -> None:
@@ -130,6 +166,108 @@ def test_webhook_with_valid_hmac_parses() -> None:
     assert event.reference == "ref-456"
     assert event.transaction_id == "987654"
     assert event.is_paid is True
+    assert event.is_pending is False
+    assert event.status == "success"
+    # HMAC-signed amount/currency ride along for the service's cross-check.
+    assert event.amount_minor == 7550
+    assert event.currency == "EGP"
+
+
+def _parse(obj: dict[str, Any]) -> Any:
+    return PaymobGateway().parse_webhook(
+        headers={},
+        params={"hmac": _sign(obj)},
+        body=json.dumps({"type": "TRANSACTION", "obj": obj}).encode(),
+    )
+
+
+def test_webhook_declined_is_failed_not_pending() -> None:
+    obj = _webhook_obj()
+    obj["success"] = False
+
+    event = _parse(obj)
+
+    assert event.is_paid is False
+    assert event.is_pending is False
+    assert event.status == "failed"
+
+
+def test_webhook_pending_is_informational() -> None:
+    """success=false + pending=true is the customer on the bank's OTP page
+    (or a kiosk reference awaiting cash) - not a decline."""
+    obj = _webhook_obj()
+    obj["success"] = False
+    obj["pending"] = True
+
+    event = _parse(obj)
+
+    assert event.is_paid is False
+    assert event.is_pending is True
+    assert event.status == "pending"
+
+
+def test_webhook_refund_child_never_transitions_or_retargets() -> None:
+    """A refund/void/capture arrives as a CHILD transaction on the same
+    order: its own id must not replace the settled transaction id, and its
+    amount is the refund's, not the payment's."""
+    obj = _webhook_obj()
+    obj.update({"has_parent_transaction": True, "id": 111222, "is_refund": True})
+    obj["amount_cents"] = 2000  # partial refund
+
+    event = _parse(obj)
+
+    assert event.reference == "ref-456"  # still finds our row (audit)
+    assert event.is_paid is False
+    assert event.is_pending is True
+    assert event.status == "refund"
+    assert event.transaction_id == ""
+    assert event.amount_minor is None
+    assert event.currency == ""
+
+
+def test_webhook_void_child_is_reported_as_void() -> None:
+    obj = _webhook_obj()
+    obj.update({"has_parent_transaction": True, "is_void": True})
+
+    assert _parse(obj).status == "void"
+
+
+def test_webhook_authorization_without_capture_is_not_paid() -> None:
+    """An Auth integration only holds funds; we never capture, so it must
+    not credit anything."""
+    obj = _webhook_obj()
+    obj["is_auth"] = True
+    obj["is_standalone_payment"] = False
+
+    event = _parse(obj)
+
+    assert event.is_paid is False
+    assert event.is_pending is True
+    assert event.status == "authorized"
+
+
+@pytest.mark.parametrize(
+    ("flag", "status"), [("is_refunded", "refunded"), ("is_voided", "voided")]
+)
+def test_webhook_reversed_parent_is_informational(flag: str, status: str) -> None:
+    obj = _webhook_obj()
+    obj[flag] = True
+
+    event = _parse(obj)
+
+    assert event.is_paid is False
+    assert event.is_pending is True
+    assert event.status == status
+
+
+def test_webhook_without_merchant_order_id_has_an_empty_reference() -> None:
+    """Paymob's own callback sample carries ``merchant_order_id: null``."""
+    obj = _webhook_obj()
+    obj["order"] = {"id": 555, "merchant_order_id": None}
+
+    event = _parse(obj)
+
+    assert event.reference == ""
 
 
 def test_webhook_with_tampered_success_flag_is_rejected() -> None:
@@ -174,22 +312,101 @@ def test_webhook_with_blank_secret_fails_closed(settings: Any, blank: str) -> No
 
 
 @respx.mock
-def test_fetch_status_by_merchant_order_id() -> None:
-    """The old template raised NotImplementedError here."""
-    route = respx.post(
-        "https://accept.paymob.com/api/ecommerce/orders/transaction_inquiry"
-    ).mock(
+def test_fetch_status_by_merchant_order_id_with_cached_auth_token() -> None:
+    """The inquiry API still authenticates with a one-hour auth token IN THE
+    BODY (minted from the dashboard API key), not the secret-key header the
+    intention API takes - and the token is cached across calls."""
+    auth_route = respx.post(AUTH_TOKENS).mock(
+        return_value=httpx.Response(201, json={"token": "auth_1"})
+    )
+    route = respx.post(INQUIRY).mock(
         return_value=httpx.Response(
-            200, json={"id": 987654, "success": True, "is_refunded": False}
+            200,
+            json={
+                "id": 987654,
+                "success": True,
+                "pending": False,
+                "is_refunded": False,
+                "amount_cents": 7550,
+                "currency": "EGP",
+            },
+        )
+    )
+
+    status = PaymobGateway().fetch_status(charge_id="int_1", reference="ref-456")
+    PaymobGateway().fetch_status(charge_id="int_1", reference="ref-456")
+
+    assert status.is_paid is True
+    assert status.transaction_id == "987654"
+    assert status.amount_minor == 7550
+    assert status.currency == "EGP"
+    assert json.loads(auth_route.calls.last.request.content) == {"api_key": API_KEY}
+    inquiry = route.calls.last.request
+    assert "Authorization" not in inquiry.headers
+    assert json.loads(inquiry.content) == {
+        "auth_token": "auth_1",
+        "merchant_order_id": "ref-456",
+    }
+    assert auth_route.call_count == 1  # second inquiry rode the cached token
+    assert route.call_count == 2
+
+
+@respx.mock
+def test_fetch_status_without_transaction_is_pending_not_an_outage() -> None:
+    """An order nobody paid yet has no transaction - Paymob answers 404. That
+    is "still pending" for the polling client, not a 503."""
+    respx.post(AUTH_TOKENS).mock(
+        return_value=httpx.Response(201, json={"token": "auth_1"})
+    )
+    respx.post(INQUIRY).mock(
+        return_value=httpx.Response(404, json={"detail": "Transaction not found"})
+    )
+
+    status = PaymobGateway().fetch_status(charge_id="int_1", reference="ref-456")
+
+    assert status.is_paid is False
+    assert status.is_pending is True
+    assert status.status == "no_transaction"
+    assert status.transaction_id == ""
+
+
+@respx.mock
+def test_fetch_status_refund_child_is_not_paid() -> None:
+    """The inquiry returns the LAST transaction on the order - after a
+    refund that is the child, which must not read as a fresh payment."""
+    respx.post(AUTH_TOKENS).mock(
+        return_value=httpx.Response(201, json={"token": "auth_1"})
+    )
+    respx.post(INQUIRY).mock(
+        return_value=httpx.Response(
+            200,
+            json={"id": 111, "success": True, "has_parent_transaction": True},
         )
     )
 
     status = PaymobGateway().fetch_status(charge_id="int_1", reference="ref-456")
 
-    assert status.is_paid is True
-    assert json.loads(route.calls.last.request.content) == {
-        "merchant_order_id": "ref-456"
-    }
+    assert status.is_paid is False
+    assert status.is_pending is True
+
+
+@respx.mock
+def test_fetch_status_without_api_key_is_loud(settings: Any) -> None:
+    settings.PAYMOB_API_KEY = None
+    route = respx.post(INQUIRY).mock(return_value=httpx.Response(200, json={}))
+
+    with pytest.raises(GatewayResponseError):
+        PaymobGateway().fetch_status(charge_id="int_1", reference="ref-456")
+
+    assert route.call_count == 0
+
+
+@respx.mock
+def test_fetch_status_with_tokenless_auth_response_is_loud() -> None:
+    respx.post(AUTH_TOKENS).mock(return_value=httpx.Response(201, json={}))
+
+    with pytest.raises(GatewayResponseError):
+        PaymobGateway().fetch_status(charge_id="int_1", reference="ref-456")
 
 
 @respx.mock
@@ -259,6 +476,40 @@ def test_token_webhook_with_valid_hmac_parses() -> None:
     assert event.saved_card.brand == "MasterCard"
     assert event.saved_card.last4 == "2346"  # digits out of the masked pan
     assert event.saved_card.email == "omar@example.com"
+    assert event.saved_card.exp_month is None  # older payloads carry no expiry
+    assert event.saved_card.exp_year is None
+
+
+def test_token_webhook_parses_expiry_when_present() -> None:
+    """The Aug-2026 token payload adds expiry_month/expiry_year ("01"/"38");
+    they sit outside the HMAC, so they are display data only."""
+    obj = _token_obj()
+    obj.update({"expiry_month": "01", "expiry_year": "38", "cardholder_name": "T"})
+
+    event = PaymobGateway().parse_webhook(
+        headers={},
+        params={"hmac": _sign_token(obj)},
+        body=json.dumps({"type": "TOKEN", "obj": obj}).encode(),
+    )
+
+    assert event.saved_card is not None
+    assert event.saved_card.exp_month == 1
+    assert event.saved_card.exp_year == 2038
+
+
+@pytest.mark.parametrize("masked", ["xxxx-xxxx-xxxx-23", "", "xxxx"])
+def test_token_webhook_with_short_masked_pan_has_no_last4(masked: str) -> None:
+    obj = _token_obj()
+    obj["masked_pan"] = masked
+
+    event = PaymobGateway().parse_webhook(
+        headers={},
+        params={"hmac": _sign_token(obj)},
+        body=json.dumps({"type": "TOKEN", "obj": obj}).encode(),
+    )
+
+    assert event.saved_card is not None
+    assert event.saved_card.last4 == ""
 
 
 def test_token_webhook_with_tampered_token_is_rejected() -> None:
@@ -353,6 +604,36 @@ def test_charge_saved_moto_intention_then_pay(settings: Any) -> None:
     assert session.checkout_url == ""
     assert session.is_paid is True
     assert session.status == "success"
+    assert session.transaction_id == "123321"
+
+
+@respx.mock
+def test_charge_saved_pending_pay_leaves_the_row_to_the_webhook(
+    settings: Any,
+) -> None:
+    """A MOTO pay answered ``pending`` is not an outcome yet: an empty
+    session status keeps the Payment PENDING for the callback/sweep."""
+    settings.PAYMOB_MOTO_INTEGRATION_ID = 44
+    respx.post(INTENTION).mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "id": "int_9",
+                "client_secret": "cs_moto",
+                "payment_keys": [{"integration": 44, "key": "pk_moto_1"}],
+            },
+        )
+    )
+    respx.post(PAY).mock(
+        return_value=httpx.Response(
+            200, json={"id": 123321, "success": False, "pending": True}
+        )
+    )
+
+    session = PaymobGateway().charge_saved(request=_saved_request())
+
+    assert session.is_paid is False
+    assert session.status == ""
     assert session.transaction_id == "123321"
 
 
