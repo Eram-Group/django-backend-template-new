@@ -63,7 +63,7 @@ repos:
   # Deploy workflows are load-bearing (Express Mode rollout, release task);
   # lint them where every other file is linted.
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.10
+    rev: v1.7.12
     hooks:
       - id: actionlint
 
