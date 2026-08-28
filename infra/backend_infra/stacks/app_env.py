@@ -244,5 +244,6 @@ class AppEnvStack(Stack):
             construct_id,
             log_group_name=name,
             retention=logs.RetentionDays.ONE_MONTH,
-            removal_policy=RemovalPolicy.DESTROY,
+            # RETAIN so a rolled-back first deploy still leaves its logs behind.
+            removal_policy=RemovalPolicy.RETAIN,
         )

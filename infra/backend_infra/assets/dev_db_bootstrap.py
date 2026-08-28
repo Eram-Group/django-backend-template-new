@@ -5,7 +5,8 @@ so the master password never leaves AWS and nobody has to reach the private
 instance from a laptop. Idempotent: re-running rotates the app password.
 
 Env: MASTER_HOST, MASTER_USER, MASTER_PASSWORD (secret), APP_DB, TARGET_SECRET
-Writes DATABASE_URL (and SECRET_KEY, if empty) into TARGET_SECRET's JSON.
+Writes DATABASE_URL (plus SECRET_KEY / DJANGO_SUPERUSER_PASSWORD when empty)
+into TARGET_SECRET's JSON.
 """
 
 import json
@@ -20,6 +21,14 @@ host = os.environ["MASTER_HOST"]
 app_db = os.environ["APP_DB"]
 target = os.environ["TARGET_SECRET"]
 password = secrets.token_urlsafe(32)  # URL-safe alphabet: no escaping needed
+
+# Application secrets are never generated here - a human sets them in Secrets
+# Manager. Refuse to leave the environment half-configured.
+sm = boto3.client("secretsmanager")
+current = json.loads(sm.get_secret_value(SecretId=target)["SecretString"])
+missing = [k for k in ("SECRET_KEY", "DJANGO_SUPERUSER_PASSWORD") if not current.get(k)]
+if missing:
+    raise SystemExit(f"set {', '.join(missing)} in the {target} secret first")
 
 with psycopg.connect(
     host=host,
@@ -49,10 +58,6 @@ with psycopg.connect(
         conn.execute(sql.SQL("GRANT {} TO CURRENT_USER").format(role))
         conn.execute(sql.SQL("CREATE DATABASE {} OWNER {}").format(role, role))
 
-sm = boto3.client("secretsmanager")
-current = json.loads(sm.get_secret_value(SecretId=target)["SecretString"])
 current["DATABASE_URL"] = f"postgres://{app_db}:{password}@{host}:5432/{app_db}"
-if not current.get("SECRET_KEY"):
-    current["SECRET_KEY"] = secrets.token_urlsafe(50)
 sm.put_secret_value(SecretId=target, SecretString=json.dumps(current))
 print(f"database {app_db} ready; DATABASE_URL written to {target}")

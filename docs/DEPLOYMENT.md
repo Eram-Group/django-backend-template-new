@@ -127,9 +127,10 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    CDK — leave that key out (`infra-secret-skeleton production` already does).
 6. Dev database on the shared instance: `just infra-dev-db dev` runs a
    one-off task inside the VPC that creates the `<app>_dev` role + database
-   and writes `DATABASE_URL` (and `SECRET_KEY`, if empty) straight into the
-   `dev/<app>` secret — no password ever leaves AWS. Re-running rotates the
-   password.
+   and writes `DATABASE_URL` into the `dev/<app>` secret — no database
+   password ever leaves AWS. It refuses to run until `SECRET_KEY` and
+   `DJANGO_SUPERUSER_PASSWORD` have been set in the secret by you.
+   Re-running rotates the database password.
 7. GitHub repo variables: `AWS_ECR_REPOSITORY=eram/<app>`,
    `AWS_OIDC_ROLE_ARN` (Shared output `GithubDeployRoleArn`), `AWS_REGION`.
    Push to `main` → the `build` job pushes `:<sha>` to ECR (the deploy job
