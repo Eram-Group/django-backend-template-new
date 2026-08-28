@@ -8,6 +8,9 @@ missing); an empty string means "unset" to the app (env_ignore_empty).
 
 import json
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # run from infra/
 
 from backend_infra.config import ENV_SECRET
 from backend_infra.config import ENVIRONMENTS

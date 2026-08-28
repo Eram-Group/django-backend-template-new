@@ -134,7 +134,7 @@ lint.ignore = [
 lint.flake8-tidy-imports.banned-api."faker".msg = "Use mimesis via apps.common.tests.fake - Faker is only factory_boy's internal dependency."
 lint.flake8-tidy-imports.banned-api."factory.faker".msg = "Use mimesis via apps.common.tests.fake, not factory.Faker."
 # S105/S106 in tests: device tokens / webhook secrets are test data, not passwords.
-lint.per-file-ignores = { "**/tests/**" = [ "S101", "S105", "S106" ], "conftest.py" = [ "S101" ], "config/settings/*" = [ "F403", "F405" ], "infra/app.py" = [ "INP001" ], "infra/scripts/*" = [ "INP001" ] }
+lint.per-file-ignores = { "**/tests/**" = [ "S101", "S105", "S106" ], "conftest.py" = [ "S101" ], "config/settings/*" = [ "F403", "F405" ], "infra/app.py" = [ "INP001" ], "infra/scripts/*" = [ "INP001" ], "infra/backend_infra/assets/*" = [ "INP001", "T201" ] }
 lint.isort.force-single-line = true
 
 # ==== mypy ====

@@ -165,6 +165,10 @@ infra-deploy env *args:
 infra-secret-skeleton env="dev":
     cd infra && uv run python scripts/secret_skeleton.py {{ env }}
 
+# Create <app>_<env> on the shared dev RDS + write DATABASE_URL into the env secret (in-VPC task).
+infra-dev-db env="dev":
+    ./infra/scripts/dev_db.sh {{ app_name }} {{ env }}
+
 # One-off task on the worker family, e.g. `just infra-run-task dev python manage.py createsu`.
 infra-run-task env +cmd:
     ./infra/scripts/run_task.sh {{ app_name }} {{ env }} {{ cmd }}

@@ -8,12 +8,14 @@ from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_ecs as ecs
 from aws_cdk import aws_iam as iam
+from aws_cdk import aws_logs as logs
 from aws_cdk import aws_rds as rds
 from constructs import Construct
 
 from backend_infra.config import AppConfig
 from backend_infra.constructs import database
 from backend_infra.constructs import roles
+from backend_infra.constructs.dev_db_bootstrap import DevDbBootstrapTask
 from backend_infra.constructs.network import default_vpc
 from backend_infra.constructs.network import public_subnets
 
@@ -102,6 +104,28 @@ class SharedStack(Stack):
                 self,
                 "SharedDevDbEndpoint",
                 value=self.shared_dev_db.db_instance_endpoint_address,
+            )
+            bootstrap = DevDbBootstrapTask(
+                self,
+                "DevDbBootstrap",
+                family=f"{app.shared_dev_db_identifier}-bootstrap",
+                instance=self.shared_dev_db,
+                vpc=self.vpc,
+                log_group=logs.LogGroup(
+                    self,
+                    "DevDbBootstrapLogs",
+                    log_group_name=f"/aws/ecs/{app.shared_dev_db_identifier}-bootstrap",
+                    retention=logs.RetentionDays.ONE_MONTH,
+                    removal_policy=RemovalPolicy.DESTROY,
+                ),
+            )
+            CfnOutput(
+                self, "DevDbBootstrapFamily", value=bootstrap.task_definition.family
+            )
+            CfnOutput(
+                self,
+                "DevDbBootstrapSecurityGroupId",
+                value=bootstrap.security_group.security_group_id,
             )
 
         CfnOutput(self, "RepositoryUri", value=self.repository.repository_uri)

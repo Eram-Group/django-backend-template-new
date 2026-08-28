@@ -53,7 +53,7 @@ def express_infrastructure_role(scope: Construct, construct_id: str) -> iam.Role
         assumed_by=iam.ServicePrincipal("ecs.amazonaws.com"),
         managed_policies=[
             iam.ManagedPolicy.from_aws_managed_policy_name(
-                "AmazonECSInfrastructureRoleforExpressGatewayServices"
+                "service-role/AmazonECSInfrastructureRoleforExpressGatewayServices"
             )
         ],
     )
@@ -80,8 +80,13 @@ def github_deploy_role(
                 "StringEquals": {
                     "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
                 },
+                # GitHub may issue the subject with immutable ids appended
+                # (repo:Owner@123/name@456:...); accept both spellings.
                 "StringLike": {
-                    "token.actions.githubusercontent.com:sub": f"repo:{github_repo}:*"
+                    "token.actions.githubusercontent.com:sub": [
+                        f"repo:{github_repo}:*",
+                        "repo:{}@*/{}@*:*".format(*github_repo.split("/", 1)),
+                    ]
                 },
             },
         ),

@@ -46,6 +46,10 @@ def test_shared_owns_cluster_repo_and_deploy_role(
     t.has_resource_properties(
         "AWS::RDS::DBInstance", {"Engine": "postgres", "EngineVersion": "18.4"}
     )
+    t.has_resource_properties(
+        "AWS::ECS::TaskDefinition",
+        {"Family": f"{APP.shared_dev_db_identifier}-bootstrap"},
+    )
 
 
 @pytest.mark.parametrize("env_name", list(ENVIRONMENTS))
