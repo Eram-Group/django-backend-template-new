@@ -31,7 +31,12 @@ docs/ARCHITECTURE.md explains the conventions in depth.
   field required, no code defaults; a new field updates `.env.example` in
   the same change (test_env_contract enforces the sync).
 - Tasks (`django.tasks`): bodies take pk strings, are idempotent, use only
-  models/selectors; services enqueue via `transaction.on_commit`.
+  models/selectors; services enqueue via `transaction.on_commit`. A scheduled
+  job = a management command + a `ScheduledJob` entry in
+  `infra/backend_infra/config.py::SCHEDULES` (EventBridge → RunTask).
+- Deploy: ECS Express Mode (web) + Fargate (worker); the task-definition
+  container is named `Main` — load-bearing for Express Mode and the CD
+  render steps, never rename. `ENVIRONMENT` ∈ local/dev/staging/production.
 - Admin: subclass `apps.common.admin.BaseModelAdmin`; declare
   `can_add/can_change/can_delete`; field rules via `FieldPermissions`;
   scaffold new packages with `manage.py generate_dashboard <app> <Model>`.
@@ -50,6 +55,10 @@ docs/ARCHITECTURE.md explains the conventions in depth.
   `just seed [scale]` · `just worker` · `just superuser` ·
   `just check-deploy` · `just messages` (i18n catalogs) ·
   `just pr` / `just branch <name>` (PR flow) · `just update` / `just outdated`
+- AWS (CDK in `infra/`, design `docs/AWS_ARCHITECTURE.md`, runbook
+  `docs/DEPLOYMENT.md`): `just infra-synth` ·
+  `just infra-test` · `just infra-lint` · `just infra-diff <env>` ·
+  `just infra-deploy <env>` · `just infra-run-task <env> <cmd>`
 - Before finishing any change, run the gates: `ruff check`, `mypy`,
   `pytest`, `lint-imports` — all must be green (coverage floor 80%,
   warnings are errors).

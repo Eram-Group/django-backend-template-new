@@ -73,6 +73,40 @@ jobs:
           uv run manage.py export_openapi_schema --api config.api.v1.api --output openapi.json
           uv run manage.py merge_auth_openapi --input openapi.json
 
+  # CDK app: synth without credentials, template assertions, cfn-lint.
+  infra:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: infra/package-lock.json
+
+      - name: Install (uv + pinned CDK CLI)
+        run: |
+          uv sync --locked
+          npm ci
+
+      - name: Synth all stacks
+        run: npx cdk synth --all -c image_tag=synth -q
+
+      - name: Template assertions
+        run: uv run pytest
+
+      - name: cfn-lint
+        run: uv run cfn-lint --ignore-checks W3005 -- cdk.out/*.template.json
+
   # Prod-image build + the same smokes the local compose stack passes.
   image:
     runs-on: ubuntu-latest

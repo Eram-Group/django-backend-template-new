@@ -146,9 +146,11 @@ Conventions (see `apps/users/tasks/emails.py`):
 - `TASKS_IMMEDIATE=true` (local/test) swaps in the ImmediateBackend: tasks
   run inline, no worker needed.
 - Scheduled work = management commands triggered by EventBridge Scheduler →
-  ECS RunTask (see README runbook): `clearsessions`,
-  `prune_db_task_results --min-age-days 14`, plus app commands modeled on
-  `sample_scheduled_job` (thin wrappers over services, safe to re-run).
+  ECS RunTask. The cadence is code: one `ScheduledJob` entry per command in
+  `infra/backend_infra/config.py::SCHEDULES` (`clearsessions`,
+  `prune_db_task_results`, `reconcile_payments`, `sweep_deliveries`, …);
+  commands are thin wrappers over services, safe to re-run. See
+  [DEPLOYMENT.md](DEPLOYMENT.md#scheduled-jobs).
 
 ## Outbound clients (HTTP kernel, SMS, push, payments)
 

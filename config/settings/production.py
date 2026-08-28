@@ -29,6 +29,9 @@ if _DEPLOYED:
     # __Secure- prefixed names require the Secure flag (break plain http).
     SESSION_COOKIE_NAME = "__Secure-sessionid"
     CSRF_COOKIE_NAME = "__Secure-csrftoken"
+    # Probe paths are also short-circuited by HealthProbeMiddleware; this keeps
+    # the redirect exemption explicit for anyone reading the security settings.
+    SECURE_REDIRECT_EXEMPT = [r"^healthz$", r"^readyz$"]
 
 # --- Database: psycopg native pool owns connection health ----------------------
 # CONN_MAX_AGE=0 is the required pairing; no CONN_HEALTH_CHECKS (that is for
@@ -67,6 +70,10 @@ if _DEPLOYED:
             },
         },
     }
+
+# CloudFront is a separate origin: allow it in the CSP or the admin loads bare.
+if _DEPLOYED and env.AWS_S3_CUSTOM_DOMAIN:
+    SECURE_CSP = csp_with_origin(SECURE_CSP, f"https://{env.AWS_S3_CUSTOM_DOMAIN}")
 
 # --- Email via SES (Anymail); compose containers keep SMTP -> Mailpit ------------
 if _DEPLOYED:

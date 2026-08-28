@@ -28,7 +28,12 @@ from pydantic_settings import SettingsConfigDict
 type CommaSeparated[T] = Annotated[list[T], NoDecode]
 
 #: Which kind of gateway keys each environment may hold.
-_PAYMENT_MODE_BY_ENVIRONMENT = {"local": "test", "dev": "test", "production": "live"}
+_PAYMENT_MODE_BY_ENVIRONMENT = {
+    "local": "test",
+    "dev": "test",
+    "staging": "test",
+    "production": "live",
+}
 
 
 class Env(BaseSettings):
@@ -47,7 +52,7 @@ class Env(BaseSettings):
     )
 
     # Core
-    ENVIRONMENT: Literal["local", "dev", "production"]
+    ENVIRONMENT: Literal["local", "dev", "staging", "production"]
     SECRET_KEY: SecretStr
     SECRET_KEY_FALLBACKS: CommaSeparated[SecretStr] = Field(default_factory=list)
     ALLOWED_HOSTS: CommaSeparated[str]

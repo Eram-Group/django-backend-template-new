@@ -140,7 +140,7 @@
         "Custom task definitions supported since July 2026: container must be named 'Main' with a single TCP port mapping and FARGATE compatibility; taskDefinitionArn is mutually exclusive with primaryContainer/cpu/memory/role params. Never rename the Main container - it breaks Express Mode updates.",
         "First Express service in a VPC pins the shared ALB's subnets/AZs - create with subnets from ALL AZs. Public subnets -> internet-facing ALB + public task IPs; private subnets -> internal ALB (bring your own NAT).",
         "Custom domain is not first-class: manual ACM cert + host-header listener rule on the shared ALB + Route 53 record.",
-        "IaC: Terraform aws_ecs_express_gateway_service (provider >= 6.23.0); CloudFormation/CDK supported since launch. Schedules live in IaC next to the commands they trigger - never click-ops.",
+        "IaC: AWS CDK (Python) in infra/ - CfnExpressGatewayService has been supported by CloudFormation/CDK since launch. Schedules live in IaC next to the commands they trigger - never click-ops.",
         "Recurring jobs: EventBridge Scheduler -> ECS RunTask with command override `python manage.py <command>` reusing the task definition family; one-off Fargate seconds per run, no always-on beat process.",
         "AWS positions Express Mode as the migration target for App Runner (availability changing) and the EOL Copilot CLI - a point in favor of betting on it."
       ],

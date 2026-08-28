@@ -55,6 +55,9 @@ services:
 
   # Broadcast fan-out lane - scale during campaigns:
   #   docker compose up -d --scale worker-bulk=4
+  # Locally two workers show the two queues; AWS runs ONE worker with
+  # `--queue-name default,bulk` (infra/) and scales a bulk lane only on demand.
+
   worker-bulk:
     <<: *app
     command: ['python', 'manage.py', 'db_worker', '--queue-name', 'bulk']

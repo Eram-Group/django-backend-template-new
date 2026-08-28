@@ -55,6 +55,17 @@ repos:
     rev: 0.12.5
     hooks:
       - id: uv-lock
+      - id: uv-lock
+        name: uv-lock (infra)
+        args: ["--project", "infra"]
+        files: ^infra/(pyproject\.toml|uv\.lock)$
+
+  # Deploy workflows are load-bearing (Express Mode rollout, release task);
+  # lint them where every other file is linted.
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.10
+    hooks:
+      - id: actionlint
 
   - repo: local
     hooks:

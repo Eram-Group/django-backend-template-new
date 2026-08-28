@@ -1,0 +1,232 @@
+# Deployment (AWS)
+
+How to stand the backend up on AWS once, what it costs, and how every deploy
+flows. The reasoning behind the design is in
+[AWS_ARCHITECTURE.md](AWS_ARCHITECTURE.md); the infrastructure is code in
+[`infra/`](../infra) (AWS CDK, Python); the pipelines are
+`.github/workflows/deploy-*.yml`.
+
+## Architecture
+
+```
+GitHub Actions (OIDC, arm64 build) ──push :sha──▶ ECR eram/<app>
+        │
+        ├─ 1. release  : ECS RunTask (worker family)  check --deploy, migrate, createcachetable, collectstatic
+        ├─ 2. web      : update ECS Express Mode service   canary, auto-rollback on 5XX / unhealthy
+        └─ 3. worker   : update ECS Fargate service        db_worker --queue-name default,bulk
+
+clients ──HTTPS──▶ ALB (Express-managed, shared by every Express service in the VPC)
+                     └─▶ [web] Fargate ARM64 · gunicorn · CPU target tracking, 1..N tasks
+                                  │
+CloudFront (OAC) ──▶ S3 static/ media/         ├──▶ RDS PostgreSQL 18 (DB + cache table + sessions + task queue)
+EventBridge Scheduler ──RunTask──▶ manage.py …  └──▶ SES
+[worker] Fargate ARM64 · db_worker · prod on-demand, dev Spot
+```
+
+| Concern | Service | Notes |
+|---|---|---|
+| Web | **ECS Express Mode** on Fargate (ARM64) | Express provisions and operates the ALB, HTTPS listener + certificate, target groups, security groups, auto scaling and canary deployments. We hand it a CDK-owned task definition (container **`Main`**, port 8000, health path `/readyz`). URL: `https://<service>-<hash>.ecs.eu-central-1.on.aws`. |
+| Worker | plain ECS Fargate service, same cluster | `manage.py db_worker --queue-name default,bulk`, 0.25 vCPU / 0.5 GB, `stopTimeout` 120 s (≥ the longest task), ECS Exec enabled. Production on-demand; dev/staging on **Fargate Spot** (tasks are idempotent and `db_worker` finishes the current task on SIGTERM). |
+| Release step | one-off `RunTask` on the worker family, on-demand | Runs before every web rollout from the exact revision being deployed. |
+| Scheduled jobs | **EventBridge Scheduler** → `ecs:RunTask` | One schedule per management command, defined in `infra/backend_infra/config.py::SCHEDULES` next to the commands. No always-on beat process. |
+| Database | **RDS for PostgreSQL 18** | Production: `production-<app>` db.t4g.micro, gp3 20 GB (autoscaling to 100), single-AZ, 7-day backups, deletion protection. Dev/staging: one shared `development-shared-pg18` db.t4g.small for every app's non-prod databases. Postgres also serves as cache, session store and task queue — there is no Redis. |
+| Files | S3 (private, SSE-S3) + **CloudFront** (OAC) | `static/` + `media/` prefixes (django-storages). |
+| Email | SES, region-local identity | Task role may `ses:SendEmail` from the identity's domain only. |
+| Config | ECS `environment` + `secrets` | Non-secret values in the task definition (from `config.py`), secrets from one Secrets Manager JSON secret `<env>/<app>`; production `DATABASE_URL` is composed by CDK into `<env>/<app>/database-url`. |
+| Network | default VPC, public subnets in all three AZs, public task IPs | No NAT gateway. The DB security group allows 5432 from the VPC CIDR. |
+| Observability | CloudWatch Logs (30-day retention), Sentry | JSON structlog with `request_id`; Express adds a 5XX/unhealthy alarm per service. |
+| CI identity | GitHub OIDC provider + `<app>-github-deploy` role | No static AWS keys anywhere. |
+
+**Express Mode facts that shape the design** — the primary container must be
+named `Main` with exactly one named TCP port mapping; `taskDefinitionArn` is
+mutually exclusive with the "primary container" shortcut (roles, cpu, memory
+are read from the task definition); deployments are always canary (not
+configurable); the first Express service in a VPC pins the shared ALB's
+subnets, so every service passes subnets from all AZs; a custom domain is not
+first-class (see below); one ALB is shared by up to 25 Express services in the
+VPC — dev **and** production of every app, which is cheap but couples them (a
+dedicated production VPC is the escape hatch).
+
+### Environments
+
+`dev` and `production` are defined; `staging` is supported by the app
+(`ENVIRONMENT=staging`, test payment keys) and is one more `EnvConfig` entry.
+Each environment is one CloudFormation stack `App-<env>`; account-level
+resources (ECR, cluster, roles, GitHub OIDC, shared dev DB) live in `Shared`.
+
+### Who owns what
+
+- **CDK owns** every resource, including the task definitions — created from
+  the image tag passed as `-c image_tag=<sha>`.
+- **CD mutates** task definitions (new revisions with the new image and
+  `SENTRY_RELEASE`) and repoints the services. CloudFormation ignores that
+  drift; it only re-registers when the *template* changes.
+- `just infra-deploy <env>` reads the currently deployed tag from the ACTIVE
+  worker revision (`infra/scripts/live_context.sh`) before running
+  `cdk deploy`, so a config-only deploy never reverts the image. The first
+  deploy of an environment needs `-- -c image_tag=<sha>` explicitly.
+
+## Cost (eu-central-1, on-demand list prices, 730 h/month)
+
+| Item | dev | production |
+|---|---|---|
+| Web task, Fargate ARM (dev 0.25 vCPU / 1 GB, prod 0.5 vCPU / 1 GB; 1-task floor) | $9.78 | $16.58 |
+| Worker task, Fargate ARM 0.25 vCPU / 0.5 GB (dev on Spot ≈ −70 %) | ≈ $2.50 | $8.29 |
+| Public IPv4 per task ENI ($0.005/h) — the price of "no NAT" | $7.30 | $7.30 |
+| Scheduled one-off tasks (reconcile */10 min, sweep */15 min, dailies) | ≈ $1.40 | ≈ $1.40 |
+| RDS PostgreSQL 18 | — (shared instance) | t4g.micro $13.87 + gp3 20 GB $2.74 |
+| Secrets Manager | $0.40 | $1.20 |
+| CloudFront / S3 / SES / Scheduler / CloudWatch Logs | ≈ $2 | ≈ $3–5 |
+| **Environment subtotal** | **≈ $23** | **≈ $55** |
+
+Shared pools, paid once per account: ALB ≈ $34/mo ($19.71 + LCU + 3 public
+IPs) split across every Express service in the VPC; `development-shared-pg18`
+≈ $30/mo split across every dev/staging database. With ~5 apps that lands at
+≈ $33/mo per dev environment and ≈ $58/mo per production environment.
+
+Compared with the previous shape (App Runner 1 vCPU/2 GB per env + x86
+on-demand workers + a NAT gateway for App Runner's VPC egress, ≈ $105–120/mo
+per app with dev + prod), this lands at ≈ $91/mo per app at low traffic: the
+NAT share and x86 workers go away, public IPv4 ($3.65/task) and the ALB share
+come in. The gap widens under real traffic (App Runner bills per active
+vCPU-hour; Fargate is flat and only scales out above 60 % CPU) and by another
+≈ $38/mo account-wide once the NAT gateway can be deleted. App Runner is
+closed to new customers since 2026-04-30; AWS names Express Mode as its
+replacement.
+
+### Scale-to-zero, honestly
+
+The web tier cannot scale to zero on Fargate (the ALB needs ≥ 1 healthy
+target); its floor is one 0.25 vCPU task ≈ $10/mo. The worker is the only
+tier that can: `EnvConfig.scale_to_zero_schedule=True` scales the dev worker
+to 0 tasks 20:00–05:00 UTC, or replace the service with a scheduled
+`db_worker --batch` run if minutes of latency are acceptable. Lambda was
+rejected for the web tier: one request per sandbox means a database
+connection per concurrent request (a t4g.micro would collapse), plus cold
+starts and a second runtime to maintain.
+
+## One-time bootstrap
+
+Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
+
+1. `just infra-install` — Python deps + the pinned CDK CLI.
+2. `cd infra && npx cdk bootstrap aws://<account>/eu-central-1` (once per
+   account/region).
+3. Edit `infra/backend_infra/config.py` (`APP`: name, repo, subnets, hosted
+   zone; `ENVIRONMENTS`: sizes, domain, frontend origins). For a **second app
+   in the same account** set `create_github_oidc_provider=False` and
+   `create_shared_dev_db=False` — those are account-global and exactly one
+   stack may own them.
+4. `just infra-deploy-shared` — ECR, cluster, roles, OIDC provider, shared dev
+   DB. If the ECR repository `eram/<app>` already exists, import it first
+   (`npx cdk import Shared`) or delete it.
+5. Create the app secret with every key present (empty = unset):
+   `aws secretsmanager create-secret --name dev/<app> --secret-string "$(just infra-secret-skeleton dev)"`
+   then fill the values in the console (`SECRET_KEY`, `DATABASE_URL` for
+   shared-DB envs, gateway keys…). Production gets its `DATABASE_URL` from
+   CDK — leave that key out (`infra-secret-skeleton production` already does).
+6. Dev database on the shared instance: `just infra-run-task dev` is not
+   available before the first deploy, so connect once through ECS Exec on
+   any task in the VPC (or a temporary bastion) and run
+   `CREATE ROLE <app>_dev LOGIN PASSWORD '…'; CREATE DATABASE <app>_dev OWNER <app>_dev;`
+   using the master secret `shared/development-shared-pg18/master`.
+7. GitHub repo variables: `AWS_ECR_REPOSITORY=eram/<app>`,
+   `AWS_OIDC_ROLE_ARN` (Shared output `GithubDeployRoleArn`), `AWS_REGION`.
+   Push to `main` → the `build` job pushes `:<sha>` to ECR (the deploy job
+   still skips).
+8. `just infra-deploy dev -- -c image_tag=<sha>` — first environment deploy
+   (≈ 5 min; the Express service provisions the ALB).
+9. Copy the `App-dev` outputs into the GitHub environment `dev`:
+   `ECS_CLUSTER`, `ECS_FAMILY_WEB`, `ECS_FAMILY_WORKER`, `ECS_SERVICE_WORKER`,
+   `EXPRESS_SERVICE_ARN`, `EXPRESS_SERVICE_NAME`, `ECS_SUBNETS`,
+   `ECS_SECURITY_GROUPS`, `ECS_ASSIGN_PUBLIC_IP=ENABLED`. Set the repo-level
+   sentinel `DEV_DEPLOY_ENABLED=1` and re-run `Deploy dev`.
+10. `just infra-run-task dev python manage.py createsu` (first superuser) and
+    `just infra-run-task dev python manage.py shell -c "1/0"` (Sentry smoke:
+    the event must carry `environment=dev` and `release=<sha>`).
+11. Production: `just infra-deploy production -- -c image_tag=<sha>` (RDS
+    takes ~10 min; the ACM certificate validates automatically through
+    Route 53), fill `production/<app>`, create the GitHub environment
+    `production` with required reviewers, add its variables, then dispatch
+    `Deploy production`.
+
+SES: the account is already out of the sandbox and `eramapps.com` is a
+verified identity; `DEFAULT_FROM_EMAIL` must use that domain (or add an
+identity and change `AppConfig.ses_identity`).
+
+## Deploy flow
+
+1. **release** — `amazon-ecs-deploy-task-definition` registers a worker
+   revision with the new image and runs it once (on-demand Fargate) with the
+   command `check --deploy --fail-level WARNING && migrate && createcachetable
+   && collectstatic`. Any Django deploy warning stops the rollout before the
+   database is touched. Migrations must be expand/contract: web rolls before
+   worker by design.
+2. **web** — a web revision is registered, then
+   `aws ecs update-express-gateway-service --task-definition-arn …`. Express
+   runs a canary; its alarm rolls back automatically on 5XX/unhealthy targets.
+   The workflow waits for `services-stable` and then confirms the active
+   configuration points at the new revision — a rolled-back deploy fails the
+   job loudly.
+3. **worker** — plain `UpdateService` with circuit breaker + rollback.
+
+Production promotes the exact dev image by manifest retag (build once), then
+runs the same three steps, then tags the release.
+
+Rollback: re-dispatch `Deploy production` with an older `sha`, or by hand
+`aws ecs update-express-gateway-service --service-arn … --task-definition-arn <previous>`
+and `aws ecs update-service --cluster <app> --service <app>-<env>-worker --task-definition <previous>`.
+
+## Scheduled jobs
+
+| Name | Cron (UTC) | Command |
+|---|---|---|
+| clearsessions | `0 3 * * ? *` | `manage.py clearsessions` |
+| prune-task-results | `30 3 * * ? *` | `manage.py prune_db_task_results --min-age-days 14` |
+| reconcile-payments | `*/10 * * * ? *` | `manage.py reconcile_payments` |
+| sweep-deliveries | `*/15 * * * ? *` | `manage.py sweep_deliveries` |
+| sample-scheduled-job | disabled | template reference |
+
+Adding one = a management command (thin wrapper over a service, safe to
+re-run) + a `ScheduledJob` entry in `config.py` + `just infra-deploy <env>`.
+Schedules use no flexible window and no retries: sweeps are idempotent and
+frequent, so the next tick is the retry.
+
+## Operations
+
+- **One-off commands**: `just infra-run-task <env> python manage.py <cmd>`
+  (worker family, on-demand, waits and returns the exit code).
+- **Shell**: `aws ecs execute-command --cluster <app> --task <id> --container Main --interactive --command "python manage.py shell"`.
+- **Logs**: `aws logs tail /aws/ecs/<app>-<env>-web --follow` (JSON; grep a
+  `request_id` to follow one request). Worker: `…-worker`.
+- **Spot**: a reclaimed dev worker task gets SIGTERM two minutes ahead;
+  `db_worker` finishes the current task and ECS starts a replacement.
+- **When CDK rolls services**: any change to the task definition template
+  (env value, size, secret key) registers a revision with the *live* image tag
+  and triggers a canary on web and a rolling update on the worker.
+- **Secrets**: rotate `SECRET_KEY` by moving the old value into
+  `SECRET_KEY_FALLBACKS`; edit `<env>/<app>` in Secrets Manager, then
+  `just infra-deploy <env>` (a new revision is needed for ECS to re-read).
+- `manage.py axes_reset` clears admin lockouts; admin lives at `ADMIN_URL`.
+
+## Custom domain
+
+Express Mode has no first-class custom domain. With `EnvConfig.custom_domain`
+set, CDK does what the AWS migration guide prescribes: an ACM certificate
+(DNS-validated in the Route 53 zone) added to the Express HTTPS listener, the
+host added to the Express-owned listener rule (`ModifyRule` custom resource),
+and a Route 53 alias record to the ALB. If an Express update ever rewrites
+the rule's conditions, re-run `just infra-deploy <env>` or add the host in
+the console (EC2 → Load balancers → listener rules).
+
+## Migrating an existing App Runner app
+
+1. Copy `infra/` with its own `AppConfig` (name, repo; account-global flags
+   off), deploy `Shared` + `App-production` alongside the App Runner service.
+2. Point `custom_domain` at the existing hostname; CDK adds the certificate,
+   rule and DNS alias — switch the DNS record when the Express URL is verified.
+3. PostgreSQL 17 → 18: new instance + `pg_dump | pg_restore` (uuidv7 defaults
+   need 18); or keep the app on its PG17 instance if it does not use PG18
+   features.
+4. Delete the App Runner service and, once nothing else uses it, the NAT
+   gateway.

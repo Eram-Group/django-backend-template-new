@@ -1,5 +1,5 @@
 # Manual promotion: retag the main-built image (no rebuild), release-task +
-# roll both production ECS services, then cut the git tag + GitHub Release
+# roll the production web (ECS Express Mode) and worker services, then cut the git tag + GitHub Release
 # for the exact deployed sha. No graceful skip here - a deliberate dispatch
 # against missing infra must fail loudly, not no-op.
 
@@ -132,27 +132,36 @@ jobs:
           role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      # Same shape as the dev deploy job - see deploy-dev.yml for the WHYs
-      # (task defs live in AWS, container "app", release task piggyback,
-      # SENTRY_RELEASE = sha so dev and prod share one release per commit).
-      - name: Render web task definition
-        id: render-web
+      # Task definitions are created by CDK (infra/); CD only registers a new
+      # revision with the new image. Container name "Main" is an ECS Express
+      # Mode requirement (never rename). SENTRY_RELEASE = sha, not version:
+      # one Sentry release per commit, shared by dev and production.
+      - name: Render worker task definition
+        id: render-worker
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition-family: ${{ vars.ECS_FAMILY_WEB }}
-          container-name: app
+          task-definition-family: ${{ vars.ECS_FAMILY_WORKER }}
+          container-name: Main
           image: ${{ needs.promote.outputs.image }}
           environment-variables: SENTRY_RELEASE=${{ needs.version.outputs.sha }}
 
-      - name: Release task + roll web
+      # Release task (deploy checklist + migrate + createcachetable +
+      # collectstatic) runs on the worker family from this exact new revision
+      # - same image AND env as what goes live - and the rollout only starts
+      # after it exits 0. The check runs against the real task-definition env
+      # (Secrets Manager values included) before any DB mutation;
+      # --fail-level WARNING makes "zero warnings" binding. No `service`:
+      # the action registers the revision and runs the one-off task only.
+      # Always on-demand Fargate, even where the worker service runs on Spot.
+      - name: Release task
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
-          task-definition: ${{ steps.render-web.outputs.task-definition }}
+          task-definition: ${{ steps.render-worker.outputs.task-definition }}
           cluster: ${{ vars.ECS_CLUSTER }}
-          service: ${{ vars.ECS_SERVICE_WEB }}
           run-task: true
+          run-task-launch-type: FARGATE
           run-task-container-overrides: >
-            [{"name": "app", "command": ["sh", "-c",
+            [{"name": "Main", "command": ["sh", "-c",
             "python manage.py check --deploy --fail-level WARNING &&
             python manage.py migrate --noinput &&
             python manage.py createcachetable &&
@@ -161,18 +170,53 @@ jobs:
           run-task-security-groups: ${{ vars.ECS_SECURITY_GROUPS }}
           run-task-assign-public-IP: ${{ vars.ECS_ASSIGN_PUBLIC_IP }}
           wait-for-task-stopped: true
-          wait-for-service-stability: true
           wait-for-minutes: 12
 
-      - name: Render worker task definition
-        id: render-worker
+      - name: Render web task definition
+        id: render-web
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition-family: ${{ vars.ECS_FAMILY_WORKER }}
-          container-name: app
+          task-definition-family: ${{ vars.ECS_FAMILY_WEB }}
+          container-name: Main
           image: ${{ needs.promote.outputs.image }}
           environment-variables: SENTRY_RELEASE=${{ needs.version.outputs.sha }}
 
+      # Register only (no service, no run-task): Express Mode owns the
+      # service, so the rollout goes through its own API below.
+      - name: Register web task definition
+        id: register-web
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-web.outputs.task-definition }}
+
+      # Express Mode rolls out as a canary and auto-rolls back on its 5XX /
+      # unhealthy-target alarm. `services-stable` covers the ECS side; the
+      # loop then confirms the ACTIVE configuration points at our revision
+      # (a rolled-back deploy leaves the old one active -> fail loudly).
+      - name: Roll web (ECS Express Mode)
+        env:
+          CLUSTER: ${{ vars.ECS_CLUSTER }}
+          SERVICE_ARN: ${{ vars.EXPRESS_SERVICE_ARN }}
+          SERVICE_NAME: ${{ vars.EXPRESS_SERVICE_NAME }}
+          TASK_DEF_ARN: ${{ steps.register-web.outputs.task-definition-arn }}
+          LOG_GROUP: /aws/ecs/${{ vars.ECS_FAMILY_WEB }}
+        run: |
+          aws ecs update-express-gateway-service \
+            --service-arn "$SERVICE_ARN" --task-definition-arn "$TASK_DEF_ARN" > /dev/null
+          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE_NAME"
+          for _ in $(seq 1 60); do
+            ACTIVE=$(aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" \
+              --query 'service.activeConfigurations[0].taskDefinitionArn' --output text)
+            [ "$ACTIVE" = "$TASK_DEF_ARN" ] && { echo "web active on $ACTIVE"; exit 0; }
+            sleep 15
+          done
+          echo "::error::Express rollout did not activate $TASK_DEF_ARN (active: $ACTIVE)"
+          aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" || true
+          aws logs tail "$LOG_GROUP" --since 15m | tail -n 50 || true
+          exit 1
+
+      # Worker rolls only after web is live - the canary + alarm validated the
+      # image before the worker moves (expand/contract migrations rely on it).
       - name: Roll worker
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:

@@ -134,7 +134,7 @@ lint.ignore = [
 lint.flake8-tidy-imports.banned-api."faker".msg = "Use mimesis via apps.common.tests.fake - Faker is only factory_boy's internal dependency."
 lint.flake8-tidy-imports.banned-api."factory.faker".msg = "Use mimesis via apps.common.tests.fake, not factory.Faker."
 # S105/S106 in tests: device tokens / webhook secrets are test data, not passwords.
-lint.per-file-ignores = { "**/tests/**" = [ "S101", "S105", "S106" ], "conftest.py" = [ "S101" ], "config/settings/*" = [ "F403", "F405" ] }
+lint.per-file-ignores = { "**/tests/**" = [ "S101", "S105", "S106" ], "conftest.py" = [ "S101" ], "config/settings/*" = [ "F403", "F405" ], "infra/app.py" = [ "INP001" ], "infra/scripts/*" = [ "INP001" ] }
 lint.isort.force-single-line = true
 
 # ==== mypy ====
@@ -149,6 +149,8 @@ enable_error_code = [
   "possibly-undefined",
 ]
 files = [ "apps", "config", "manage.py" ]
+# infra/ is a separate uv project (own venv, aws-cdk-lib); typed by its own gate.
+exclude = [ "^infra/" ]
 plugins = [
   "mypy_django_plugin.main",
   "pydantic.mypy",
@@ -185,6 +187,7 @@ testpaths = [
   "apps",
   "config",
 ]
+norecursedirs = [ "infra", ".venv" ]
 python_files = [
   "tests.py",
   "test_*.py",

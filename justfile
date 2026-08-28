@@ -128,6 +128,47 @@ clean:
     rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage htmlcov staticfiles
     find . -type d -name __pycache__ -not -path "./.venv/*" -exec rm -rf {} +
 
+# --- AWS infrastructure (infra/ = CDK, see docs/DEPLOYMENT.md) --------------
+
+app_name := "template"
+
+# Install the CDK project: Python deps (uv) + the pinned CDK CLI (npm).
+infra-install:
+    cd infra && uv sync && npm ci
+
+# Synthesize every stack without AWS credentials (image_tag=synth placeholder).
+infra-synth:
+    cd infra && npx cdk synth --all -c image_tag=synth -q
+
+# Template assertions for the CDK stacks.
+infra-test:
+    cd infra && uv run pytest
+
+# cfn-lint over the synthesized templates (run infra-synth first).
+infra-lint:
+    cd infra && uv run cfn-lint --ignore-checks W3005 -- cdk.out/*.template.json
+
+# Diff one environment against what is deployed, pinning the LIVE image tag.
+infra-diff env:
+    cd infra && npx cdk diff App-{{ env }} $(./scripts/live_context.sh {{ app_name }} {{ env }})
+
+# Deploy account-level resources (ECR, cluster, roles, OIDC, shared dev DB). Once.
+infra-deploy-shared:
+    cd infra && npx cdk deploy Shared --require-approval broadening
+
+# Deploy one environment; first deploy: `just infra-deploy dev -- -c image_tag=<sha>`.
+infra-deploy env *args:
+    cd infra && npx cdk deploy App-{{ env }} --require-approval broadening \
+        $(./scripts/live_context.sh {{ app_name }} {{ env }} || true) {{ args }}
+
+# JSON skeleton of the <env>/<app> Secrets Manager secret (every key present).
+infra-secret-skeleton env="dev":
+    cd infra && uv run python scripts/secret_skeleton.py {{ env }}
+
+# One-off task on the worker family, e.g. `just infra-run-task dev python manage.py createsu`.
+infra-run-task env +cmd:
+    ./infra/scripts/run_task.sh {{ app_name }} {{ env }} {{ cmd }}
+
 # Django deploy checklist against deployed-mode settings (dummy prod values).
 check-deploy:
     DJANGO_SETTINGS_MODULE=config.settings.production \

@@ -273,3 +273,7 @@ tags
 
 # Reference template (read-only concept quarry - never committed)
 Gawdat_Django_Template/
+
+# CDK (infra/)
+infra/cdk.out/
+infra/.venv/

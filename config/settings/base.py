@@ -4,6 +4,8 @@ Every environment-dependent value comes from the typed ``config.env.env``
 singleton - never from ``os.environ`` directly.
 """
 
+from collections.abc import Mapping
+from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -67,6 +69,9 @@ INSTALLED_APPS = [
 
 # --- Middleware (guid first, axes last - order is load-bearing) ----------
 MIDDLEWARE = [
+    # First on purpose: LB probes arrive as plain http with an IP Host header
+    # and must never hit the SSL redirect or ALLOWED_HOSTS (see the module).
+    "apps.common.middleware.HealthProbeMiddleware",
     "django_guid.middleware.guid_middleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
@@ -219,6 +224,7 @@ def environment_callback(request: Any) -> list[str]:
     """
     return {
         "production": ["PRODUCTION", "danger"],
+        "staging": ["STAGING", "warning"],
         "dev": ["DEV", "warning"],
         "local": ["LOCAL", "success"],
     }[env.ENVIRONMENT]
@@ -511,7 +517,7 @@ PAYMOB_MOTO_INTEGRATION_ID = env.PAYMOB_MOTO_INTEGRATION_ID
 
 # --- Security ----------------------------------------------------------------
 X_FRAME_OPTIONS = "DENY"
-SECURE_CSP = {
+SECURE_CSP: dict[str, list[str]] = {
     "default-src": [CSP.SELF],
     "img-src": [CSP.SELF, "data:"],
     "font-src": [CSP.SELF, "data:"],
@@ -519,6 +525,19 @@ SECURE_CSP = {
     "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
     "script-src": [CSP.SELF, CSP.NONCE],
 }
+
+
+def csp_with_origin(
+    csp: Mapping[str, Sequence[str]], origin: str
+) -> dict[str, list[str]]:
+    """Return ``csp`` with ``origin`` allowed for every fetch directive.
+
+    Deployed environments serve static + media from CloudFront (a different
+    origin), which a 'self'-only policy blocks - the admin renders unstyled.
+    production.py applies this once AWS_S3_CUSTOM_DOMAIN is known.
+    """
+    return {directive: [*sources, origin] for directive, sources in csp.items()}
+
 
 # --- Cross-origin (browser SPA clients) ----------------------------------------
 CORS_ALLOWED_ORIGINS = env.FRONTEND_ALLOWED_ORIGINS

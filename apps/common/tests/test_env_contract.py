@@ -116,6 +116,7 @@ def test_blank_normalisation_leaves_lists_and_required_fields_alone() -> None:
         ("local", "TAP_SECRET_KEY", "sk_test_abc"),
         ("local", "PAYMOB_SECRET_KEY", "egy_sk_test_abc"),
         ("dev", "PAYMOB_PUBLIC_KEY", "egy_pk_test_abc"),
+        ("staging", "TAP_SECRET_KEY", "sk_test_abc"),
     ],
 )
 def test_payment_key_matching_environment_is_accepted(
@@ -137,6 +138,7 @@ def test_payment_key_matching_environment_is_accepted(
         ("local", "TAP_SECRET_KEY", "sk_live_abc", "test"),
         ("local", "PAYMOB_SECRET_KEY", "egy_sk_live_abc", "test"),
         ("dev", "PAYMOB_PUBLIC_KEY", "egy_pk_live_abc", "test"),
+        ("staging", "TAP_SECRET_KEY", "sk_live_abc", "test"),
         # Says neither: refused as well.
         ("production", "TAP_SECRET_KEY", "not-a-key", "live"),
     ],

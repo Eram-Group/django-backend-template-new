@@ -4,10 +4,13 @@ API-only Django backend: [django-ninja](https://django-ninja.dev) REST API +
 Django admin (unfold), passwordless auth (allauth headless, 6-digit email
 codes), payments (Tap/Paymob gateways + wallet ledger),
 Postgres-only infrastructure (cache, sessions,
-task queue), one Docker image deployed as two ECS services. Arabic-first
+task queue), one Docker image deployed as an ECS Express Mode web service +
+a Fargate worker (CDK in `infra/`). Arabic-first
 (ar/en).
 
 How the code is organized: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md);
+why the AWS shape is what it is: [docs/AWS_ARCHITECTURE.md](docs/AWS_ARCHITECTURE.md);
+how to operate it: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md);
 how clients authenticate: [docs/AUTH_API.md](docs/AUTH_API.md); how the
 lint rule set is chosen: [docs/LINTING.md](docs/LINTING.md). The
 authoritative design document is [PLAN.md](PLAN.md); the remaining build
@@ -129,70 +132,42 @@ Empty value on the `X | None` fields = feature off (Sentry, OAuth, cookie
 domain). Deployed environments provide the same keys through ECS task
 definitions with secrets pulled from Secrets Manager.
 
-## Deployment (AWS runbook)
+## Deployment (AWS)
 
-One image, three run modes: **web** (gunicorn), **worker** (`db_worker`),
-**release task** (`migrate` + `createcachetable` + `collectstatic`, run
-before each rollout from the exact revision being deployed). Nothing runs at
-container boot; the image never runs collectstatic at build time.
-
-### One-time provisioning
-
-0. **GitHub remote**, if the repo is still local only — CI, the secret scan
-   and the migration guard cannot run without one:
-   `gh repo create <owner>/<name> --private --source=. --remote=origin`
-   then `git push -u origin main`. With no deploy variables set (below),
-   every deploy stage skips and only `ci.yml` + `secret-scan.yml` run.
-1. **ECR** repository for the image.
-2. **RDS** PostgreSQL 18; one database; `DATABASE_URL` into Secrets Manager.
-3. **S3** bucket (static + media prefixes via django-storages) fronted by
-   **CloudFront** (`AWS_S3_CUSTOM_DOMAIN`); **SES** verified domain out of
-   sandbox (`AWS_SES_REGION`).
-4. **ECS Fargate** cluster; two task-definition families per environment
-   (e.g. `backend-dev-web`, `backend-dev-worker`) whose container is named
-   **`app`** — the deploy workflows render by family and container name. Env
-   vars per `.env.example` (secrets via Secrets Manager `secrets` entries;
-   `SENTRY_RELEASE` is injected by CD, leave it out).
-5. Two **services**: web behind an ALB (target group health check
-   `/readyz`, deployment **circuit breaker with rollback** enabled) and
-   worker (no load balancer, `stopTimeout` sized to your longest task).
-6. **EventBridge Scheduler** cron → ECS `RunTask` on the worker family with a
-   command override, one schedule per job:
-
-   | Schedule | Command |
-   |---|---|
-   | daily | `python manage.py clearsessions` |
-   | daily | `python manage.py prune_db_task_results --min-age-days 14` |
-   | as needed | your scheduled jobs (see `sample_scheduled_job`) |
-
-7. **GitHub OIDC role**: trust policy scoped to this repo; permissions: ECR
-   push/pull, `ecs:Describe*`/`RegisterTaskDefinition`/`UpdateService`/`RunTask`,
-   `iam:PassRole` on the task execution/task roles.
-8. **GitHub environments** `dev` and `production` (add required reviewers on
-   `production` for a manual approval gate).
+One image, three run modes: **web** (gunicorn, ECS Express Mode), **worker**
+(`db_worker`, Fargate), **release task** (`check --deploy` + `migrate` +
+`createcachetable` + `collectstatic`, run before each rollout from the exact
+revision being deployed). Infrastructure is code: [`infra/`](infra) (AWS CDK,
+Python — `just infra-*`). The full runbook — architecture, cost, one-time
+bootstrap, deploy flow, schedules, operations — is
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ### GitHub variables / secrets
 
 Repo-level: `AWS_ECR_REPOSITORY`, `AWS_OIDC_ROLE_ARN`, `AWS_REGION`,
 `DEV_DEPLOY_ENABLED` (sentinel: any value), `APIDOG_PROJECT_ID` (+ secret
-`APIDOG_ACCESS_TOKEN`). Per environment (`dev`, `production`): `ECS_CLUSTER`,
-`ECS_FAMILY_WEB`, `ECS_FAMILY_WORKER`, `ECS_SERVICE_WEB`, `ECS_SERVICE_WORKER`,
-`ECS_SUBNETS`, `ECS_SECURITY_GROUPS`, `ECS_ASSIGN_PUBLIC_IP`. Every deploy
-stage skips gracefully until its variables exist — the repo stays green with
-zero infra provisioned.
+`APIDOG_ACCESS_TOKEN`). Per environment (`dev`, `production`, optionally
+`staging`), all printed as `App-<env>` stack outputs: `ECS_CLUSTER`,
+`ECS_FAMILY_WEB`, `ECS_FAMILY_WORKER`, `ECS_SERVICE_WORKER`,
+`EXPRESS_SERVICE_ARN`, `EXPRESS_SERVICE_NAME`, `ECS_SUBNETS`,
+`ECS_SECURITY_GROUPS`, `ECS_ASSIGN_PUBLIC_IP`. Every deploy stage skips
+gracefully until its variables exist — the repo stays green with zero infra
+provisioned.
 
 ### Pipelines
 
 - **PR / push** — `ci.yml`: lint (pre-commit) → mypy → lock check →
   migrations check → pytest (coverage ≥ 80%, postgres:18 service), plus a
-  parallel prod-image build + compose smoke (`/healthz`, `/readyz`, auth spec).
+  parallel prod-image build + compose smoke (`/healthz`, `/readyz`, auth spec)
+  and an `infra` job (CDK synth → template assertions → cfn-lint).
   TruffleHog secret scan; Dependabot (`.github/dependabot.yml`) keeps uv,
   actions, images and pre-commit hooks fresh — weekly, after a cooldown so a
   yanked release never reaches a PR. It updates `uv.lock`, not the `>=` floors
   in `pyproject.toml`; raising a floor stays a deliberate edit.
-- **Merge to main** — `deploy-dev.yml`: build + push `:sha` (OIDC, GHA layer
-  cache) → render web task def (`SENTRY_RELEASE=sha`) → **release task** from
-  that revision, then roll web (waits for stability) → roll worker → sync the
+- **Merge to main** — `deploy-dev.yml`: build + push `:sha` (arm64 runner,
+  OIDC, GHA layer cache) → **release task** on a fresh worker revision
+  (`SENTRY_RELEASE=sha`) → register the web revision and roll it through
+  **ECS Express Mode** (canary, auto-rollback) → roll worker → sync the
   OpenAPI schema to Apidog. Deploys queue, never cancel mid-rollout.
 - **Production** — `deploy-prod.yml` (manual dispatch, choose
   patch/minor/major): computes the next `v*` semver → **promotes the exact
@@ -202,8 +177,8 @@ zero infra provisioned.
 
 ### Branch protection
 
-Add a ruleset on `main`: require a PR, require the `fast`, `image` and
-`trufflehog` status checks, and tick **"Require branches to be up to date
+Add a ruleset on `main`: require a PR, require the `fast`, `image`, `infra`
+and `trufflehog` status checks, and tick **"Require branches to be up to date
 before merging"** (the server-side twin of the local `branch-behind-main`
 pre-push hook — `deploy-dev` deploys main as-is and relies on this gate).
 Migrations are append-only, enforced by `guard-migrations.yml`
@@ -211,11 +186,11 @@ Migrations are append-only, enforced by `guard-migrations.yml`
 
 ### Operations notes
 
-- First superuser: run a one-off ECS task on the web family with command
-  `python manage.py createsu` (idempotent — reads `DJANGO_SUPERUSER_*`).
-- Verify Sentry wiring after provisioning: one-off ECS task with command
-  `python manage.py shell -c "1/0"` — the event must arrive with the
-  expected `environment` and `release` tags.
+- First superuser: `just infra-run-task <env> python manage.py createsu`
+  (idempotent — reads `DJANGO_SUPERUSER_*`).
+- Verify Sentry wiring after provisioning:
+  `just infra-run-task <env> python manage.py shell -c "1/0"` — the event
+  must arrive with the expected `environment` and `release` tags.
 - Logs are JSON (structlog) with a per-request `request_id`
   (`Correlation-ID`) — grep one id in CloudWatch to follow a request.
 - `django-axes` locks a (username, ip) pair for 1h after 5 failed admin
