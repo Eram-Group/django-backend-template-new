@@ -165,9 +165,16 @@ class BroadcastAdmin(ExportableModelAdmin):
         # which the form left unsaved - point it at the row the service made.
         obj.pk = broadcast.pk
 
+    # Both lifecycle guards check the MODEL permission before the status: the
+    # action views are plain GET URLs (unfold enforces has_<action>_permission
+    # inside the view), so status alone must never authorize a send to the
+    # whole user base by any is_staff account.
+
     def has_dispatch_broadcast_permission(
         self, request: HttpRequest, object_id: str | None = None
     ) -> bool:
+        if not self.has_change_permission(request):
+            return False
         if object_id is None:
             return True
         broadcast = Broadcast.objects.filter(pk=object_id).first()
@@ -196,6 +203,8 @@ class BroadcastAdmin(ExportableModelAdmin):
     def has_resume_broadcast_permission(
         self, request: HttpRequest, object_id: str | None = None
     ) -> bool:
+        if not self.has_change_permission(request):
+            return False
         if object_id is None:
             return True
         broadcast = Broadcast.objects.filter(pk=object_id).first()

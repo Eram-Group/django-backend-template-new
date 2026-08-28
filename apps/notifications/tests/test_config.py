@@ -16,7 +16,7 @@ def _set_channels(kind: NotificationKind, channels: list[str]) -> None:
 
 def test_every_kind_has_exactly_one_config_row() -> None:
     """The no-fallback deal: rows ARE the policy, so all of them must exist
-    (migration 0004 seeds them; the conftest reset restores them)."""
+    (migration 0005 seeds them; the conftest reset restores them)."""
     kinds = list(NotificationKindConfig.objects.values_list("kind", flat=True))
 
     assert sorted(kinds) == sorted(NotificationKind.values)

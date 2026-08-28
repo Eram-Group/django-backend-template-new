@@ -7,6 +7,7 @@ from django.utils import translation
 
 from apps.notifications.clients.push import backends as push_backends
 from apps.notifications.clients.sms import backends as sms_backends
+from apps.notifications.clients.sms.base import SmsProviderError
 from apps.notifications.clients.whatsapp import backends as whatsapp_backends
 from apps.notifications.clients.whatsapp.base import WhatsAppNotConfiguredError
 from apps.notifications.constants import Channel
@@ -238,3 +239,89 @@ def test_mixed_channel_batch_processes_each_channel() -> None:
     assert sms_row.status == DeliveryStatus.SENT
     assert len(push_backends.outbox) == 1
     assert len(sms_backends.outbox) == 1
+
+
+# --- outcomes persist per channel ----------------------------------------------
+
+
+def test_systemic_failure_in_a_later_channel_keeps_earlier_sends(
+    settings: Any,
+) -> None:
+    """Push went out; WhatsApp then raised NotConfigured. The push row must be
+    SENT in the database - left PROCESSING, the sweep would reset it and the
+    user would receive the same push again on every pass."""
+    settings.WHATSAPP_BACKEND = (
+        "apps.notifications.clients.whatsapp.meta.MetaWhatsAppBackend"
+    )
+    user = UserFactory.create(phone="+966501234567")
+    DeviceFactory.create(user=user)
+    notification = NotificationFactory.create(
+        recipient=user, kind=NotificationKind.ANNOUNCEMENT
+    )
+    push_row = NotificationDeliveryFactory.create(
+        notification=notification, channel=Channel.PUSH
+    )
+    whatsapp_row = NotificationDeliveryFactory.create(
+        notification=notification, channel=Channel.WHATSAPP
+    )
+
+    with pytest.raises(WhatsAppNotConfiguredError):
+        execute_deliveries(delivery_ids=[str(push_row.pk), str(whatsapp_row.pk)])
+
+    push_row.refresh_from_db()
+    whatsapp_row.refresh_from_db()
+    assert push_row.status == DeliveryStatus.SENT
+    assert whatsapp_row.status == DeliveryStatus.PROCESSING
+    assert len(push_backends.outbox) == 1
+
+    # The sweep/resume path re-runs only the WhatsApp row: no second push.
+    execute_deliveries(delivery_ids=[str(push_row.pk), str(whatsapp_row.pk)])
+    assert len(push_backends.outbox) == 1
+
+
+def test_sms_rows_the_provider_accepted_before_a_rejection_are_sent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SMSMisr posts one number at a time and stops at the first bad code; the
+    numbers before it are with the provider. Marking the whole group FAILED
+    would re-bill them on the next `--include-failed` sweep."""
+    context = {"amount": "10.00", "currency": "SAR"}
+    rows = []
+    for phone in ("+201001234567", "+201001234568", "+201001234569"):
+        user = UserFactory.create(phone=phone, language="en")
+        notification = NotificationFactory.create(
+            recipient=user, kind=NotificationKind.PAYMENT_PAID, context=context
+        )
+        rows.append(
+            NotificationDeliveryFactory.create(
+                notification=notification, channel=Channel.SMS
+            )
+        )
+
+    def _partial(*, to: list[str], body: str) -> None:
+        raise SmsProviderError(provider="smsmisr", detail="code='1905'", sent=to[:1])
+
+    monkeypatch.setattr("apps.notifications.tasks.delivery.sms_send_many", _partial)
+
+    execute_deliveries(delivery_ids=[str(row.pk) for row in rows])
+
+    for row in rows:
+        row.refresh_from_db()
+    assert rows[0].status == DeliveryStatus.SENT
+    assert rows[0].sent_at is not None
+    assert [row.status for row in rows[1:]] == [DeliveryStatus.FAILED] * 2
+    assert rows[1].detail == "smsmisr: code='1905'"
+
+
+def test_a_channel_with_no_deliverer_fails_instead_of_staying_claimed() -> None:
+    """A claimed-but-unroutable row would be reset and re-claimed by every
+    sweep while its broadcast never completed."""
+    delivery = NotificationDeliveryFactory.create(
+        notification=NotificationFactory.create(), channel="email"
+    )
+
+    execute_deliveries(delivery_ids=[str(delivery.pk)])
+
+    delivery.refresh_from_db()
+    assert delivery.status == DeliveryStatus.FAILED
+    assert "email" in delivery.detail

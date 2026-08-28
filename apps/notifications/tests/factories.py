@@ -92,7 +92,7 @@ class NotificationDeliveryFactory(DjangoModelFactory[NotificationDelivery]):
 
 
 def kind_config_seed(kind: str) -> dict[str, Any]:
-    """The exact row state migration 0004 seeded for one kind.
+    """The exact row state migration 0005 seeded for one kind.
 
     English text in BOTH language columns (the repo ships empty translation
     catalogs, so str() under "en" returns the source string either way); the
@@ -117,7 +117,7 @@ def kind_config_seed(kind: str) -> dict[str, Any]:
 class NotificationKindConfigFactory(DjangoModelFactory[NotificationKindConfig]):
     """Exists for the factory-coverage and admin gates.
 
-    Every kind's row already exists (migration 0004 + the conftest reset), so
+    Every kind's row already exists (migration 0005 + the conftest reset), so
     get_or_create returns the SEEDED row and ignores other kwargs - tests that
     want a different policy edit the row directly, they don't call this.
     """

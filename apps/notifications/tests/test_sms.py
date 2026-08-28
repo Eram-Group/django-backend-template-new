@@ -8,6 +8,7 @@ import pytest
 import respx
 from pydantic import SecretStr
 
+from apps.common.http import OutboundTransportError
 from apps.notifications.clients.sms import sms_send
 from apps.notifications.clients.sms import sms_send_many
 from apps.notifications.clients.sms.backends import outbox
@@ -206,3 +207,112 @@ def test_sms_send_single_wraps_send_many() -> None:
 
     assert len(outbox) == 1
     assert outbox[0].to == "+966501234567"
+
+
+# --- partial progress is reported, never lost -----------------------------------
+
+
+@pytest.mark.usefixtures("_smsmisr_creds")
+@respx.mock
+def test_smsmisr_reports_the_numbers_sent_before_the_first_rejection() -> None:
+    respx.post(SMSMISR_URL).mock(
+        side_effect=[
+            httpx.Response(200, json={"code": "1901"}),
+            httpx.Response(200, json={"code": "1905"}),  # bad mobile - loop stops
+            httpx.Response(200, json={"code": "1901"}),
+        ]
+    )
+
+    with pytest.raises(SmsProviderError) as excinfo:
+        SmsMisrBackend().send_many(
+            to=["+201001234567", "+201001234568", "+201001234569"], body="hello"
+        )
+
+    assert excinfo.value.sent == ("+201001234567",)
+
+
+@pytest.mark.usefixtures("_oursms_creds")
+@respx.mock
+def test_oursms_rejected_bulk_group_reports_nothing_sent() -> None:
+    """Counts carry no per-number detail: a rejected bulk group fails whole."""
+    respx.post(OURSMS_URL).mock(
+        return_value=httpx.Response(200, json={"accepted": 1, "rejected": 1})
+    )
+
+    with pytest.raises(SmsProviderError) as excinfo:
+        OurSmsBackend().send_many(to=["+966501234567", "+966501234568"], body="hi")
+
+    assert excinfo.value.sent == ()
+
+
+@pytest.mark.usefixtures("_oursms_creds", "_smsmisr_creds")
+@respx.mock
+def test_routing_carries_the_earlier_provider_group_as_sent() -> None:
+    """OurSMS accepted its group, then SMSMisr rejected: the SA numbers are
+    with the provider and must not be reported as failed."""
+    respx.post(OURSMS_URL).mock(
+        return_value=httpx.Response(200, json={"accepted": 2, "rejected": 0})
+    )
+    respx.post(SMSMISR_URL).mock(
+        side_effect=[
+            httpx.Response(200, json={"code": "1901"}),
+            httpx.Response(200, json={"code": "1906"}),
+        ]
+    )
+
+    with pytest.raises(SmsProviderError) as excinfo:
+        RoutingSmsBackend().send_many(
+            to=["+966501234567", "+966501234568", "+201001234567", "+201001234568"],
+            body="hi",
+        )
+
+    assert excinfo.value.sent == ("+966501234567", "+966501234568", "+201001234567")
+    assert excinfo.value.provider == "smsmisr"
+
+
+@pytest.mark.usefixtures("_oursms_creds", "_smsmisr_creds")
+@respx.mock
+def test_routing_turns_a_later_transport_failure_into_a_rejection_with_progress() -> (
+    None
+):
+    """A 5xx/transport failure AFTER another provider already accepted numbers
+    surfaces as SmsProviderError carrying them; escaping as systemic would
+    leave those rows PROCESSING for the sweep to re-send."""
+    respx.post(OURSMS_URL).mock(
+        return_value=httpx.Response(200, json={"accepted": 1, "rejected": 0})
+    )
+    respx.post(SMSMISR_URL).mock(side_effect=httpx.ConnectError("down"))
+
+    with pytest.raises(SmsProviderError) as excinfo:
+        RoutingSmsBackend().send_many(to=["+966501234567", "+201001234567"], body="hi")
+
+    assert excinfo.value.sent == ("+966501234567",)
+
+
+@pytest.mark.usefixtures("_oursms_creds", "_smsmisr_creds")
+@respx.mock
+def test_routing_keeps_a_failure_before_any_send_systemic() -> None:
+    """Nothing went through yet - the task should fail loudly as before."""
+    respx.post(SMSMISR_URL).mock(side_effect=httpx.ConnectError("down"))
+    oursms = respx.post(OURSMS_URL).mock(
+        return_value=httpx.Response(200, json={"accepted": 1, "rejected": 0})
+    )
+
+    with pytest.raises(OutboundTransportError):
+        RoutingSmsBackend().send_many(to=["+201001234567", "+966501234567"], body="hi")
+
+    assert oursms.call_count == 0  # the loop stopped at the first provider
+
+
+@pytest.mark.usefixtures("_oursms_creds")
+@respx.mock
+def test_routing_reports_an_unconfigured_later_provider_with_progress() -> None:
+    respx.post(OURSMS_URL).mock(
+        return_value=httpx.Response(200, json={"accepted": 1, "rejected": 0})
+    )
+
+    with pytest.raises(SmsProviderError) as excinfo:  # SMSMisr creds unset
+        RoutingSmsBackend().send_many(to=["+966501234567", "+201001234567"], body="hi")
+
+    assert excinfo.value.sent == ("+966501234567",)
+    assert "SMSMISR" in excinfo.value.detail

@@ -22,7 +22,7 @@ from apps.notifications.models import NotificationKindConfig
 ConfigMap = Mapping[NotificationKind, NotificationKindConfig]
 
 _MISSING_ROW_HINT = (
-    "seeded by migration 0004; a new NotificationKind must seed its row "
+    "seeded by migration 0005; a new NotificationKind must seed its row "
     "in the same change (test_config enforces the pairing)"
 )
 

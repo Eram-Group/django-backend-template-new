@@ -37,6 +37,7 @@ class SmsMisrBackend:
         if username is None or password is None or sender is None:
             msg = "SMSMISR_USERNAME / SMSMISR_PASSWORD / SMSMISR_SENDER are not set"
             raise SmsNotConfiguredError(msg)
+        sent: list[str] = []
         for number in to:
             response = request_json(
                 service="smsmisr",
@@ -56,4 +57,9 @@ class SmsMisrBackend:
             payload = response.json()
             code = payload.get("code") if isinstance(payload, dict) else None
             if code != _SUCCESS_CODE:
-                raise SmsProviderError(provider="smsmisr", detail=f"code={code!r}")
+                # The loop stops at the first rejection; the numbers before it
+                # are already with the provider and must be reported as such.
+                raise SmsProviderError(
+                    provider="smsmisr", detail=f"code={code!r}", sent=sent
+                )
+            sent.append(number)

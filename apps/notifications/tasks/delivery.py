@@ -12,6 +12,12 @@ marks that row FAILED and the task continues; a systemic failure
 and fails the task loudly (FAILED task row + Sentry) - claimed rows stay
 PROCESSING and the sweep/resume path resets exactly that remainder.
 
+Outcomes are persisted PER CHANNEL, in a ``finally``: a systemic failure in
+the SMS step must never discard the push step's already-sent rows, or the
+sweep would reset them to PENDING and the user would get the same push
+again on every pass. Only rows the failing step had not reached stay
+PROCESSING.
+
 Rendering happens HERE, under each recipient's language (no request in a
 worker) - never at creation time.
 """
@@ -69,13 +75,29 @@ def execute_deliveries(*, delivery_ids: list[str]) -> None:
         by_channel[row.channel].append(row)
     # One config query for the whole batch - rendering per row must not be.
     configs = selectors.notification_config_map()
-    if Channel.PUSH in by_channel:
-        _deliver_push(by_channel[Channel.PUSH], configs=configs)
-    if Channel.SMS in by_channel:
-        _deliver_sms(by_channel[Channel.SMS], configs=configs)
-    if Channel.WHATSAPP in by_channel:
-        _deliver_whatsapp(by_channel[Channel.WHATSAPP])
-    _record_outcomes(rows)
+    for channel, channel_rows in by_channel.items():
+        try:
+            _deliver_channel(channel, channel_rows, configs=configs)
+        finally:
+            _record_outcomes(channel_rows)
+
+
+def _deliver_channel(
+    channel: str, rows: list[NotificationDelivery], *, configs: selectors.ConfigMap
+) -> None:
+    if channel == Channel.PUSH:
+        _deliver_push(rows, configs=configs)
+    elif channel == Channel.SMS:
+        _deliver_sms(rows, configs=configs)
+    elif channel == Channel.WHATSAPP:
+        _deliver_whatsapp(rows)
+    else:
+        # A channel with no deliverer must not be claimed forever: left
+        # PROCESSING it would be reset and re-claimed by every sweep while
+        # its broadcast never completes. FAILED is visible and terminal.
+        for row in rows:
+            row.status = DeliveryStatus.FAILED
+            row.detail = f"no deliverer for channel {channel!r}"
 
 
 def _claim(*, delivery_ids: list[str]) -> list[uuid.UUID]:
@@ -164,7 +186,11 @@ def _deliver_sms(
     """One provider call per rendered-body group (language + kind + context).
 
     Bulk providers report counts, not per-number outcomes, so failure
-    granularity is the GROUP: a rejection fails every row in it.
+    granularity is the GROUP - except for the numbers the backend reports
+    as already accepted (``SmsProviderError.sent``: SMSMisr posts one number
+    at a time, and the routing backend runs one provider after another).
+    Those rows are SENT; only the rest fail, so a resume/sweep
+    ``--include-failed`` can never re-bill a number that went through.
     """
     now = timezone.now()
     groups: dict[
@@ -193,9 +219,14 @@ def _deliver_sms(
         try:
             sms_send_many(to=numbers, body=body)
         except SmsProviderError as exc:
-            for row in grouped:
-                row.status = DeliveryStatus.FAILED
-                row.detail = str(exc)
+            accepted = set(exc.sent)
+            for row, number in zip(grouped, numbers, strict=True):
+                if number in accepted:
+                    row.status = DeliveryStatus.SENT
+                    row.sent_at = now
+                else:
+                    row.status = DeliveryStatus.FAILED
+                    row.detail = str(exc)
         else:
             for row in grouped:
                 row.status = DeliveryStatus.SENT
@@ -235,7 +266,12 @@ def _deliver_whatsapp(rows: list[NotificationDelivery]) -> None:
 
 
 def _record_outcomes(rows: list[NotificationDelivery]) -> None:
-    """One bulk write for the batch, then broadcast progress + completion."""
+    """One bulk write per channel group, then broadcast progress + completion.
+
+    Rows a failing step never reached are written back unchanged
+    (PROCESSING) - they are not counted, and the broadcast cannot complete
+    while they exist; the sweep resets exactly those.
+    """
     now = timezone.now()
     for row in rows:
         row.updated_at = now  # bulk_update bypasses auto_now

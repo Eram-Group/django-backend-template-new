@@ -1,7 +1,7 @@
 """Capability + field decisions for the NotificationKindConfig admin.
 
 THE operator surface for "this action sends on these channels, saying this".
-Rows are born in migration 0004, exactly one per kind - operators edit
+Rows are born in migration 0005, exactly one per kind - operators edit
 channels and copy, never the row set itself (a missing row fails sends
 loudly, so add/delete stay off).
 """
@@ -11,7 +11,7 @@ from apps.common.admin import FieldPermissions
 from apps.common.admin import always
 from apps.notifications.constants import NotificationKind
 
-CAN_ADD = False  # one row per kind, born in migration 0004
+CAN_ADD = False  # one row per kind, born in migration 0005
 CAN_CHANGE = True
 CAN_DELETE = False  # a deleted row = LookupError on the next send
 

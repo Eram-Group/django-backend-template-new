@@ -15,14 +15,18 @@ class SmsNotConfiguredError(SmsError):
 class SmsProviderError(SmsError):
     """The provider rejected the send - including error-in-2xx-body.
 
-    Bulk providers report counts, not per-number outcomes, so a rejection
-    fails the WHOLE group it was raised for - callers mark every delivery in
-    that group failed rather than guessing which numbers went through.
+    ``sent`` names the numbers a provider had ALREADY accepted before the
+    rejection: SMSMisr posts one number at a time, and the routing backend
+    runs one provider after another. Callers mark exactly those SENT and only
+    the rest FAILED - a retry must never re-bill a number that went through.
+    Bulk providers report counts, not per-number outcomes, so a rejected bulk
+    group carries an empty ``sent`` and fails whole.
     """
 
-    def __init__(self, *, provider: str, detail: str) -> None:
+    def __init__(self, *, provider: str, detail: str, sent: Sequence[str] = ()) -> None:
         self.provider = provider
         self.detail = detail
+        self.sent = tuple(sent)
         super().__init__(f"{provider}: {detail}")
 
 
