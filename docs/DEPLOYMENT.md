@@ -136,8 +136,12 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    Push to `main` → the `build` job pushes `:<sha>` to ECR (the deploy job
    still skips).
 8. `just infra-deploy dev -- -c image_tag=<sha>` — first environment deploy
-   (≈ 5 min; the Express service provisions the ALB).
-9. Copy the `App-dev` outputs into the GitHub environment `dev`:
+   (≈ 10 min; the Express service provisions the ALB). The stack's release
+   trigger runs `check --deploy`, `migrate`, `createcachetable` and
+   `collectstatic` on the worker task definition *before* the services are
+   created, so `/readyz` is green on the first task.
+9. Create the GitHub environment `dev` and copy the `App-dev` outputs into
+   its variables:
    `ECS_CLUSTER`, `ECS_FAMILY_WEB`, `ECS_FAMILY_WORKER`, `ECS_SERVICE_WORKER`,
    `EXPRESS_SERVICE_ARN`, `EXPRESS_SERVICE_NAME`, `ECS_SUBNETS`,
    `ECS_SECURITY_GROUPS`, `ECS_ASSIGN_PUBLIC_IP=ENABLED`. Set the repo-level
@@ -162,7 +166,9 @@ identity and change `AppConfig.ses_identity`).
    command `check --deploy --fail-level WARNING && migrate && createcachetable
    && collectstatic`. Any Django deploy warning stops the rollout before the
    database is touched. Migrations must be expand/contract: web rolls before
-   worker by design.
+   worker by design. (`cdk deploy` runs the same command through its release
+   trigger before touching the services, so IaC-driven rollouts are migrated
+   too.)
 2. **web** — a web revision is registered, then
    `aws ecs update-express-gateway-service --task-definition-arn …`. Express
    runs a canary; its alarm rolls back automatically on 5XX/unhealthy targets.
