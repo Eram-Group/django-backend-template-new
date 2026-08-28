@@ -6,6 +6,8 @@ from allauth.usersessions.models import UserSession
 from django.core.exceptions import ValidationError
 from django.core.mail import EmailMessage
 
+from apps.notifications.constants import NotificationKind
+from apps.notifications.models import Notification
 from apps.payments.constants import DEFAULT_CURRENCY
 from apps.users import services
 from apps.users.constants import Language
@@ -59,6 +61,10 @@ def test_user_post_signup_provisions_wallet_and_enqueues_welcome_email(
     assert len(callbacks) == 1
     assert len(mailoutbox) == 1
     assert mailoutbox[0].to == [user.email]
+    # WELCOME is inbox-only by catalog default (no devices exist at signup).
+    welcome = Notification.objects.get(recipient=user, kind=NotificationKind.WELCOME)
+    assert welcome.context == {"name": "New User"}
+    assert not welcome.deliveries.exists()
 
 
 def test_user_post_signup_sends_nothing_before_commit(

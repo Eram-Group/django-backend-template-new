@@ -21,6 +21,9 @@ from config.env import env
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 
 # --- Core ---------------------------------------------------------------
+# Surfaced as a setting (rather than read from env directly) so system checks
+# and tests can reason about the deployment environment via override_settings.
+ENVIRONMENT = env.ENVIRONMENT
 SECRET_KEY = env.SECRET_KEY.get_secret_value()
 SECRET_KEY_FALLBACKS = [key.get_secret_value() for key in env.SECRET_KEY_FALLBACKS]
 DEBUG = False  # local.py turns it on
@@ -125,7 +128,15 @@ CACHES = {
 }
 RATELIMIT_USE_CACHE = "ratelimit"
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
-TASKS = {"default": {"BACKEND": "django_tasks_db.DatabaseBackend"}}
+# Two queues: "default" for transactional work (emails, refunds, single
+# notification sends), "bulk" for broadcast dispatch + delivery batches so a
+# campaign never starves an OTP. Workers: `just worker` / `just worker-bulk`.
+TASKS = {
+    "default": {
+        "BACKEND": "django_tasks_db.DatabaseBackend",
+        "QUEUES": ["default", "bulk"],
+    }
+}
 
 # --- Auth -----------------------------------------------------------------
 AUTH_USER_MODEL = "users.User"
@@ -331,11 +342,41 @@ UNFOLD = {
                         ),
                     },
                     {
+                        "title": _("Deliveries"),
+                        "icon": "outbox",
+                        "link": reverse_lazy(
+                            "admin:notifications_notificationdelivery_changelist"
+                        ),
+                        "permission": lambda request: request.user.has_perm(
+                            "notifications.view_notificationdelivery"
+                        ),
+                    },
+                    {
+                        "title": _("Broadcasts"),
+                        "icon": "campaign",
+                        "link": reverse_lazy(
+                            "admin:notifications_broadcast_changelist"
+                        ),
+                        "permission": lambda request: request.user.has_perm(
+                            "notifications.view_broadcast"
+                        ),
+                    },
+                    {
                         "title": _("Devices"),
                         "icon": "smartphone",
                         "link": reverse_lazy("admin:notifications_device_changelist"),
                         "permission": lambda request: request.user.has_perm(
                             "notifications.view_device"
+                        ),
+                    },
+                    {
+                        "title": _("Notification actions"),
+                        "icon": "tune",
+                        "link": reverse_lazy(
+                            "admin:notifications_notificationkindconfig_changelist"
+                        ),
+                        "permission": lambda request: request.user.has_perm(
+                            "notifications.view_notificationkindconfig"
                         ),
                     },
                 ],
@@ -431,11 +472,13 @@ MAILERS = {
     }
 }
 
-# --- Outbound clients: SMS + push (the mail-backend pattern) ------------------
+# --- Outbound clients: SMS + push + WhatsApp (the EMAIL_BACKEND pattern) ------
 # Console backends log locally; production.py swaps in the real transports
-# (RoutingSmsBackend / FcmPushBackend) when deployed; test.py uses locmem.
+# (RoutingSmsBackend / FcmPushBackend / MetaWhatsAppBackend) when deployed;
+# test.py uses locmem.
 SMS_BACKEND = "apps.notifications.clients.sms.backends.ConsoleSmsBackend"
 PUSH_BACKEND = "apps.notifications.clients.push.backends.ConsolePushBackend"
+WHATSAPP_BACKEND = "apps.notifications.clients.whatsapp.backends.ConsoleWhatsAppBackend"
 OURSMS_API_KEY = env.OURSMS_API_KEY
 OURSMS_SENDER = env.OURSMS_SENDER
 SMSMISR_USERNAME = env.SMSMISR_USERNAME
@@ -443,6 +486,10 @@ SMSMISR_PASSWORD = env.SMSMISR_PASSWORD
 SMSMISR_SENDER = env.SMSMISR_SENDER
 SMSMISR_LIVE = False  # "1" live vs "2" test API mode; production.py decides
 FIREBASE_CREDENTIALS_B64 = env.FIREBASE_CREDENTIALS_B64
+WHATSAPP_ACCESS_TOKEN = env.WHATSAPP_ACCESS_TOKEN
+WHATSAPP_PHONE_NUMBER_ID = env.WHATSAPP_PHONE_NUMBER_ID
+WHATSAPP_APP_SECRET = env.WHATSAPP_APP_SECRET
+WHATSAPP_WEBHOOK_VERIFY_TOKEN = env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
 
 # --- Payments: currency -> gateway class. One mapping for every environment;
 # the .env keys decide test vs live mode (locally: provider TEST keys + a

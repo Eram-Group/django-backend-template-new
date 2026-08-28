@@ -1,0 +1,296 @@
+"""The Broadcast compose form: the admin's only authoring path.
+
+The point of these tests is the seam the form closes - before it, the admin
+add view called obj.save() directly, so services.notification_broadcast (and
+with it the catalog's context validation) never ran, and a malformed
+announcement only failed later inside the worker.
+
+Every assertion is scoped by the marker message rather than
+``Broadcast.objects.get()``: the admin basics gate seeds rows for every
+registered factory and ``--reuse-db`` keeps them committed between runs, so
+the table is never empty (same reason the app conftest clears channel
+overrides).
+"""
+
+from typing import Any
+
+import pytest
+from django.contrib.auth.models import Permission
+from django.test import Client
+from django.urls import reverse
+
+from apps.notifications.constants import BroadcastStatus
+from apps.notifications.constants import Channel
+from apps.notifications.constants import NotificationKind
+from apps.notifications.models import Broadcast
+from apps.notifications.selectors import notification_render
+from apps.notifications.tests.factories import BroadcastFactory
+from apps.users.tests.factories import UserFactory
+
+pytestmark = pytest.mark.django_db
+
+ADD_URL = "admin:notifications_broadcast_add"
+TITLE = "Composer test title"
+MESSAGE = "Composer test announcement - unique to this module."
+
+
+def _superuser_client(client: Client) -> Client:
+    client.force_login(UserFactory.create(is_staff=True, is_superuser=True))
+    return client
+
+
+def _payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "title": TITLE,
+        "message": MESSAGE,
+        "language": "",
+        "joined_after": "",
+        "joined_before": "",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _composed() -> Broadcast:
+    return Broadcast.objects.get(context__message=MESSAGE)
+
+
+def _nothing_composed() -> bool:
+    return not Broadcast.objects.filter(context__message=MESSAGE).exists()
+
+
+def test_add_page_renders_the_composer(client: Client) -> None:
+    response = _superuser_client(client).get(reverse(ADD_URL))
+
+    assert response.status_code == 200
+    body = response.content.decode()
+    # The title/body pair replaces the raw context JSON box.
+    assert 'name="title"' in body
+    assert 'name="message"' in body
+    assert 'name="context"' not in body
+
+
+def test_compose_creates_a_draft_with_the_message_as_context(client: Client) -> None:
+    response = _superuser_client(client).post(reverse(ADD_URL), _payload())
+
+    assert response.status_code == 302
+    broadcast = _composed()
+    assert broadcast.kind == NotificationKind.ANNOUNCEMENT
+    assert broadcast.status == BroadcastStatus.DRAFT
+    assert broadcast.context == {"title": TITLE, "message": MESSAGE}
+    # Stamped by the service from the request user, never typed.
+    assert broadcast.created_by is not None
+
+
+def test_a_title_is_required(client: Client) -> None:
+    response = _superuser_client(client).post(reverse(ADD_URL), _payload(title=""))
+
+    assert response.status_code == 200
+    assert _nothing_composed()
+    assert response.context["adminform"].form.errors["title"]
+
+
+def test_the_authored_title_is_what_renders(client: Client) -> None:
+    """The catalog title is "{title}" now - the operator's words, not a label."""
+    _superuser_client(client).post(reverse(ADD_URL), _payload())
+
+    rendered = notification_render(
+        kind=NotificationKind.ANNOUNCEMENT, context=_composed().context
+    )
+    assert rendered.title == TITLE
+    assert rendered.body == MESSAGE
+
+
+def test_compose_records_the_audience_filters(client: Client) -> None:
+    _superuser_client(client).post(
+        reverse(ADD_URL),
+        _payload(
+            language="ar",
+            require_device="on",
+            joined_after="2026-01-01",
+            joined_before="2026-06-30",
+        ),
+    )
+
+    broadcast = _composed()
+    assert broadcast.language == "ar"
+    assert broadcast.require_device is True
+    assert str(broadcast.joined_after) == "2026-01-01"
+    assert str(broadcast.joined_before) == "2026-06-30"
+
+
+def test_compose_records_selected_channels(client: Client) -> None:
+    _superuser_client(client).post(
+        reverse(ADD_URL), _payload(channels=[Channel.PUSH, Channel.SMS])
+    )
+
+    assert sorted(_composed().channels) == sorted([Channel.PUSH, Channel.SMS])
+
+
+def test_empty_channels_defer_to_the_kind_policy(client: Client) -> None:
+    _superuser_client(client).post(reverse(ADD_URL), _payload())
+
+    assert _composed().channels == []
+
+
+def test_reversed_dates_are_rejected_as_a_field_error(client: Client) -> None:
+    response = _superuser_client(client).post(
+        reverse(ADD_URL),
+        _payload(joined_after="2026-06-30", joined_before="2026-01-01"),
+    )
+
+    assert response.status_code == 200  # redisplayed, not saved
+    assert _nothing_composed()
+    assert response.context["adminform"].form.errors["joined_before"]
+
+
+def test_a_message_is_required(client: Client) -> None:
+    response = _superuser_client(client).post(reverse(ADD_URL), _payload(message=""))
+
+    assert response.status_code == 200
+    assert response.context["adminform"].form.errors["message"]
+
+
+def test_an_unsupported_channel_cannot_be_chosen(client: Client) -> None:
+    response = _superuser_client(client).post(
+        reverse(ADD_URL), _payload(channels=["carrier_pigeon"])
+    )
+
+    assert response.status_code == 200
+    assert _nothing_composed()
+
+
+def test_the_context_field_cannot_be_posted_on_add(client: Client) -> None:
+    """The composer owns the context shape - a hand-crafted POST cannot win."""
+    _superuser_client(client).post(
+        reverse(ADD_URL), _payload(context='{"message": "smuggled"}')
+    )
+
+    assert _composed().context == {"title": TITLE, "message": MESSAGE}
+
+
+ESTIMATE_URL = "admin:notifications_broadcast_audience_estimate"
+
+
+class TestAudienceEstimate:
+    """The compose screen's live reach counter."""
+
+    def test_counts_active_users_with_no_filters(self, client: Client) -> None:
+        from apps.users.models import User
+
+        User.objects.update(is_active=False)  # rolled back with the test
+        UserFactory.create_batch(3)
+        staff = UserFactory.create(is_staff=True, is_superuser=True)
+        client.force_login(staff)
+
+        response = client.post(reverse(ESTIMATE_URL), {})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is True
+        assert body["recipients"] == 4  # the three plus the signed-in staff user
+        assert body["devices"] == 0
+
+    def test_counts_reachable_devices(self, client: Client) -> None:
+        from apps.notifications.tests.factories import DeviceFactory
+        from apps.users.models import User
+
+        User.objects.update(is_active=False)
+        staff = UserFactory.create(is_staff=True, is_superuser=True)
+        DeviceFactory.create(user=staff)
+        DeviceFactory.create(user=staff)  # two devices, one recipient
+        client.force_login(staff)
+
+        body = client.post(reverse(ESTIMATE_URL), {"require_device": "on"}).json()
+
+        assert body["recipients"] == 1
+        assert body["devices"] == 2
+
+    def test_reversed_dates_are_rejected(self, client: Client) -> None:
+        _superuser_client(client)
+
+        response = client.post(
+            reverse(ESTIMATE_URL),
+            {"joined_after": "2026-06-30", "joined_before": "2026-01-01"},
+        )
+
+        assert response.status_code == 400
+        assert response.json()["ok"] is False
+
+    def test_anonymous_callers_are_redirected_to_login(self, client: Client) -> None:
+        response = client.post(reverse(ESTIMATE_URL), {})
+
+        assert response.status_code == 302
+
+    def test_a_staff_user_without_add_permission_is_refused(
+        self, client: Client
+    ) -> None:
+        client.force_login(UserFactory.create(is_staff=True))
+
+        response = client.post(reverse(ESTIMATE_URL), {})
+
+        # admin_view bounces a staff user with no model perms at the door.
+        assert response.status_code in (302, 403)
+
+
+# --- lifecycle actions are permission-gated, not just status-gated ------------
+#
+# The Dispatch/Resume buttons are plain GET URLs. Before the guard checked the
+# model permission, any is_staff account - with zero notifications
+# permissions - could fan out a draft to the whole user base by URL.
+
+
+def _dispatch_url(broadcast: Broadcast) -> str:
+    return reverse(
+        "admin:notifications_broadcast_dispatch_broadcast", args=[broadcast.pk]
+    )
+
+
+def _resume_url(broadcast: Broadcast) -> str:
+    return reverse(
+        "admin:notifications_broadcast_resume_broadcast", args=[broadcast.pk]
+    )
+
+
+def test_staff_without_permission_cannot_dispatch(client: Client) -> None:
+    broadcast = BroadcastFactory.create(status=BroadcastStatus.DRAFT)
+    client.force_login(UserFactory.create(is_staff=True))
+
+    response = client.get(_dispatch_url(broadcast))
+
+    assert response.status_code == 403
+    broadcast.refresh_from_db()
+    assert broadcast.status == BroadcastStatus.DRAFT
+
+
+def test_staff_without_permission_cannot_resume(client: Client) -> None:
+    broadcast = BroadcastFactory.create(status=BroadcastStatus.DISPATCHED)
+    client.force_login(UserFactory.create(is_staff=True))
+
+    response = client.get(_resume_url(broadcast))
+
+    assert response.status_code == 403
+
+
+def test_view_only_permission_cannot_dispatch(client: Client) -> None:
+    broadcast = BroadcastFactory.create(status=BroadcastStatus.DRAFT)
+    viewer = UserFactory.create(is_staff=True)
+    viewer.user_permissions.add(Permission.objects.get(codename="view_broadcast"))
+    client.force_login(viewer)
+
+    response = client.get(_dispatch_url(broadcast))
+
+    assert response.status_code == 403
+
+
+def test_change_permission_dispatches(client: Client) -> None:
+    broadcast = BroadcastFactory.create(status=BroadcastStatus.DRAFT)
+    operator = UserFactory.create(is_staff=True)
+    operator.user_permissions.add(Permission.objects.get(codename="change_broadcast"))
+    client.force_login(operator)
+
+    response = client.get(_dispatch_url(broadcast))
+
+    assert response.status_code == 302  # back to the change form, dispatched
+    broadcast.refresh_from_db()
+    assert broadcast.status != BroadcastStatus.DRAFT

@@ -5,6 +5,9 @@ from apps.notifications.admin.notification import change_view
 from apps.notifications.admin.notification import list_view
 from apps.notifications.admin.notification import permissions
 from apps.notifications.admin.notification.resource import NotificationResource
+from apps.notifications.admin.notificationdelivery.inline import (
+    NotificationDeliveryInline,
+)
 from apps.notifications.models import Notification
 
 
@@ -28,7 +31,4 @@ class NotificationAdmin(ExportableModelAdmin):
     fieldsets = change_view.FIELDSETS
     readonly_fields = change_view.READONLY_FIELDS
 
-    # inlines = [...]        # child rows on the change form (inline.py)
-    # list_sections = [...]  # expandable per-row previews (LimitedTableSection)
-    # actions_detail = [...] # state-transition buttons - the body calls a
-    #                        # service, never obj.save() (see ARCHITECTURE.md)
+    inlines = [NotificationDeliveryInline]

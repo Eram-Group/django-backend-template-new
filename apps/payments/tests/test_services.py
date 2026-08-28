@@ -178,15 +178,17 @@ def test_paid_topup_credits_wallet_and_notifies_exactly_once() -> None:
     wallet = payment.user.wallet
     assert wallet.balance == payment.amount
     assert wallet.transactions.count() == 1  # the replay did NOT double credit
-    assert (
-        Notification.objects.filter(
-            recipient=payment.user, kind=NotificationKind.WALLET_CREDITED
-        ).count()
-        == 1
-    )
+    notification = Notification.objects.get(
+        recipient=payment.user, kind=NotificationKind.WALLET_CREDITED
+    )  # get(): the replay did NOT double notify
+    assert notification.context == {
+        "amount": str(payment.amount),
+        "currency": payment.currency,
+        "balance": str(wallet.balance),  # wallet_apply's balance_after
+    }
 
 
-def test_paid_other_kind_notifies_and_leaves_wallet_untouched() -> None:
+def test_paid_other_kind_leaves_wallet_untouched() -> None:
     payment = PaymentFactory.create(kind=PaymentKind.OTHER)
 
     services.payment_apply_gateway_event(
@@ -196,9 +198,13 @@ def test_paid_other_kind_notifies_and_leaves_wallet_untouched() -> None:
     wallet = payment.user.wallet  # provisioned at signup, never credited
     assert wallet.balance == Decimal(0)
     assert not wallet.transactions.exists()
-    assert Notification.objects.filter(
+    notification = Notification.objects.get(
         recipient=payment.user, kind=NotificationKind.PAYMENT_PAID
-    ).exists()
+    )
+    assert notification.context == {
+        "amount": str(payment.amount),
+        "currency": payment.currency,
+    }
 
 
 def test_failed_event_marks_failed() -> None:
@@ -617,7 +623,7 @@ def test_paid_event_with_card_payload_stores_saved_card() -> None:
     # admin-gate session fixture around (reconcile-test precedent).
     card = SavedCard.objects.get(user=payment.user)  # one despite the replay
     assert card.user == payment.user
-    assert card.token == "fake_card_A"  # noqa: S105 - test fixture value
+    assert card.token == "fake_card_A"
     assert card.gateway_agreement_id == "fake_agr_A"
     payment.refresh_from_db()
     assert payment.saved_card == card
@@ -762,7 +768,7 @@ def test_saved_card_store_is_idempotent_and_reassigns_owner() -> None:
         user=second_owner, gateway="fake", data=_card_data(last4="2222")
     )
 
-    cards = SavedCard.objects.filter(gateway="fake", token="fake_card_A")  # noqa: S106
+    cards = SavedCard.objects.filter(gateway="fake", token="fake_card_A")
     assert cards.count() == 1  # (gateway, token) upsert, no dupes
     assert card.user == second_owner  # 3DS on the token proves possession
     assert card.last4 == "2222"  # metadata refresh rides along
@@ -789,7 +795,7 @@ def test_saved_card_store_folds_a_revaulted_card_into_the_existing_row(
             user=user,
             gateway="fake",
             data=_card_data(
-                token="fake_card_B",  # noqa: S106 - test fixture value
+                token="fake_card_B",
                 customer_id="fake_cus_B",
                 agreement_id="fake_agr_B",
             ),
@@ -798,7 +804,7 @@ def test_saved_card_store_folds_a_revaulted_card_into_the_existing_row(
     assert second.pk == first.pk
     assert SavedCard.objects.filter(user=user, gateway="fake").count() == 1
     second.refresh_from_db()
-    assert second.token == "fake_card_B"  # noqa: S105 - test fixture value
+    assert second.token == "fake_card_B"
     assert second.gateway_customer_id == "fake_cus_B"
     assert second.gateway_agreement_id == "fake_agr_B"
     assert [ref.token for ref in detached] == ["fake_card_A"]
@@ -823,11 +829,11 @@ def test_saved_card_store_survives_a_failed_detach_of_the_old_card(
         services.saved_card_store(
             user=user,
             gateway="fake",
-            data=_card_data(token="fake_card_B"),  # noqa: S106 - fixture value
+            data=_card_data(token="fake_card_B"),
         )
 
     card = SavedCard.objects.get(user=user, gateway="fake")
-    assert card.token == "fake_card_B"  # noqa: S105 - test fixture value
+    assert card.token == "fake_card_B"
 
 
 def test_saved_card_store_keeps_different_cards_apart() -> None:
@@ -837,7 +843,7 @@ def test_saved_card_store_keeps_different_cards_apart() -> None:
     services.saved_card_store(
         user=user,
         gateway="fake",
-        data=_card_data(token="fake_card_B", fingerprint="fp_B"),  # noqa: S106
+        data=_card_data(token="fake_card_B", fingerprint="fp_B"),
     )
 
     assert SavedCard.objects.filter(user=user, gateway="fake").count() == 2
@@ -863,7 +869,7 @@ def test_saved_card_store_same_card_on_another_user_is_their_own_row(
         services.saved_card_store(
             user=second_owner,
             gateway="fake",
-            data=_card_data(token="fake_card_B"),  # noqa: S106 - fixture value
+            data=_card_data(token="fake_card_B"),
         )
 
     assert SavedCard.objects.filter(user=first_owner, gateway="fake").count() == 1
@@ -918,7 +924,7 @@ def test_saved_card_store_without_a_fingerprint_still_stores_and_never_collides(
     services.saved_card_store(
         user=user,
         gateway="fake",
-        data=_card_data(token="fake_card_B", fingerprint=""),  # noqa: S106
+        data=_card_data(token="fake_card_B", fingerprint=""),
     )
 
     cards = SavedCard.objects.filter(user=user, gateway="fake")
@@ -996,7 +1002,7 @@ def test_saved_card_store_from_event_unknown_email_returns_none() -> None:
     stored = services.saved_card_store_from_event(gateway_name="fake", event=event)
 
     assert stored is None
-    assert not SavedCard.objects.filter(token="fake_card_A").exists()  # noqa: S106
+    assert not SavedCard.objects.filter(token="fake_card_A").exists()
 
 
 def test_saved_card_delete_removes_row() -> None:
@@ -1057,7 +1063,7 @@ def test_verify_persists_saved_card_from_charge_status(
     payment.refresh_from_db()
     assert payment.status == PaymentStatus.PAID
     assert payment.saved_card is not None
-    assert payment.saved_card.token == "fake_card_A"  # noqa: S105 - fixture value
+    assert payment.saved_card.token == "fake_card_A"
 
 
 # --- gateway events: signed-amount cross-check, informational events, expiry ----

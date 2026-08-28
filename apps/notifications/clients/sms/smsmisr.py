@@ -1,6 +1,12 @@
-"""SMSMisr (smsmisr.com) - Egypt."""
+"""SMSMisr (smsmisr.com) - Egypt.
+
+No bulk endpoint: ``send_many`` loops one POST per number. Broadcast-scale
+Egyptian SMS therefore leans on worker parallelism (or a bulk-capable
+provider later - a client-only change behind the SmsBackend protocol).
+"""
 
 import re
+from collections.abc import Sequence
 
 from django.conf import settings
 
@@ -24,29 +30,36 @@ class SmsMisrBackend:
     template hardcoded Arabic and garbled English texts.
     """
 
-    def send(self, *, to: str, body: str) -> None:
+    def send_many(self, *, to: Sequence[str], body: str) -> None:
         username = settings.SMSMISR_USERNAME
         password = settings.SMSMISR_PASSWORD
         sender = settings.SMSMISR_SENDER
         if username is None or password is None or sender is None:
             msg = "SMSMISR_USERNAME / SMSMISR_PASSWORD / SMSMISR_SENDER are not set"
             raise SmsNotConfiguredError(msg)
-        response = request_json(
-            service="smsmisr",
-            method="POST",
-            url=_URL,
-            json={
-                "environment": "1" if settings.SMSMISR_LIVE else "2",
-                "username": username,
-                "password": password.get_secret_value(),
-                "language": "2" if _ARABIC_RE.search(body) else "1",
-                "mobile": to.removeprefix("+"),
-                "sender": sender,
-                "message": body,
-            },
-            retry="transient",
-        )
-        payload = response.json()
-        code = payload.get("code") if isinstance(payload, dict) else None
-        if code != _SUCCESS_CODE:
-            raise SmsProviderError(provider="smsmisr", detail=f"code={code!r}")
+        sent: list[str] = []
+        for number in to:
+            response = request_json(
+                service="smsmisr",
+                method="POST",
+                url=_URL,
+                json={
+                    "environment": "1" if settings.SMSMISR_LIVE else "2",
+                    "username": username,
+                    "password": password.get_secret_value(),
+                    "language": "2" if _ARABIC_RE.search(body) else "1",
+                    "mobile": number.removeprefix("+"),
+                    "sender": sender,
+                    "message": body,
+                },
+                retry="transient",
+            )
+            payload = response.json()
+            code = payload.get("code") if isinstance(payload, dict) else None
+            if code != _SUCCESS_CODE:
+                # The loop stops at the first rejection; the numbers before it
+                # are already with the provider and must be reported as such.
+                raise SmsProviderError(
+                    provider="smsmisr", detail=f"code={code!r}", sent=sent
+                )
+            sent.append(number)

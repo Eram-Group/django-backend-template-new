@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from collections.abc import Sequence
 from dataclasses import dataclass
+from dataclasses import field
 from typing import Protocol
 
 
@@ -15,20 +16,31 @@ class PushNotConfiguredError(PushError):
 
 
 @dataclass(frozen=True, slots=True)
-class PushReport:
-    """Outcome of one multicast send."""
+class PushMessage:
+    """One rendered message for one device token."""
 
-    sent: int
-    failed: int
-    invalid_tokens: tuple[str, ...] = ()  # callers prune these Device rows
+    token: str
+    title: str
+    body: str
+    data: Mapping[str, str] = field(default_factory=dict)  # FCM data is str-to-str
+
+
+@dataclass(frozen=True, slots=True)
+class PushResult:
+    """Outcome for one PushMessage, aligned with the input order.
+
+    ``invalid`` strictly means the TOKEN is dead (FCM unregistered / sender-id
+    mismatch) - callers prune that Device row. A transient failure is
+    ``ok=False, invalid=False`` and must NOT prune.
+    """
+
+    token: str
+    ok: bool
+    invalid: bool = False
+    detail: str = ""
 
 
 class PushBackend(Protocol):
-    def send(
-        self,
-        *,
-        tokens: Sequence[str],
-        title: str,
-        body: str,
-        data: Mapping[str, str],  # FCM data payloads are string-to-string
-    ) -> PushReport: ...
+    def send_many(
+        self, *, messages: Sequence[PushMessage]
+    ) -> tuple[PushResult, ...]: ...

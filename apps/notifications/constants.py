@@ -1,5 +1,3 @@
-from enum import StrEnum
-
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
@@ -13,11 +11,50 @@ class NotificationKind(models.TextChoices):
     WALLET_CREDITED = "wallet_credited", _("Wallet credited")
 
 
-class Channel(StrEnum):
+class NotificationCategory(models.TextChoices):
+    """Preference granularity: users may opt out of MARKETING channels only.
+
+    TRANSACTIONAL is structurally exempt - the preference model refuses to
+    store an opt-out for it, and the send path never consults preferences.
+    """
+
+    TRANSACTIONAL = "transactional", _("Transactional")
+    MARKETING = "marketing", _("Marketing")
+
+
+class Channel(models.TextChoices):
     """Delivery channels BEYOND the in-app inbox row (which always exists)."""
 
-    PUSH = "push"
-    SMS = "sms"
+    PUSH = "push", _("Push")
+    SMS = "sms", _("SMS")
+    WHATSAPP = "whatsapp", _("WhatsApp")
+
+
+class DeliveryStatus(models.TextChoices):
+    """Lifecycle of one (notification, channel) delivery attempt.
+
+    PENDING -> PROCESSING -> SENT -> DELIVERED -> READ move strictly forward
+    (provider webhooks may skip steps); FAILED is reachable only from at
+    most SENT; SKIPPED is terminal (no capability, or opted out). The
+    monotonic guard lives in ``delivery_update_status``.
+    """
+
+    PENDING = "pending", _("Pending")
+    PROCESSING = "processing", _("Processing")
+    SENT = "sent", _("Sent")
+    DELIVERED = "delivered", _("Delivered")
+    READ = "read", _("Read")
+    FAILED = "failed", _("Failed")
+    SKIPPED = "skipped", _("Skipped")
+
+
+class BroadcastStatus(models.TextChoices):
+    """DRAFT -> DISPATCHING -> DISPATCHED -> COMPLETED, via guarded UPDATEs."""
+
+    DRAFT = "draft", _("Draft")
+    DISPATCHING = "dispatching", _("Dispatching")
+    DISPATCHED = "dispatched", _("Dispatched")
+    COMPLETED = "completed", _("Completed")
 
 
 class DevicePlatform(models.TextChoices):

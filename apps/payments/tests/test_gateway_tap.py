@@ -18,11 +18,11 @@ from apps.payments.gateways.base import SavedCardRef
 from apps.payments.gateways.base import WebhookVerificationError
 from apps.payments.gateways.tap import TapGateway
 
-SECRET = "sk_test_tap"  # noqa: S105 - test fixture value
+SECRET = "sk_test_tap"
 CHARGES = "https://api.tap.company/v2/charges/"
 TOKENS = "https://api.tap.company/v2/tokens"
 CARD_REF = SavedCardRef(
-    token="card_abc123",  # noqa: S106 - test fixture value
+    token="card_abc123",
     customer_id="cus_xyz789",
     agreement_id="payment_agreement_555",
 )
@@ -343,7 +343,7 @@ def test_webhook_extracts_saved_card_payload() -> None:
     )
 
     assert event.saved_card is not None
-    assert event.saved_card.token == "card_abc123"  # noqa: S105 - fixture value
+    assert event.saved_card.token == "card_abc123"
     assert event.saved_card.customer_id == "cus_xyz789"
     assert event.saved_card.agreement_id == "payment_agreement_555"
     assert event.saved_card.brand == "VISA"

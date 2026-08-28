@@ -2,8 +2,8 @@
 
 API-only Django backend: [django-ninja](https://django-ninja.dev) REST API +
 Django admin (unfold), passwordless auth (allauth headless, 6-digit email
-codes), notifications (in-app inbox + FCM push + SMS), payments (Tap/Paymob
-gateways + wallet ledger), Postgres-only infrastructure (cache, sessions,
+codes), payments (Tap/Paymob gateways + wallet ledger),
+Postgres-only infrastructure (cache, sessions,
 task queue), one Docker image deployed as two ECS services. Arabic-first
 (ar/en).
 
@@ -104,23 +104,19 @@ Django 6 native `django.tasks` with the Postgres-backed queue — no broker.
 - Results are rows: prune with `manage.py prune_db_task_results
   --min-age-days 14` (scheduled below).
 
-## Outbound integrations (SMS, push, payments)
+## Outbound integrations (payments)
 
 Every external transport follows the email pattern: **real only when
 deployed, observable fakes locally, in-memory in tests** (details:
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) "Outbound clients").
 
-- **SMS** (OurSMS for SA numbers, SMSMisr for EG) and **push** (FCM) log to
-  the console locally — trigger any notification and watch the
-  `sms_console_send` / `push_console_send` structlog lines. Deployed, the
-  real providers activate only when their env creds are set.
 - **Payments** route by currency to the same gateways in every environment
   (Tap SAR / Paymob EGP) — put the providers' TEST-mode keys in `.env` and
   tunnel webhooks (`ngrok http 8000`, `BACKEND_BASE_URL` = the tunnel URL).
   `manage.py simulate_payment_webhook <payment-pk> [--fail]` still delivers
-  a gateway event by hand — the payment flips to paid, the wallet is
-  credited, and the notification fans out, exactly like production. The
-  test suite always runs against `FakeGateway` (pinned in `test.py`).
+  a gateway event by hand — the payment flips to paid and the wallet is
+  credited, exactly like production. The test suite always runs against
+  `FakeGateway` (pinned in `test.py`).
 - All provider credentials are optional `X | None` env fields (see
   `.env.example`): absent = that provider is simply not configured.
 

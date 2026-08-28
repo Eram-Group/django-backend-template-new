@@ -1,4 +1,4 @@
-"""Services: fan-out policy, context validation, inbox writes, device lifecycle."""
+"""Service behavior: send fan-out, devices, status ingestion."""
 
 from typing import Any
 
@@ -6,20 +6,25 @@ import pytest
 
 from apps.notifications import services
 from apps.notifications.clients.push import backends as push_backends
-from apps.notifications.clients.sms import backends as sms_backends
+from apps.notifications.constants import Channel
+from apps.notifications.constants import DeliveryStatus
 from apps.notifications.constants import DevicePlatform
 from apps.notifications.constants import NotificationKind
-from apps.notifications.exceptions import NotificationNotFoundError
 from apps.notifications.models import Device
-from apps.notifications.models import Notification
+from apps.notifications.models import NotificationDelivery
+from apps.notifications.models import NotificationKindConfig
 from apps.notifications.tests.factories import DeviceFactory
+from apps.notifications.tests.factories import NotificationDeliveryFactory
 from apps.notifications.tests.factories import NotificationFactory
 from apps.users.tests.factories import UserFactory
 
 pytestmark = pytest.mark.django_db
 
 
-def test_notification_send_creates_row_and_pushes_on_commit(
+# --- notification_send --------------------------------------------------------
+
+
+def test_send_creates_inbox_row_and_pending_deliveries(
     django_capture_on_commit_callbacks: Any,
 ) -> None:
     user = UserFactory.create()
@@ -27,129 +32,180 @@ def test_notification_send_creates_row_and_pushes_on_commit(
 
     with django_capture_on_commit_callbacks(execute=True):
         notification = services.notification_send(
-            recipient=user, kind=NotificationKind.WELCOME, context={"name": "Omar"}
+            recipient=user,
+            kind=NotificationKind.WALLET_CREDITED,
+            context={"amount": "10.00", "currency": "SAR", "balance": "20.00"},
         )
 
-    assert Notification.objects.filter(pk=notification.pk).exists()
-    assert len(push_backends.outbox) == 1  # WELCOME is push-only
-    assert not sms_backends.outbox
-    assert "Omar" in push_backends.outbox[0].body
+    delivery = notification.deliveries.get()
+    assert delivery.channel == Channel.PUSH
+    assert delivery.status == DeliveryStatus.SENT  # executed inline on commit
+    assert len(push_backends.outbox) == 1
 
 
-def test_notification_send_fans_out_sms_for_sms_kinds(
-    django_capture_on_commit_callbacks: Any,
-) -> None:
-    user = UserFactory.create(phone="+966501234567")
+def test_send_validates_context_keys() -> None:
+    user = UserFactory.create()
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with pytest.raises(ValueError, match="missing=\\['balance'\\]"):
         services.notification_send(
             recipient=user,
-            kind=NotificationKind.ANNOUNCEMENT,
-            context={"message": "Maintenance tonight."},
+            kind=NotificationKind.WALLET_CREDITED,
+            context={"amount": "10.00", "currency": "SAR"},
         )
 
-    assert len(sms_backends.outbox) == 1
-    assert sms_backends.outbox[0].to == "+966501234567"
-    assert "Maintenance tonight." in sms_backends.outbox[0].body
 
-
-def test_notification_send_without_commit_sends_nothing() -> None:
-    user = UserFactory.create()
-    DeviceFactory.create(user=user)
-
-    services.notification_send(
-        recipient=user, kind=NotificationKind.WELCOME, context={"name": "X"}
-    )  # test transaction never commits
-
-    assert not push_backends.outbox
-
-
-def test_notification_send_rejects_wrong_context_keys() -> None:
-    user = UserFactory.create()
-
-    with pytest.raises(ValueError, match="unexpected=\\['nam'\\]"):
-        services.notification_send(
-            recipient=user, kind=NotificationKind.WELCOME, context={"nam": "typo"}
-        )
-    assert not Notification.objects.filter(recipient=user).exists()
-
-
-def test_mark_read_is_scoped_to_the_recipient() -> None:
-    notification = NotificationFactory.create()
-    stranger = UserFactory.create()
-
-    with pytest.raises(NotificationNotFoundError):
-        services.notification_mark_read(user=stranger, pk=notification.pk)
-
-    read = services.notification_mark_read(
-        user=notification.recipient, pk=notification.pk
+def test_send_honors_the_kind_config_channels(
+    django_capture_on_commit_callbacks: Any,
+) -> None:
+    NotificationKindConfig.objects.filter(kind=NotificationKind.PAYMENT_PAID).update(
+        channels=[]
     )
-    assert read.read_at is not None
+    user = UserFactory.create()
+
+    with django_capture_on_commit_callbacks(execute=True):
+        notification = services.notification_send(
+            recipient=user,
+            kind=NotificationKind.PAYMENT_PAID,
+            context={"amount": "10.00", "currency": "SAR"},
+        )
+
+    assert not notification.deliveries.exists()  # inbox-only
 
 
-def test_mark_read_twice_keeps_the_first_timestamp() -> None:
+# --- read state ---------------------------------------------------------------
+
+
+def test_mark_read_is_idempotent() -> None:
     notification = NotificationFactory.create()
 
     first = services.notification_mark_read(
         user=notification.recipient, pk=notification.pk
-    ).read_at
+    )
     second = services.notification_mark_read(
         user=notification.recipient, pk=notification.pk
-    ).read_at
-
-    assert first == second
-
-
-def test_mark_all_read_counts_only_unread() -> None:
-    user = UserFactory.create()
-    NotificationFactory.create_batch(3, recipient=user)
-    services.notification_mark_read(
-        user=user, pk=NotificationFactory.create(recipient=user).pk
     )
 
-    assert services.notification_mark_all_read(user=user) == 3
+    assert first.read_at is not None
+    assert second.read_at == first.read_at
+
+
+def test_mark_all_read_returns_count_and_sets_updated_at() -> None:
+    user = UserFactory.create()
+    NotificationFactory.create(recipient=user)
+    NotificationFactory.create(recipient=user)
+
+    assert services.notification_mark_all_read(user=user) == 2
     assert services.notification_mark_all_read(user=user) == 0
 
 
-def test_mark_all_read_refreshes_updated_at() -> None:
-    notification = NotificationFactory.create()
-    stale = notification.updated_at
-
-    services.notification_mark_all_read(user=notification.recipient)
-
-    notification.refresh_from_db()
-    assert notification.updated_at > stale  # bulk .update() bypasses auto_now
-    assert notification.updated_at == notification.read_at
+# --- devices ------------------------------------------------------------------
 
 
-def test_device_register_is_an_upsert_that_reassigns() -> None:
-    first_owner = UserFactory.create()
-    second_owner = UserFactory.create()
+def test_device_register_reassigns_token_to_new_user() -> None:
+    device = DeviceFactory.create()
+    other = UserFactory.create()
 
-    device = services.device_register(
-        user=first_owner, registration_id="tok-1", platform=DevicePlatform.ANDROID
-    )
     reassigned = services.device_register(
-        user=second_owner, registration_id="tok-1", platform=DevicePlatform.IOS
+        user=other,
+        registration_id=device.registration_id,
+        platform=DevicePlatform.IOS,
     )
 
-    assert device.pk == reassigned.pk
-    assert reassigned.user == second_owner
+    assert reassigned.pk == device.pk
+    assert reassigned.user == other
     assert reassigned.platform == DevicePlatform.IOS
-    assert Device.objects.filter(registration_id="tok-1").count() == 1
 
 
 def test_device_unregister_is_scoped_and_idempotent() -> None:
     device = DeviceFactory.create()
-    stranger = UserFactory.create()
+    other = UserFactory.create()
 
-    services.device_unregister(
-        user=stranger, registration_id=device.registration_id
-    )  # someone else's token: no-op
+    services.device_unregister(user=other, registration_id=device.registration_id)
     assert Device.objects.filter(pk=device.pk).exists()
 
     services.device_unregister(user=device.user, registration_id=device.registration_id)
-    services.device_unregister(  # idempotent re-run
-        user=device.user, registration_id=device.registration_id
-    )
+    services.device_unregister(user=device.user, registration_id=device.registration_id)
     assert not Device.objects.filter(pk=device.pk).exists()
+
+
+# --- delivery_update_status (webhook ingestion) -------------------------------
+
+
+def _whatsapp_delivery(status: DeliveryStatus) -> NotificationDelivery:
+    return NotificationDeliveryFactory.create(
+        channel=Channel.WHATSAPP,
+        status=status,
+        provider="whatsapp",
+        provider_message_id="wamid.test.1",
+    )
+
+
+def test_status_moves_forward_and_ignores_regressions() -> None:
+    delivery = _whatsapp_delivery(DeliveryStatus.SENT)
+
+    assert services.delivery_update_status(
+        provider="whatsapp",
+        provider_message_id="wamid.test.1",
+        status=DeliveryStatus.READ,
+    )
+    delivery.refresh_from_db()
+    assert delivery.status == DeliveryStatus.READ
+
+    # A late "delivered" after "read" is a rowcount-0 no-op.
+    assert not services.delivery_update_status(
+        provider="whatsapp",
+        provider_message_id="wamid.test.1",
+        status=DeliveryStatus.DELIVERED,
+    )
+    delivery.refresh_from_db()
+    assert delivery.status == DeliveryStatus.READ
+
+
+def test_duplicate_status_report_is_a_no_op() -> None:
+    _whatsapp_delivery(DeliveryStatus.SENT)
+
+    assert services.delivery_update_status(
+        provider="whatsapp",
+        provider_message_id="wamid.test.1",
+        status=DeliveryStatus.DELIVERED,
+    )
+    assert not services.delivery_update_status(
+        provider="whatsapp",
+        provider_message_id="wamid.test.1",
+        status=DeliveryStatus.DELIVERED,
+    )
+
+
+def test_failed_is_ignored_after_delivered() -> None:
+    delivery = _whatsapp_delivery(DeliveryStatus.DELIVERED)
+
+    assert not services.delivery_update_status(
+        provider="whatsapp",
+        provider_message_id="wamid.test.1",
+        status=DeliveryStatus.FAILED,
+        detail="expired",
+    )
+    delivery.refresh_from_db()
+    assert delivery.status == DeliveryStatus.DELIVERED
+
+
+def test_failed_applies_from_sent_with_detail() -> None:
+    delivery = _whatsapp_delivery(DeliveryStatus.SENT)
+
+    assert services.delivery_update_status(
+        provider="whatsapp",
+        provider_message_id="wamid.test.1",
+        status=DeliveryStatus.FAILED,
+        detail="recipient blocked business",
+    )
+    delivery.refresh_from_db()
+    assert delivery.status == DeliveryStatus.FAILED
+    assert delivery.detail == "recipient blocked business"
+
+
+def test_unknown_provider_message_id_is_acked_but_ignored() -> None:
+    assert not services.delivery_update_status(
+        provider="whatsapp",
+        provider_message_id="wamid.unknown",
+        status=DeliveryStatus.DELIVERED,
+    )

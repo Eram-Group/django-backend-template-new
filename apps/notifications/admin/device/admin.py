@@ -21,7 +21,6 @@ class DeviceAdmin(ExportableModelAdmin):
     list_filter_submit = list_view.LIST_FILTER_SUBMIT
     search_fields = list_view.SEARCH_FIELDS
     search_help_text = list_view.SEARCH_HELP_TEXT
-    list_select_related = list_view.LIST_SELECT_RELATED
     ordering = list_view.ORDERING
     list_per_page = list_view.LIST_PER_PAGE
 

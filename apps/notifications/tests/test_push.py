@@ -1,6 +1,5 @@
-"""FCM backend: chunking, invalid-token reporting, configuration guard."""
+"""FCM backend: chunking, per-token results, dead-token flags, config guard."""
 
-from collections.abc import Mapping
 from collections.abc import Sequence
 from types import SimpleNamespace
 from typing import Any
@@ -10,15 +9,20 @@ from firebase_admin import messaging
 
 from apps.notifications.clients.push import backends as push_backends
 from apps.notifications.clients.push import fcm as fcm_module
-from apps.notifications.clients.push import push_send
+from apps.notifications.clients.push import push_send_many
+from apps.notifications.clients.push.base import PushMessage
 from apps.notifications.clients.push.base import PushNotConfiguredError
-from apps.notifications.clients.push.base import PushReport
+from apps.notifications.clients.push.base import PushResult
 from apps.notifications.clients.push.fcm import FcmPushBackend
 
 
 @pytest.fixture
 def fake_firebase(monkeypatch: pytest.MonkeyPatch) -> list[list[messaging.Message]]:
-    """Bypass credentials and capture every send_each batch."""
+    """Bypass credentials and capture every send_each batch.
+
+    Tokens prefixed ``dead-`` answer UnregisteredError, ``mismatch-`` answer
+    SenderIdMismatchError, ``flaky-`` a transient QuotaExceededError.
+    """
     batches: list[list[messaging.Message]] = []
 
     def fake_send_each(
@@ -28,14 +32,16 @@ def fake_firebase(monkeypatch: pytest.MonkeyPatch) -> list[list[messaging.Messag
         responses = []
         for message in messages:
             if message.token.startswith("dead-"):
-                responses.append(
-                    SimpleNamespace(
-                        success=False,
-                        exception=messaging.UnregisteredError("token gone"),
-                    )
-                )
+                exception: Exception | None = messaging.UnregisteredError("token gone")
+            elif message.token.startswith("mismatch-"):
+                exception = messaging.SenderIdMismatchError("wrong sender")
+            elif message.token.startswith("flaky-"):
+                exception = messaging.QuotaExceededError("try later")
             else:
-                responses.append(SimpleNamespace(success=True, exception=None))
+                exception = None
+            responses.append(
+                SimpleNamespace(success=exception is None, exception=exception)
+            )
         return SimpleNamespace(responses=responses)
 
     monkeypatch.setattr(fcm_module, "_firebase_app", lambda: None)
@@ -43,55 +49,62 @@ def fake_firebase(monkeypatch: pytest.MonkeyPatch) -> list[list[messaging.Messag
     return batches
 
 
-def test_fcm_chunks_at_500(fake_firebase: list[list[messaging.Message]]) -> None:
-    tokens = [f"token-{i}" for i in range(1001)]
-
-    report = FcmPushBackend().send(tokens=tokens, title="t", body="b", data={})
-
-    assert [len(batch) for batch in fake_firebase] == [500, 500, 1]
-    assert report.sent == 1001
-    assert report.failed == 0
+def _messages(tokens: Sequence[str]) -> list[PushMessage]:
+    return [PushMessage(token=token, title="t", body="b") for token in tokens]
 
 
-def test_fcm_reports_unregistered_tokens(
-    fake_firebase: list[list[messaging.Message]],
-) -> None:
-    report = FcmPushBackend().send(
-        tokens=["live-1", "dead-1", "live-2"],
-        title="t",
-        body="b",
-        data={"k": "v"},
+def test_fcm_chunks_at_200(fake_firebase: list[list[messaging.Message]]) -> None:
+    results = FcmPushBackend().send_many(
+        messages=_messages([f"token-{i}" for i in range(401)])
     )
 
-    assert report.sent == 2
-    assert report.failed == 1
-    assert report.invalid_tokens == ("dead-1",)
+    assert [len(batch) for batch in fake_firebase] == [200, 200, 1]
+    assert len(results) == 401
+    assert all(result.ok for result in results)
+
+
+def test_fcm_per_token_results_flag_dead_tokens(
+    fake_firebase: list[list[messaging.Message]],
+) -> None:
+    results = FcmPushBackend().send_many(
+        messages=_messages(["live-1", "dead-1", "mismatch-1", "flaky-1"])
+    )
+
+    assert results[0] == PushResult(token="live-1", ok=True)
+    assert results[1].invalid is True  # unregistered -> prune
+    assert results[2].invalid is True  # sender-id mismatch -> prune
+    assert results[3].ok is False
+    assert results[3].invalid is False  # transient -> must NOT prune
+    assert results[3].detail == "QuotaExceededError"
 
 
 def test_fcm_without_creds_is_loud() -> None:
     # FIREBASE_CREDENTIALS_B64 is None in test settings; exceptions are not
     # cached by functools.cache, so this stays deterministic.
     with pytest.raises(PushNotConfiguredError):
-        FcmPushBackend().send(tokens=["x"], title="t", body="b", data={})
+        FcmPushBackend().send_many(messages=_messages(["x"]))
 
 
-def test_push_send_uses_locmem_backend_in_tests() -> None:
-    report = push_send(tokens=["a", "b"], title="t", body="b", data={"x": "1"})
+def test_push_send_many_uses_locmem_backend_in_tests() -> None:
+    messages = [
+        PushMessage(token="a", title="t", body="b", data={"x": "1"}),
+        PushMessage(token="b", title="t", body="b"),
+    ]
 
-    assert report == PushReport(sent=2, failed=0)
-    assert len(push_backends.outbox) == 1
-    assert push_backends.outbox[0].tokens == ("a", "b")
+    results = push_send_many(messages=messages)
+
+    assert results == (
+        PushResult(token="a", ok=True),
+        PushResult(token="b", ok=True),
+    )
+    assert push_backends.outbox == messages
 
 
 class InvalidTokenPushBackend:
     """Test double: every token comes back invalid (drives prune tests)."""
 
-    def send(
-        self,
-        *,
-        tokens: Sequence[str],
-        title: str,
-        body: str,
-        data: Mapping[str, str],
-    ) -> PushReport:
-        return PushReport(sent=0, failed=len(tokens), invalid_tokens=tuple(tokens))
+    def send_many(self, *, messages: Sequence[PushMessage]) -> tuple[PushResult, ...]:
+        return tuple(
+            PushResult(token=m.token, ok=False, invalid=True, detail="gone")
+            for m in messages
+        )

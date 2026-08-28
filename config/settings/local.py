@@ -35,4 +35,9 @@ SECURE_CSP = {}
 
 # --- Tasks: inline by default, flip TASKS_IMMEDIATE=false to exercise db_worker
 if env.TASKS_IMMEDIATE:
-    TASKS = {"default": {"BACKEND": "django.tasks.backends.immediate.ImmediateBackend"}}
+    TASKS = {
+        "default": {
+            "BACKEND": "django.tasks.backends.immediate.ImmediateBackend",
+            "QUEUES": ["default", "bulk"],
+        }
+    }

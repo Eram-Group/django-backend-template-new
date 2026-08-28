@@ -10,10 +10,16 @@ from typing import Any
 from django.db.models import Model
 from factory.django import DjangoModelFactory
 
+from apps.notifications.models import Broadcast
 from apps.notifications.models import Device
 from apps.notifications.models import Notification
+from apps.notifications.models import NotificationDelivery
+from apps.notifications.models import NotificationKindConfig
+from apps.notifications.tests.factories import BroadcastFactory
 from apps.notifications.tests.factories import DeviceFactory
+from apps.notifications.tests.factories import NotificationDeliveryFactory
 from apps.notifications.tests.factories import NotificationFactory
+from apps.notifications.tests.factories import NotificationKindConfigFactory
 from apps.payments.models import Payment
 from apps.payments.models import SavedCard
 from apps.payments.models import Wallet
@@ -27,8 +33,11 @@ from apps.users.tests.factories import UserFactory
 
 FACTORIES: dict[type[Model], type[DjangoModelFactory[Any]]] = {
     User: UserFactory,
+    Broadcast: BroadcastFactory,
     Device: DeviceFactory,
     Notification: NotificationFactory,
+    NotificationDelivery: NotificationDeliveryFactory,
+    NotificationKindConfig: NotificationKindConfigFactory,
     Payment: PaymentFactory,
     SavedCard: SavedCardFactory,
     Wallet: WalletFactory,

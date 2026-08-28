@@ -1,31 +1,30 @@
 """FCM via firebase-admin (HTTP v1 API).
 
-firebase-admin transports its own HTTP (auth, batching, backoff) - the
-apps.common.http kernel is deliberately not involved here. We use the typed
-``send_each`` API (one Message per token, 500 per call); tokens Firebase
-reports as unregistered come back in PushReport.invalid_tokens so the caller
-prunes their Device rows - the modern replacement for fcm-django's
-DELETE_INACTIVE_DEVICES (fcm-django itself hard-depends on DRF; this repo is
-ninja-only).
+firebase-admin transports its own HTTP (auth, backoff) - the apps.common.http
+kernel is deliberately not involved here. ``send_each`` is NOT a batch call:
+it opens one thread + one HTTP request per message (hard cap 500 per call),
+so we chunk at 200 to bound thread fan-out. Tokens Firebase reports as dead
+(unregistered / sender-id mismatch) come back with ``invalid=True`` so the
+caller prunes their Device rows - transient failures never set it.
 """
 
 import base64
 import functools
 import itertools
 import json
-from collections.abc import Mapping
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from django.conf import settings
 
+from apps.notifications.clients.push.base import PushMessage
 from apps.notifications.clients.push.base import PushNotConfiguredError
-from apps.notifications.clients.push.base import PushReport
+from apps.notifications.clients.push.base import PushResult
 
 if TYPE_CHECKING:
     import firebase_admin
 
-_BATCH_LIMIT = 500  # FCM's per-call ceiling for send_each
+_BATCH_LIMIT = 200  # send_each spawns a thread per message; 500 is its hard cap
 
 
 @functools.cache
@@ -43,34 +42,37 @@ def _firebase_app() -> firebase_admin.App:
 
 
 class FcmPushBackend:
-    def send(
-        self,
-        *,
-        tokens: Sequence[str],
-        title: str,
-        body: str,
-        data: Mapping[str, str],
-    ) -> PushReport:
+    def send_many(self, *, messages: Sequence[PushMessage]) -> tuple[PushResult, ...]:
         from firebase_admin import messaging
 
         app = _firebase_app()
-        sent = failed = 0
-        invalid: list[str] = []
-        for chunk in itertools.batched(tokens, _BATCH_LIMIT, strict=False):
-            messages = [
+        results: list[PushResult] = []
+        for chunk in itertools.batched(messages, _BATCH_LIMIT, strict=False):
+            fcm_messages = [
                 messaging.Message(
-                    notification=messaging.Notification(title=title, body=body),
-                    data=dict(data),
-                    token=token,
+                    notification=messaging.Notification(
+                        title=message.title, body=message.body
+                    ),
+                    data=dict(message.data),
+                    token=message.token,
                 )
-                for token in chunk
+                for message in chunk
             ]
-            batch = messaging.send_each(messages, app=app)
-            for token, result in zip(chunk, batch.responses, strict=True):
+            batch = messaging.send_each(fcm_messages, app=app)
+            for message, result in zip(chunk, batch.responses, strict=True):
                 if result.success:
-                    sent += 1
+                    results.append(PushResult(token=message.token, ok=True))
                 else:
-                    failed += 1
-                    if isinstance(result.exception, messaging.UnregisteredError):
-                        invalid.append(token)
-        return PushReport(sent=sent, failed=failed, invalid_tokens=tuple(invalid))
+                    invalid = isinstance(
+                        result.exception,
+                        messaging.UnregisteredError | messaging.SenderIdMismatchError,
+                    )
+                    results.append(
+                        PushResult(
+                            token=message.token,
+                            ok=False,
+                            invalid=invalid,
+                            detail=type(result.exception).__name__,
+                        )
+                    )
+        return tuple(results)

@@ -3,6 +3,8 @@ from typing import Any
 from allauth.usersessions.models import UserSession
 from django.db import transaction
 
+from apps.notifications.constants import NotificationKind
+from apps.notifications.services import notification_send
 from apps.payments.services import wallet_create
 from apps.users.models import User
 from apps.users.tasks import send_welcome_email
@@ -28,9 +30,16 @@ def user_post_signup(*, user: User) -> None:
     """Post-signup side effects; everything rides the signup transaction.
 
     The wallet is provisioned HERE (explicit cross-app service call) - the
-    payment flows only ever ``wallet_get`` and assume it exists.
+    payment flows only ever ``wallet_get`` and assume it exists. The WELCOME
+    inbox row is inbox-only by catalog default (devices register after
+    login, so a push would have nowhere to go yet).
     """
     wallet_create(user=user)
+    notification_send(
+        recipient=user,
+        kind=NotificationKind.WELCOME,
+        context={"name": user.name or user.email},
+    )
     transaction.on_commit(lambda: send_welcome_email.enqueue(str(user.pk)))
 
 

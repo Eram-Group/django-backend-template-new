@@ -133,7 +133,8 @@ lint.ignore = [
 # must use mimesis via apps/common/tests/fake.py instead.
 lint.flake8-tidy-imports.banned-api."faker".msg = "Use mimesis via apps.common.tests.fake - Faker is only factory_boy's internal dependency."
 lint.flake8-tidy-imports.banned-api."factory.faker".msg = "Use mimesis via apps.common.tests.fake, not factory.Faker."
-lint.per-file-ignores = { "**/tests/**" = [ "S101" ], "conftest.py" = [ "S101" ], "config/settings/*" = [ "F403", "F405" ] }
+# S105/S106 in tests: device tokens / webhook secrets are test data, not passwords.
+lint.per-file-ignores = { "**/tests/**" = [ "S101", "S105", "S106" ], "conftest.py" = [ "S101" ], "config/settings/*" = [ "F403", "F405" ] }
 lint.isort.force-single-line = true
 
 # ==== mypy ====
@@ -240,15 +241,22 @@ name = "Domain apps independent"
 type = "independence"
 modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
 ignore_imports = [
-  # Explicit decision (2026-07-12): notifications addresses users - Device/
-  # Notification rows belong to a User, delivery reads user.phone/.language.
-  # One-way only; users never imports notifications.
+  # Explicit decision (2026-07-12, restored 2026-07-27): notifications
+  # addresses users - Notification/Device/Preference rows belong to a User,
+  # delivery reads user.phone/.language. One-way only at the model layer;
+  # users reaches back ONLY via the narrow service edge below.
   "apps.notifications.** -> apps.users.**",
-  # Explicit decision (2026-07-12): payments belongs to a User (payer,
-  # wallet owner) and announces outcomes through notifications' service
-  # re-exports.
-  "apps.payments.** -> apps.users.**",
+  # Explicit decision (2026-07-27): payments announces outcomes (wallet
+  # credited, payment paid) through notifications' service re-exports.
   "apps.payments.** -> apps.notifications.**",
+  # Explicit decision (2026-07-27): signup writes the WELCOME inbox row -
+  # the same narrow service-edge shape as users -> payments wallet_create.
+  "apps.users.services.users -> apps.notifications.services",
+  "apps.users.services.users -> apps.notifications.constants",
+  "apps.users.tests.** -> apps.notifications.**",
+  # Explicit decision (2026-07-12): payments belongs to a User (payer,
+  # wallet owner). One-way only; users never imports payments' models.
+  "apps.payments.** -> apps.users.**",
   # Explicit decision (2026-07-18): signup provisions the wallet -
   # user_post_signup calls payments' wallet_create service re-export, and
   # UserFactory/tests replicate and assert the invariant. Service + test
@@ -259,6 +267,10 @@ ignore_imports = [
   # this, any app's tests importing fake form an indirect chain to users.
   "apps.common.tests.fake -> apps.users.constants",
 ]
+# The notifications edges above are declared with the app shell and become
+# matched as the domain/service/producer slices land - same option the
+# forbidden contract below already uses.
+unmatched_ignore_imports_alerting = "none"
 
 [[tool.importlinter.contracts]]
 # apps.common is primitives only. Exemptions: apps/common/tests hosts the

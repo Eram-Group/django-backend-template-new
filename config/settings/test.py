@@ -15,13 +15,14 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 # so the DatabaseCache default would fail on first hit.
 MAILERS = {"default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"}}
 
-# In-memory SMS/push outboxes (the mail.outbox analogue) - tests never touch
-# provider HTTP even when real creds sit in a developer's .env.
+# In-memory SMS/push/WhatsApp outboxes (the mail.outbox analogue) - tests
+# never touch provider HTTP even when real creds sit in a developer's .env.
 SMS_BACKEND = "apps.notifications.clients.sms.backends.LocmemSmsBackend"
 PUSH_BACKEND = "apps.notifications.clients.push.backends.LocmemPushBackend"
+WHATSAPP_BACKEND = "apps.notifications.clients.whatsapp.backends.LocmemWhatsAppBackend"
 
-# The payments analogue of the outboxes above: every currency resolves to
-# FakeGateway, so suites never hit Tap/Paymob even with test keys in .env.
+# Every currency resolves to FakeGateway, so suites never hit Tap/Paymob even
+# with test keys in .env.
 PAYMENT_GATEWAYS = {
     "SAR": "apps.payments.gateways.fake.FakeGateway",
     "EGP": "apps.payments.gateways.fake.FakeGateway",
@@ -38,7 +39,12 @@ CACHES = {
 }
 
 # Tasks run inline so assertions see their effects immediately.
-TASKS = {"default": {"BACKEND": "django.tasks.backends.immediate.ImmediateBackend"}}
+TASKS = {
+    "default": {
+        "BACKEND": "django.tasks.backends.immediate.ImmediateBackend",
+        "QUEUES": ["default", "bulk"],
+    }
+}
 
 # Lockout middleware would flake repeated-login tests.
 AXES_ENABLED = False

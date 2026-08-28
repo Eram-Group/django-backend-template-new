@@ -170,7 +170,7 @@ an allowlist success predicate (OurSMS accepted/rejected counts, SMSMisr
 `code == "1901"`) — unknown shapes fail loudly, never pass silently.
 
 **Transport selection = the mail-backend pattern** (settings string,
-resolved per call — what Django itself now spells `MAILERS`): `SMS_BACKEND` / `PUSH_BACKEND` (base + local = console
+resolved per call — what Django itself now spells `MAILERS`): `SMS_BACKEND` / `PUSH_BACKEND` / `WHATSAPP_BACKEND` (base + local = console
 backends with structlog lines; `production.py` swaps in the real transports
 only when `_DEPLOYED`) and `PAYMENT_GATEWAYS` (currency → gateway class —
 the same Tap SAR / Paymob EGP mapping in every environment; the `.env` keys
@@ -196,10 +196,17 @@ Per-area notes:
   Firebase init is lazy from `FIREBASE_CREDENTIALS_B64` (base64
   service-account JSON). firebase-admin transports its own HTTP.
 - **Notifications**: per-recipient inbox rows store `(kind, context)`;
-  copy lives in the typed catalog (`apps/notifications/catalog.py`,
-  gettext) and renders at send/read time in the viewer's locale — never
-  stored pre-rendered. Delivery = `on_commit` tasks with `*_sent_at`
-  idempotency markers; a kind's channels are declared on its catalog entry
+  the catalog (`apps/notifications/catalog.py`) is the code-side contract
+  (context keys, supported channels, WhatsApp template) while the copy and
+  the channel policy live on one `NotificationKindConfig` row per kind
+  (admin-editable, ar/en via modeltranslation); rendering happens at
+  send/read time in the viewer's locale — never stored pre-rendered.
+  Delivery = one `NotificationDelivery` row per (notification, channel),
+  THE idempotency record: `on_commit` tasks claim PENDING → PROCESSING under
+  `select_for_update(skip_locked)`, outcomes persist per channel, no
+  auto-retry (`broadcast_resume` / `sweep_deliveries` re-enqueue exactly the
+  remainder). Mass sends = `Broadcast` rows fanned out on the `bulk` queue.
+  WhatsApp status webhooks are HMAC-verified and never 5xx on input shape
   (`test_catalog` keeps `NotificationKind` ↔ `CATALOG` in lockstep).
 - **Payments** (Tap SAR / Paymob EGP): gateway Protocol + frozen DTOs in
   `apps/payments/gateways/`. Money is Decimal end-to-end; the wire uses
@@ -268,9 +275,11 @@ Per-area notes:
 
 **Cross-app decisions on record** (independence contract `ignore_imports`
 in `pyproject.toml`): notifications → users (rows belong to a User;
-delivery reads `user.phone`/`user.language`) and payments → users +
-payments → notifications (paid events call `notification_send`). Both are
-one-way; nothing imports payments.
+delivery reads `user.phone`/`user.language`), payments → users +
+payments → notifications (paid events call `notification_send`), and the
+narrow service edge users.services → notifications.services (signup writes
+the WELCOME inbox row, the same shape as `wallet_create`). One-way at the
+model layer; nothing imports payments.
 
 ## i18n and translated content
 

@@ -1,4 +1,4 @@
-from apps.notifications.tasks.delivery import send_push_notification
-from apps.notifications.tasks.delivery import send_sms_notification
+from apps.notifications.tasks.broadcast import dispatch_broadcast
+from apps.notifications.tasks.delivery import deliver_notifications
 
-__all__ = ["send_push_notification", "send_sms_notification"]
+__all__ = ["deliver_notifications", "dispatch_broadcast"]

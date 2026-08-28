@@ -4,7 +4,7 @@
 retry policy (stamina), structured logging, and a small error taxonomy:
 
 - ``"transient"`` retries transport errors and 429/5xx responses - for calls
-  where a duplicate beats a drop (SMS, status polls).
+  where a duplicate beats a drop (status polls).
 - ``"connect-only"`` retries only errors raised before the request hit the
   wire - for non-idempotent POSTs (payment charges) unless the provider
   accepts an idempotency key.

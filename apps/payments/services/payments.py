@@ -364,6 +364,11 @@ def _check_event_matches(*, payment: Payment, event: WebhookEvent) -> None:
 
 
 def _on_paid(payment: Payment) -> None:
+    """Post-transition effects of a payment reaching PAID.
+
+    Announcing the outcome goes through notifications' service re-export -
+    an explicit cross-app call recorded in pyproject ignore_imports.
+    """
     if payment.kind == PaymentKind.WALLET_TOPUP:
         wallet = _wallet_for(user=payment.user, currency=payment.currency)
         entry = wallet_apply(

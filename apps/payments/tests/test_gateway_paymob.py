@@ -19,14 +19,14 @@ from apps.payments.gateways.base import WebhookEventKind
 from apps.payments.gateways.base import WebhookVerificationError
 from apps.payments.gateways.paymob import PaymobGateway
 
-SECRET = "skey_test_paymob"  # noqa: S105 - test fixture value
-HMAC_SECRET = "hmac_test_secret"  # noqa: S105 - test fixture value
+SECRET = "skey_test_paymob"
+HMAC_SECRET = "hmac_test_secret"
 API_KEY = "api_test_paymob"
 INTENTION = "https://accept.paymob.com/v1/intention/"
 PAY = "https://accept.paymob.com/api/acceptance/payments/pay"
 AUTH_TOKENS = "https://accept.paymob.com/api/auth/tokens"
 INQUIRY = "https://accept.paymob.com/api/ecommerce/orders/transaction_inquiry"
-CARD_TOKEN = "tok_saved_paymob_1"  # noqa: S105 - test fixture; gitleaks:allow
+CARD_TOKEN = "tok_saved_paymob_1"  # gitleaks:allow - fake fixture token
 
 
 @pytest.fixture(autouse=True)
@@ -526,7 +526,7 @@ def test_token_webhook_with_short_masked_pan_has_no_last4(masked: str) -> None:
 def test_token_webhook_with_tampered_token_is_rejected() -> None:
     obj = _token_obj()
     signature = _sign_token(obj)
-    obj["token"] = "tok_attacker"  # noqa: S105 - test fixture value
+    obj["token"] = "tok_attacker"
 
     with pytest.raises(WebhookVerificationError):
         PaymobGateway().parse_webhook(

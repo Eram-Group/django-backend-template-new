@@ -101,14 +101,20 @@ class Env(BaseSettings):
     SENTRY_RELEASE: str | None = None  # git sha, injected by CD at render time
     SENTRY_TRACES_SAMPLE_RATE: float
 
-    # Notifications: FCM push + SMS providers (absent creds = not configured;
-    # local/test use console/locmem backends regardless)
+    # Notifications: FCM push + SMS + WhatsApp providers (absent creds = not
+    # configured; local/test use console/locmem backends regardless)
     FIREBASE_CREDENTIALS_B64: SecretStr | None = None  # base64 service-account JSON
     OURSMS_API_KEY: SecretStr | None = None
     OURSMS_SENDER: str | None = None
     SMSMISR_USERNAME: str | None = None
     SMSMISR_PASSWORD: SecretStr | None = None
     SMSMISR_SENDER: str | None = None
+    # WhatsApp Cloud API (connector lands in a follow-up PR; the webhook
+    # fields already gate the status endpoint)
+    WHATSAPP_ACCESS_TOKEN: SecretStr | None = None
+    WHATSAPP_PHONE_NUMBER_ID: str | None = None
+    WHATSAPP_APP_SECRET: SecretStr | None = None  # X-Hub-Signature-256 HMAC key
+    WHATSAPP_WEBHOOK_VERIFY_TOKEN: str | None = None  # GET handshake echo guard
 
     # Payments: Tap (SAR) / Paymob (EGP); local/test use the fake gateway
     BACKEND_BASE_URL: str  # absolute base for gateway webhook URLs

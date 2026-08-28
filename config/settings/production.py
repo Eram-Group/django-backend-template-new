@@ -75,10 +75,13 @@ if _DEPLOYED:
         "AMAZON_SES_CLIENT_PARAMS": {"region_name": env.AWS_SES_REGION},
     }
 
-# --- SMS + push: real transports only when deployed (console otherwise) ---------
+# --- SMS + push + WhatsApp: real transports only when deployed (console otherwise)
 if _DEPLOYED:
     SMS_BACKEND = "apps.notifications.clients.sms.routing.RoutingSmsBackend"
     PUSH_BACKEND = "apps.notifications.clients.push.fcm.FcmPushBackend"
+    # Placeholder until the Meta connector PR: a force-enabled WhatsApp
+    # channel fails loudly instead of silently dropping messages.
+    WHATSAPP_BACKEND = "apps.notifications.clients.whatsapp.meta.MetaWhatsAppBackend"
     # SMSMisr live mode only in production - dev traffic stays on its test API.
     SMSMISR_LIVE = env.ENVIRONMENT == "production"
 
