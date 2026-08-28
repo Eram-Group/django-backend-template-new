@@ -16,8 +16,10 @@ from decimal import Decimal
 from typing import Any
 
 import phonenumbers
+import structlog
 from django.conf import settings
 
+from apps.common.http import OutboundError
 from apps.common.http import request_json
 from apps.payments.gateways.base import ChargeStatus
 from apps.payments.gateways.base import CheckoutRequest
@@ -28,6 +30,8 @@ from apps.payments.gateways.base import SavedCardData
 from apps.payments.gateways.base import SavedCardRef
 from apps.payments.gateways.base import WebhookEvent
 from apps.payments.gateways.base import WebhookVerificationError
+
+logger = structlog.get_logger(__name__)
 
 _BASE = "https://api.tap.company/v2"
 _PAID_STATUS = "CAPTURED"
@@ -181,6 +185,26 @@ class TapGateway:
         )
         return response.json().get("deleted") is not False
 
+    def saved_card_fingerprint(self, *, saved_card: SavedCardRef) -> str:
+        """Tap's fingerprint for a vaulted card, or "" when it cannot be read.
+
+        The charge/webhook ``card`` object does not carry it; the Card API
+        does. Best effort by design: the caller is card bookkeeping inside a
+        settlement, which must not fail because a lookup did.
+        """
+        try:
+            response = request_json(
+                service="tap",
+                method="GET",
+                url=f"{_BASE}/card/{saved_card.customer_id}/{saved_card.token}",
+                headers=_headers(),
+                retry="transient",  # GET is idempotent
+            )
+        except OutboundError, GatewayResponseError:
+            logger.warning("tap_card_fingerprint_unavailable", token=saved_card.token)
+            return ""
+        return str(response.json().get("fingerprint") or "")
+
     def parse_webhook(
         self,
         *,
@@ -197,6 +221,9 @@ class TapGateway:
         except ValueError as exc:
             msg = "webhook body is not JSON"
             raise WebhookVerificationError(msg) from exc
+        if not isinstance(payload, dict):
+            msg = "webhook body is not a JSON object"
+            raise WebhookVerificationError(msg)
         if not hmac.compare_digest(_expected_hashstring(payload), posted):
             msg = "hashstring mismatch"
             raise WebhookVerificationError(msg)
@@ -256,6 +283,8 @@ def _customer(request: CheckoutRequest) -> dict[str, Any]:
         "first_name": request.customer_name or "Customer",
         "email": request.customer_email,
     }
+    if request.customer_id:  # file the charge (and its card) under this customer
+        customer["id"] = request.customer_id
     if request.customer_phone:
         parsed = phonenumbers.parse(request.customer_phone)
         customer["phone"] = {
@@ -287,6 +316,7 @@ def _extract_saved_card(payload: dict[str, Any]) -> SavedCardData | None:
         exp_month=int(card["exp_month"]) if card.get("exp_month") else None,
         exp_year=int(card["exp_year"]) if card.get("exp_year") else None,
         email=str(customer.get("email") or ""),
+        fingerprint=str(card.get("fingerprint") or ""),
     )
 
 

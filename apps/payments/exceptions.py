@@ -25,6 +25,11 @@ class WebhookRejectedError(PaymentError):
     """Webhook signature verification failed - the gateway should retry/alert."""
 
 
+class PaymentEventMismatchError(PaymentError):
+    """A verified gateway event carries an amount/currency that is not the
+    Payment row's - never applied; logged for reconciliation."""
+
+
 class SavedCardNotFoundError(PaymentError):
     status_code = 404
 

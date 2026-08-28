@@ -1,5 +1,6 @@
 from apps.payments.services.payments import payment_apply_gateway_event
 from apps.payments.services.payments import payment_charge_saved
+from apps.payments.services.payments import payment_expire
 from apps.payments.services.payments import payment_initiate
 from apps.payments.services.payments import payment_refund_execute
 from apps.payments.services.payments import payment_refund_start
@@ -13,6 +14,7 @@ from apps.payments.services.wallets import wallet_create
 __all__ = [
     "payment_apply_gateway_event",
     "payment_charge_saved",
+    "payment_expire",
     "payment_initiate",
     "payment_refund_execute",
     "payment_refund_start",

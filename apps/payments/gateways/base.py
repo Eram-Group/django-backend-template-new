@@ -54,6 +54,10 @@ class SavedCardData:
     exp_month: int | None  # Paymob provides neither expiry field
     exp_year: int | None
     email: str  # billing email echoed by the gateway ("" when absent)
+    #: The provider's hash of the card number (Tap ``fingerprint``): the same
+    #: physical card has the same value whatever token it was vaulted under.
+    #: "" when the payload does not carry it - the service may fetch it.
+    fingerprint: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +75,10 @@ class CheckoutRequest:
     #: charge_saved). None = a new card is entered at checkout, and every
     #: new-card checkout requests vaulting (saving is not client-optional).
     saved_card: SavedCardRef | None = None
+    #: The gateway customer the user's other cards already live under (Tap
+    #: "cus_..."); "" = let the gateway create one. Reusing it is what makes
+    #: the same physical card come back with the same card id.
+    customer_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,12 +95,19 @@ class CheckoutSession:
 @dataclass(frozen=True, slots=True)
 class WebhookEvent:
     reference: str  # the planted idempotency key, echoed back
-    transaction_id: str
+    transaction_id: str  # "" = do not touch Payment.gateway_transaction_id
     is_paid: bool
     status: str  # gateway-native status string (audit/logging)
     raw: dict[str, Any]
     kind: WebhookEventKind = WebhookEventKind.PAYMENT
     saved_card: SavedCardData | None = None
+    #: The event is informational (still in flight, or a refund/void/capture
+    #: child transaction): record the callback, never transition the row.
+    is_pending: bool = False
+    #: What the gateway says was charged, in minor units - set when the
+    #: provider signs these fields so the service can cross-check the row.
+    amount_minor: int | None = None
+    currency: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +118,9 @@ class ChargeStatus:
     raw: dict[str, Any]
     #: Lets payment_verify persist a card when the webhook was lost.
     saved_card: SavedCardData | None = None
+    is_pending: bool = False
+    amount_minor: int | None = None
+    currency: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +151,10 @@ class PaymentGateway(Protocol):
     def charge_saved(self, *, request: CheckoutRequest) -> CheckoutSession: ...
 
     def delete_saved_card(self, *, saved_card: SavedCardRef) -> bool: ...
+
+    def saved_card_fingerprint(self, *, saved_card: SavedCardRef) -> str:
+        """The provider's fingerprint for a vaulted card; "" when unknown."""
+        ...
 
 
 _MINOR_UNIT_EXPONENT = {"SAR": 2, "EGP": 2}

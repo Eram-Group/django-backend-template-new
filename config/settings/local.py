@@ -7,8 +7,9 @@ from config.settings.base import *
 
 DEBUG = True
 
-# --- Email -> Mailpit (host/port come from env: localhost:1025) --------------
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# --- Email -> Mailpit ---------------------------------------------------------
+# base.MAILERS already points the default mailer at SMTP with the env host/port
+# (localhost:1025), so local dev needs no override here.
 
 # --- Dev tooling ---------------------------------------------------------------
 INSTALLED_APPS += [

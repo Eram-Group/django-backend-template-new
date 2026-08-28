@@ -4,7 +4,14 @@ FIELDSETS = (
     (None, {"fields": ("user", "gateway")}),
     (
         "Gateway references",
-        {"fields": ("token", "gateway_customer_id", "gateway_agreement_id")},
+        {
+            "fields": (
+                "token",
+                "gateway_customer_id",
+                "gateway_agreement_id",
+                "fingerprint",
+            )
+        },
     ),
     ("Card", {"fields": ("brand", "last4", "exp_month", "exp_year")}),
     ("Dates", {"fields": ("created_at", "updated_at")}),

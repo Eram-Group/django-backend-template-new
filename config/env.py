@@ -13,17 +13,22 @@ S3/CloudFront, cookie domain).
 
 from typing import Annotated
 from typing import Literal
+from typing import Self
 from typing import get_args
 
 from pydantic import Field
 from pydantic import SecretStr
 from pydantic import ValidationInfo
 from pydantic import field_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings
 from pydantic_settings import NoDecode
 from pydantic_settings import SettingsConfigDict
 
 type CommaSeparated[T] = Annotated[list[T], NoDecode]
+
+#: Which kind of gateway keys each environment may hold.
+_PAYMENT_MODE_BY_ENVIRONMENT = {"local": "test", "dev": "test", "production": "live"}
 
 
 class Env(BaseSettings):
@@ -35,6 +40,10 @@ class Env(BaseSettings):
         case_sensitive=False,
         extra="ignore",
         env_ignore_empty=True,  # FOO= in .env means unset, not empty string
+        # Validation errors print the offending input by default - for a
+        # settings model that is the raw env (SECRET_KEY, gateway keys, ...)
+        # landing in a boot-time traceback. Field names are enough to fix it.
+        hide_input_in_errors=True,
     )
 
     # Core
@@ -113,6 +122,9 @@ class Env(BaseSettings):
     PAYMOB_SECRET_KEY: SecretStr | None = None
     PAYMOB_PUBLIC_KEY: str | None = None
     PAYMOB_HMAC_SECRET: SecretStr | None = None
+    # Dashboard API key (same for test/live) -> auth token for the transaction
+    # inquiry API; unset = payment_verify/reconcile refuse loudly on paymob.
+    PAYMOB_API_KEY: SecretStr | None = None
     PAYMOB_INTEGRATION_IDS: CommaSeparated[int] = Field(default_factory=list)
     # Card-on-file: one-click CIT checkout (unset = fall back to
     # PAYMOB_INTEGRATION_IDS, which works in Paymob test mode) and MOTO for
@@ -154,6 +166,25 @@ class Env(BaseSettings):
         if field is None or type(None) not in get_args(field.annotation):
             return value
         return None
+
+    @model_validator(mode="after")
+    def _payment_keys_match_environment(self) -> Self:
+        """Live gateway keys only in production, test keys everywhere else.
+
+        Tap and Paymob keys carry the mode in their name (``sk_live_…`` /
+        ``egy_sk_test_…``), and the key alone decides whether money moves.
+        Unset keys mean the gateway is not configured and pass.
+        """
+        mode = _PAYMENT_MODE_BY_ENVIRONMENT[self.ENVIRONMENT]
+        for name in ("TAP_SECRET_KEY", "PAYMOB_SECRET_KEY", "PAYMOB_PUBLIC_KEY"):
+            value = getattr(self, name)
+            if value is None:
+                continue
+            key = value.get_secret_value() if isinstance(value, SecretStr) else value
+            if mode not in key:
+                msg = f"{name} is not a {mode} key (ENVIRONMENT={self.ENVIRONMENT})"
+                raise ValueError(msg)
+        return self
 
 
 # pydantic-settings fills the required fields from .env / the process environment.

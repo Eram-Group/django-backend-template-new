@@ -22,11 +22,13 @@ from apps.common.http import OutboundStatusError
 from apps.common.http import OutboundTransportError
 from apps.notifications.constants import NotificationKind
 from apps.notifications.services import notification_send
+from apps.payments.constants import PENDING_EXPIRY
 from apps.payments.constants import TERMINAL_STATUSES
 from apps.payments.constants import Currency
 from apps.payments.constants import PaymentKind
 from apps.payments.constants import PaymentStatus
 from apps.payments.constants import WalletTransactionKind
+from apps.payments.exceptions import PaymentEventMismatchError
 from apps.payments.exceptions import PaymentGatewayUnavailableError
 from apps.payments.exceptions import PaymentNotFoundError
 from apps.payments.exceptions import PaymentNotRefundableError
@@ -41,9 +43,11 @@ from apps.payments.gateways.base import CheckoutSession
 from apps.payments.gateways.base import GatewayResponseError
 from apps.payments.gateways.base import SavedCardRef
 from apps.payments.gateways.base import WebhookEvent
+from apps.payments.gateways.base import to_minor_units
 from apps.payments.models import Payment
 from apps.payments.models import SavedCard
 from apps.payments.models import Wallet
+from apps.payments.selectors.saved_cards import saved_card_gateway_customer_id
 from apps.payments.selectors.wallets import wallet_get
 from apps.payments.services.saved_cards import saved_card_store
 from apps.payments.services.wallets import wallet_apply
@@ -51,6 +55,11 @@ from apps.payments.tasks.refunds import process_payment_refund
 from apps.users.models import User
 
 logger = structlog.get_logger(__name__)
+
+#: Informational event statuses that mean the PROVIDER moved money on a row
+#: we still hold as PAID (a refund/void issued from the gateway dashboard) -
+#: never auto-applied to the wallet; a human reconciles.
+_PROVIDER_REVERSALS = frozenset({"refund", "void", "refunded", "voided"})
 
 
 def _card_ref(card: SavedCard) -> SavedCardRef:
@@ -156,6 +165,13 @@ def payment_initiate(
         ),
         redirect_url=f"{settings.FRONTEND_BASE_URL}/payments/{payment.pk}/return",
         saved_card=_card_ref(saved_card) if saved_card is not None else None,
+        # A new card is filed under the customer the user's other cards use,
+        # so re-entering a card yields the same provider card, not a copy.
+        customer_id=(
+            saved_card_gateway_customer_id(user=user, gateway=gateway.name)
+            if saved_card is None
+            else ""
+        ),
     )
     try:
         session = gateway.create_checkout(request=request)
@@ -252,7 +268,13 @@ def payment_charge_saved(
 
 
 def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Payment:
-    """Apply one gateway event (webhook or verify) - idempotent on replays."""
+    """Apply one gateway event (webhook or verify) - idempotent on replays.
+
+    A verified event whose signed amount/currency disagree with the row is
+    never applied (``PaymentEventMismatchError``); an informational event
+    (``is_pending`` - still in flight, or a refund/void/capture child) is
+    recorded on the row but never transitions it.
+    """
     with transaction.atomic():
         try:
             payment = Payment.objects.select_for_update().get(
@@ -260,8 +282,10 @@ def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Pa
             )
         except (Payment.DoesNotExist, ValueError, ValidationError) as exc:
             raise PaymentNotFoundError(str(_("Payment not found."))) from exc
+        _check_event_matches(payment=payment, event=event)
         payment.gateway_callback = event.raw
-        payment.gateway_transaction_id = event.transaction_id
+        if event.transaction_id:  # "" = keep the settled id (child actions)
+            payment.gateway_transaction_id = event.transaction_id
         if event.saved_card is not None and payment.save_card_requested:
             # Consent-gated card persistence; the upsert is idempotent, and a
             # replay may be the FIRST carrier of the card payload when
@@ -269,7 +293,17 @@ def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Pa
             payment.saved_card = saved_card_store(
                 user=payment.user, gateway=gateway_name, data=event.saved_card
             )
-        if payment.status in TERMINAL_STATUSES:  # replay: record, never re-credit
+        if payment.status in TERMINAL_STATUSES or event.is_pending:
+            # Replay or informational event: record, never (re-)credit.
+            if event.status in _PROVIDER_REVERSALS and (
+                payment.status == PaymentStatus.PAID
+            ):
+                logger.error(
+                    "payment_provider_action_needs_reconciliation",
+                    payment_id=str(payment.pk),
+                    gateway=gateway_name,
+                    action=event.status,
+                )
             payment.save(
                 update_fields=[
                     "gateway_callback",
@@ -298,6 +332,35 @@ def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Pa
         if payment.status == PaymentStatus.PAID:
             _on_paid(payment)
         return payment
+
+
+def _check_event_matches(*, payment: Payment, event: WebhookEvent) -> None:
+    """Cross-check the gateway's signed amount/currency against the row.
+
+    The signature proves the gateway sent it; this proves it is about THIS
+    payment at THIS price. Gateways that do not sign the amount leave
+    ``amount_minor`` unset and skip the check.
+    """
+    if event.amount_minor is None:
+        return
+    expected = to_minor_units(amount=payment.amount, currency=payment.currency)
+    if event.amount_minor == expected and (
+        not event.currency or event.currency == payment.currency
+    ):
+        return
+    logger.error(
+        "payment_event_amount_mismatch",
+        payment_id=str(payment.pk),
+        gateway=payment.gateway,
+        transaction_id=event.transaction_id,
+        expected_minor=expected,
+        expected_currency=payment.currency,
+        event_minor=event.amount_minor,
+        event_currency=event.currency,
+    )
+    raise PaymentEventMismatchError(
+        str(_("The gateway event does not match this payment."))
+    )
 
 
 def _on_paid(payment: Payment) -> None:
@@ -356,8 +419,36 @@ def payment_verify(*, payment: Payment) -> Payment:
         status=status.status,
         raw=status.raw,
         saved_card=status.saved_card,
+        amount_minor=status.amount_minor,
+        currency=status.currency,
     )
     return payment_apply_gateway_event(gateway_name=payment.gateway, event=event)
+
+
+def payment_expire(*, payment: Payment) -> Payment:
+    """Abandoned checkout: a PENDING row older than ``PENDING_EXPIRY`` becomes
+    FAILED. Called by the reconcile sweep after ``payment_verify`` found
+    nothing paid, so the sweep's oldest-first window is not clogged forever
+    by checkouts nobody completed. FAILED is non-terminal - a late webhook
+    still heals a wrongly-expired row.
+    """
+    with transaction.atomic():
+        locked = Payment.objects.select_for_update().get(pk=payment.pk)
+        if (
+            locked.status != PaymentStatus.PENDING
+            or locked.created_at > timezone.now() - PENDING_EXPIRY
+        ):
+            return locked
+        locked.status = PaymentStatus.FAILED
+        locked.full_clean()
+        locked.save(update_fields=["status", "updated_at"])
+        logger.info(
+            "payment_expired",
+            payment_id=str(locked.pk),
+            gateway=locked.gateway,
+            created_at=locked.created_at.isoformat(),
+        )
+        return locked
 
 
 def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
@@ -452,7 +543,7 @@ def payment_refund_execute(
         )
     except (OutboundError, GatewayResponseError) as exc:
         if _refund_outcome_unknown(exc):
-            logger.error(
+            logger.exception(
                 "payment_refund_needs_reconciliation",
                 payment_id=str(locked.pk),
                 gateway=locked.gateway,

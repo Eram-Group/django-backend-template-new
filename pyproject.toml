@@ -15,7 +15,7 @@ classifiers = [
 dependencies = [
   "argon2-cffi>=25.1",
   "dj-database-url>=3.1.2",
-  "django>=6.0,<6.1",
+  "django>=6.1,<6.2",
   "django-allauth[headless-spec,socialaccount]>=65.18",
   "django-anymail[amazon-ses]>=15.0",
   "django-axes>=8.3.1",
@@ -96,9 +96,38 @@ lint.select = [
   "LOG", # flake8-logging
   "G",   # flake8-logging-format
   "RET", # flake8-return
+  # Ruff 0.16 grew its default rule set from 59 to 413. Ruff's own advice is to
+  # keep `select` explicit and add a category at a time rather than "ALL", so
+  # these are the parts of that new baseline adopted here - each one already
+  # clean at adoption, so the gate stayed green.
+  "PLE",   # pylint errors - genuine runtime bugs, not style
+  "ASYNC", # flake8-async - blocking calls inside async defs (readyz, ninja)
+  "BLE",   # flake8-blind-except - `except Exception` past the error taxonomy
+  "INT",   # flake8-gettext - f-string/format inside _() silently breaks extraction
+  "ISC",   # flake8-implicit-str-concat
+  "FLY",   # flynt - static str.join -> f-string
+  "N",     # pep8-naming
+  "INP",   # flake8-no-pep420 - a package missing __init__.py breaks Django's
+           # app/migration discovery silently
+  "T10",   # flake8-debugger - no pdb/ipdb import survives a commit (ipdb is a
+           # dev dependency on purpose; it must never be imported in tree)
+  "EXE",   # flake8-executable - shebang and exec-bit agree
+  "RSE",   # flake8-raise - no empty parens on a bare raise
+  "SLOT",  # flake8-slots - __slots__ on str/tuple subclasses
+  "ICN",   # flake8-import-conventions
+  "YTT",   # flake8-2020 - sys.version comparisons that break on 3.10+
+  "TRY",   # tryceratops - TRY400 (.error where .exception belongs) already
+           # caught a real refund-logging bug here
+  "PLC",   # pylint conventions
+  "PLW",   # pylint warnings
 ]
 lint.ignore = [
   "RUF012", # ClassVar annotations conflict with Django's class-attr idiom (Meta, admin, etc.)
+  "TRY003", # ApplicationError subclasses carry their message inline; the one
+            # error envelope is assembled in config/api/exception_handlers.py
+  "PLC0415", # function-level imports are deliberate: the refund-task trampoline
+            # (recorded in the import-linter contract below), health.py importing
+            # without configured settings, seed_db's dev-only imports
 ]
 # Faker stays installed only because factory_boy imports it eagerly; our code
 # must use mimesis via apps/common/tests/fake.py instead.
@@ -128,7 +157,7 @@ overrides = [
   # Django migrations should not produce any errors:
   { module = "*.migrations.*", ignore_errors = true },
   # Third-party packages without type stubs / py.typed:
-  { module = [ "allauth.*", "health_check.*", "django_ratelimit.*", "unfold.*", "import_export.*", "phonenumber_field.*", "firebase_admin.*" ], ignore_missing_imports = true },
+  { module = [ "allauth.*", "axes.*", "health_check.*", "django_ratelimit.*", "unfold.*", "import_export.*", "phonenumber_field.*", "firebase_admin.*" ], ignore_missing_imports = true },
   # The framework wraps unfold/import-export (untyped) once; per-entity
   # admins subclass OUR typed classes and need no exemption:
   { module = "apps.common.admin.*", disallow_subclassing_any = false },

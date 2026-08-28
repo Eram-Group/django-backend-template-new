@@ -1,6 +1,6 @@
 """Outbound SMS - ``sms_send_many`` resolves ``settings.SMS_BACKEND`` per call.
 
-The settings-string switch mirrors EMAIL_BACKEND: Console in base/local,
+The settings-string switch mirrors Django's mail backend: Console in base/local,
 RoutingSmsBackend (OurSMS/SMSMisr by phone country) when deployed, Locmem in
 tests (``backends.outbox`` is the ``mail.outbox`` analogue). Per-call
 resolution keeps ``override_settings`` authoritative in tests.

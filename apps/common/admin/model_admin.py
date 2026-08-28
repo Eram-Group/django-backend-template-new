@@ -1,13 +1,18 @@
 from collections.abc import Sequence
 from typing import Any
 from typing import ClassVar
+from typing import cast
 
+from django.contrib.admin import ModelAdmin as DjangoModelAdmin
 from django.contrib.admin import ShowFacets
+from django.contrib.admin.options import Action
+from django.contrib.admin.options import ActionLocation
 from django.contrib.admin.sites import AdminSite
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models import Model
 from django.forms import ModelForm
 from django.http import HttpRequest
+from django.utils.translation import gettext_lazy as _
 from import_export.admin import ExportActionModelAdmin
 from unfold.admin import ModelAdmin
 from unfold.contrib.import_export.forms import SelectableFieldsExportForm
@@ -48,7 +53,6 @@ class BaseModelAdmin(FieldRuleLookups, ModelAdmin):
 
     # unfold/django quality-of-life defaults
     empty_value_display = "-"
-    compressed_fields = True
     warn_unsaved_form = True
     change_form_show_cancel_button = True
     show_facets = ShowFacets.ALWAYS
@@ -176,6 +180,32 @@ class BaseModelAdmin(FieldRuleLookups, ModelAdmin):
             ]
         return inlines
 
+    # Django 6.1 threads an `action_location` through the admin action hooks so
+    # actions can be offered on the change FORM as well as the change list, and
+    # warns about overrides still on the old signature. unfold 0.104.1's
+    # get_action_choices() is one such override - it exists only to relabel the
+    # blank choice - so we restate that one behaviour here on the modern
+    # signature and call Django's implementation directly, deliberately stepping
+    # over unfold's. Without this, Django takes its deprecation path, which
+    # silently DROPS every change-form action. Delete once unfold updates.
+    def get_action_choices(
+        self,
+        request: HttpRequest,
+        default_choices: list[tuple[str, str]] | None = None,
+        action_location: ActionLocation = ActionLocation.CHANGE_LIST,
+    ) -> list[tuple[str, str]]:
+        if default_choices is None:
+            # django-stubs types these labels as plain `str`; Django resolves
+            # lazy proxies at render time, which is what the Arabic-first rule
+            # needs - cast rather than evaluate the translation eagerly.
+            default_choices = [("", cast("str", _("Select action")))]
+        return DjangoModelAdmin.get_action_choices(
+            self,
+            request,
+            default_choices=default_choices,
+            action_location=action_location,
+        )
+
 
 class ExportableModelAdmin(BaseModelAdmin, ExportActionModelAdmin):
     """BaseModelAdmin + import-export's export action, unfold-styled.
@@ -187,3 +217,33 @@ class ExportableModelAdmin(BaseModelAdmin, ExportActionModelAdmin):
 
     abstract_admin = True
     export_form_class = SelectableFieldsExportForm
+
+    # Same Django 6.1 story as BaseModelAdmin.get_action_choices above:
+    # django-import-export 4.4.1's ExportActionMixin.get_actions() still has
+    # the pre-6.1 signature and registers its action as a bare 3-tuple. Restate
+    # it here on the modern signature, as an Action object, and pin it to the
+    # change list (exporting is a bulk operation - it has no meaning on a
+    # single-object form). Delete once django-import-export updates.
+    def get_actions(
+        self,
+        request: HttpRequest,
+        action_location: ActionLocation = ActionLocation.CHANGE_LIST,
+    ) -> dict[str, Action | None]:
+        actions = DjangoModelAdmin.get_actions(
+            self, request, action_location=action_location
+        )
+        if action_location is ActionLocation.CHANGE_LIST and self.has_export_permission(
+            request
+        ):
+            # Lazy on purpose (see get_action_choices above); Django applies the
+            # %(verbose_name_plural)s interpolation per request, in the active
+            # locale.
+            description = cast("str", _("Export selected %(verbose_name_plural)s"))
+            actions["export_admin_action"] = Action(
+                func=type(self).export_admin_action,
+                name="export_admin_action",
+                description=description,
+                plural_description=description,
+                locations=[ActionLocation.CHANGE_LIST],
+            )
+        return actions

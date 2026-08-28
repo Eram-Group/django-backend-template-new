@@ -1,9 +1,10 @@
-"""Gateway resolution - the EMAIL_BACKEND pattern, keyed by currency.
+"""Gateway resolution - the mail-backend pattern, keyed by currency.
 
 ``settings.PAYMENT_GATEWAYS`` maps currency -> dotted gateway class; base
-and test settings point every currency at the FakeGateway, production.py
-swaps in Tap (SAR) / Paymob (EGP) when deployed. Adding a gateway = one
-module implementing PaymentGateway + one mapping entry.
+settings map Tap (SAR) / Paymob (EGP) in every environment (the ``.env``
+keys pick test vs live mode), and test.py pins every currency to the
+FakeGateway so suites never do provider HTTP. Adding a gateway = one module
+implementing PaymentGateway + one mapping entry.
 """
 
 from django.conf import settings

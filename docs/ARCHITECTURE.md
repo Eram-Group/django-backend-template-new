@@ -21,9 +21,9 @@ one envelope (below).
 
 ## App layout and layering
 
-Every domain app (`apps/users` is the reference, `apps/payments` the
-built-out example, `apps/example` the copy-me template) is a set of
-packages, one module per entity inside each:
+Every domain app (`apps/users` is the reference, `apps/notifications` and
+`apps/payments` the built-out examples, `apps/example` the copy-me template)
+is a set of packages, one module per entity inside each:
 
 ```
 apps/<app>/
@@ -66,7 +66,7 @@ apis | admin | management  →  services  →  tasks  →  selectors  →  model
 - `created_at` (indexed) / `updated_at`.
 
 `User` is email-login only: no username, single `name` field, `language`
-(ar/en) that drives every user-facing email.
+(ar/en) that drives every user-facing email/notification.
 
 ## Error contract
 
@@ -150,7 +150,7 @@ Conventions (see `apps/users/tasks/emails.py`):
   `prune_db_task_results --min-age-days 14`, plus app commands modeled on
   `sample_scheduled_job` (thin wrappers over services, safe to re-run).
 
-## Outbound clients (HTTP kernel, payments)
+## Outbound clients (HTTP kernel, SMS, push, payments)
 
 Every call to an external service goes through **one kernel**,
 `apps/common/http.py::request_json` — explicit `httpx.Timeout(10, connect=5)`,
@@ -161,25 +161,46 @@ truncated). Retry policies are chosen per call semantics:
 
 | Policy | Retries | Use for |
 |---|---|---|
-| `transient` | transport errors + 429/5xx | idempotent-enough calls: status GETs (duplicate beats dropped) |
+| `transient` | transport errors + 429/5xx | idempotent-enough calls: SMS sends, status GETs (duplicate beats dropped) |
 | `connect-only` | only errors raised before the request hit the wire | non-idempotent POSTs: payment charge/refund creation |
 | `none` | nothing | everything else |
 
 A 2xx with an error body is the **caller's** job: each provider module owns
-an allowlist success predicate — unknown shapes fail loudly, never pass
-silently.
+an allowlist success predicate (OurSMS accepted/rejected counts, SMSMisr
+`code == "1901"`) — unknown shapes fail loudly, never pass silently.
 
-**Transport selection = the `EMAIL_BACKEND` pattern** (settings string,
-resolved per call): `PAYMENT_GATEWAYS` (currency → gateway class — the same
-Tap SAR / Paymob EGP mapping in every environment; the `.env` keys pick test
-vs live mode, and local webhooks arrive through a tunnel such as ngrok with
-`BACKEND_BASE_URL` pointing at it). `test.py` pins `FakeGateway` for every
-currency, so tests can never touch provider HTTP even with real creds in
-`.env`. Provider clients live in a leaf package (`apps/payments/gateways/`)
-— unconstrained by the layer contract, called from services/tasks.
+**Transport selection = the mail-backend pattern** (settings string,
+resolved per call — what Django itself now spells `MAILERS`): `SMS_BACKEND` / `PUSH_BACKEND` (base + local = console
+backends with structlog lines; `production.py` swaps in the real transports
+only when `_DEPLOYED`) and `PAYMENT_GATEWAYS` (currency → gateway class —
+the same Tap SAR / Paymob EGP mapping in every environment; the `.env` keys
+pick test vs live mode, and local webhooks arrive through a tunnel such as
+ngrok with `BACKEND_BASE_URL` pointing at it). `test.py` = locmem outboxes
+(`apps/notifications/clients/*/backends.py::outbox` — the `mail.outbox`
+analogue) plus `FakeGateway` for every currency, so tests can never touch
+provider HTTP even with real creds in `.env`. Provider clients live in leaf packages
+(`apps/notifications/clients/`, `apps/payments/gateways/`) — unconstrained
+by the layer contract, called from services/tasks.
 
 Per-area notes:
 
+- **SMS** (OurSMS SA / SMSMisr EG): `RoutingSmsBackend` picks the provider
+  from the number's country (`PROVIDER_REGISTRY`); SMSMisr's `language` is
+  chosen per message body (Arabic codepoints → "2") and its live/test
+  `environment` comes from `ENVIRONMENT`. Adding a provider = one module
+  implementing `SmsBackend` + one registry entry.
+- **Push** (FCM via firebase-admin, HTTP v1): NOT fcm-django (hard DRF
+  dependency). Own `Device` model + `messaging.send_each` in 500-token
+  chunks; tokens Firebase reports unregistered come back in
+  `PushReport.invalid_tokens` and the delivery task deletes those rows.
+  Firebase init is lazy from `FIREBASE_CREDENTIALS_B64` (base64
+  service-account JSON). firebase-admin transports its own HTTP.
+- **Notifications**: per-recipient inbox rows store `(kind, context)`;
+  copy lives in the typed catalog (`apps/notifications/catalog.py`,
+  gettext) and renders at send/read time in the viewer's locale — never
+  stored pre-rendered. Delivery = `on_commit` tasks with `*_sent_at`
+  idempotency markers; a kind's channels are declared on its catalog entry
+  (`test_catalog` keeps `NotificationKind` ↔ `CATALOG` in lockstep).
 - **Payments** (Tap SAR / Paymob EGP): gateway Protocol + frozen DTOs in
   `apps/payments/gateways/`. Money is Decimal end-to-end; the wire uses
   integer minor units (`to_minor_units`). Charge creation plants
@@ -189,17 +210,37 @@ Per-area notes:
   `select_for_update`, never overwriting terminal statuses (replays ack
   with 200 and cannot re-credit). Webhooks REALLY verify: Tap `hashstring`
   HMAC-SHA256, Paymob `hmac` HMAC-SHA512 over its 20 documented fields,
-  constant-time compares. The webhook route
-  (`/api/v1/payments/webhooks/{gateway}`) is the API's one deliberate
-  `auth=None` surface — signature IS the authentication. Wallet balance
-  moves only through `wallet_apply` (Wallet row lock + append-only
-  `WalletTransaction` ledger with `balance_after`). Local flow:
-  `manage.py simulate_payment_webhook <pk> [--fail] [--save-card]` drives
-  the same transition service (Mailpit's role, for payments).
+  constant-time compares. After the signature, the service cross-checks
+  the signed `amount_minor`/`currency` against the row
+  (`PaymentEventMismatchError`, nothing written on a mismatch). Only two
+  event shapes ever transition a row — paid and declined; everything else
+  is `is_pending` (still in flight on the bank's OTP page, an
+  authorization we never capture, or a refund/void/capture CHILD
+  transaction on the same order) and is recorded without touching status
+  or the settled `gateway_transaction_id`. A provider-side reversal on a
+  PAID row is logged for manual reconciliation, never auto-debited. The
+  webhook route (`/api/v1/payments/webhooks/{gateway}`) is the API's one
+  deliberate `auth=None` surface — signature IS the authentication.
+  Paymob publishes no webhook retry policy, so `payment_verify` (Paymob:
+  `transaction_inquiry`, authenticated with an `auth_token` minted from
+  `PAYMOB_API_KEY` and cached 50 min; an order with no transaction is
+  "still pending", not an outage) and the `reconcile_payments` sweep are
+  the recovery path; the sweep also expires PENDING checkouts older than
+  `constants.PENDING_EXPIRY` (2 h, above Paymob's 1 h intention
+  `expiration`) to FAILED so abandoned rows stop clogging its oldest-first
+  window — FAILED is non-terminal, so a late webhook still heals one.
+  Wallet balance moves only through `wallet_apply` (Wallet row lock +
+  append-only `WalletTransaction` ledger with `balance_after`). Local
+  flow: `manage.py simulate_payment_webhook <pk> [--fail] [--save-card]`
+  drives the same transition service (Mailpit's role, for payments).
 - **Saved cards** (built 2026-07-18): `SavedCard` stores only opaque
   provider references (Tap card/customer/agreement ids, Paymob token) —
-  PAN and expiry never touch our servers. Saving is always-on, not
-  client-optional: every new-card checkout requests vaulting
+  PAN and expiry never touch our servers. One row per physical card: Tap
+  checkouts reuse the customer id the user's cards already live under
+  (`saved_card_gateway_customer_id`), and `saved_card_store` dedupes on
+  Tap's card `fingerprint` (fetched from the Card API when the webhook
+  omits it), repointing the row and detaching the superseded card.
+  Saving is always-on, not client-optional: every new-card checkout requests vaulting
   (`Payment.save_card_requested`, which still gates persisting the card
   payload Tap echoes on webhooks — one-click rows never re-vault); on
   Paymob the hosted checkout's Save-Card checkbox governs, arriving as a
@@ -226,9 +267,10 @@ Per-area notes:
   history has the working implementation if it is ever wanted back.)
 
 **Cross-app decisions on record** (independence contract `ignore_imports`
-in `pyproject.toml`): payments → users (a payment belongs to a User — payer
-and wallet owner). One-way; users' runtime models/selectors never import
-payments.
+in `pyproject.toml`): notifications → users (rows belong to a User;
+delivery reads `user.phone`/`user.language`) and payments → users +
+payments → notifications (paid events call `notification_send`). Both are
+one-way; nothing imports payments.
 
 ## i18n and translated content
 
@@ -253,7 +295,7 @@ payments.
   fixtures/factories must set the suffixed fields. `FieldPermissions` rules
   on a base field automatically govern its `_ar`/`_en` shadows — the admin
   framework expands them (`expand_translation_shadows`).
-- **Emails** render in `user.language`, not a request header.
+- **Emails/notifications** render in `user.language`, not a request header.
 - `.po` catalogs under `locale/`; `makemessages` / `compilemessages`
   (compile happens at image build once catalogs exist).
 
@@ -325,7 +367,7 @@ signals, services, strict mypy).
 
 | Need | Path | Blueprint (Gawdat_Django_Template/) |
 |---|---|---|
-| Audit history (who changed what) | django-simple-history on the models that need it | `apps/payment/models/` (registration), `apps/users/admin/*/admin.py` (SimpleHistoryAdmin MRO) |
+| Audit history (who changed what) | django-simple-history on the models that need it | `apps/payments/models/` (registration), `apps/users/admin/*/admin.py` (SimpleHistoryAdmin MRO) |
 | Recoverable delete (user-facing rows kept for history, e.g. addresses referenced by orders) | `deleted_at` pattern or django-softdelete — a DIFFERENT need than audit history; decide the lib when first needed | `apps/location/models/address.py` |
 | Direct-to-S3 uploads | presigned-URL endpoint in a service; client uploads, API stores the key | — |
 | Embedded mini-schemas | add the `Ref` tier per entity alongside Summary/Detail | — |

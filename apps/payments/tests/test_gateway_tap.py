@@ -33,7 +33,23 @@ def _tap_creds(settings: Any) -> None:
     settings.TAP_SECRET_KEY = SecretStr(SECRET)
 
 
-def _request() -> CheckoutRequest:
+def _request(**overrides: Any) -> CheckoutRequest:
+    fields: dict[str, Any] = {
+        "reference": "ref-123",
+        "amount": Decimal("50.00"),
+        "currency": "SAR",
+        "description": "Top-up",
+        "customer_email": "omar@example.com",
+        "customer_name": "Omar",
+        "customer_phone": "+966501234567",
+        "webhook_url": "https://backend.example.com/api/v1/payments/webhooks/tap",
+        "redirect_url": "https://app.example.com/payments/x/return",
+    }
+    fields.update(overrides)
+    return CheckoutRequest(**fields)
+
+
+def _legacy_request() -> CheckoutRequest:
     return CheckoutRequest(
         reference="ref-123",
         amount=Decimal("50.00"),
@@ -146,6 +162,15 @@ def test_webhook_without_hashstring_is_rejected() -> None:
     with pytest.raises(WebhookVerificationError):
         TapGateway().parse_webhook(
             headers={}, params={}, body=json.dumps(_webhook_payload()).encode()
+        )
+
+
+@pytest.mark.parametrize("body", [b"[]", b"null", b'"text"', b"42"])
+def test_webhook_with_non_object_body_is_rejected(body: bytes) -> None:
+    """Valid JSON that is not an object is a clean rejection, not a 500."""
+    with pytest.raises(WebhookVerificationError):
+        TapGateway().parse_webhook(
+            headers={"hashstring": _sign(_webhook_payload())}, params={}, body=body
         )
 
 
@@ -325,6 +350,37 @@ def test_webhook_extracts_saved_card_payload() -> None:
     assert event.saved_card.last4 == "1019"
 
 
+def test_webhook_extracts_the_fingerprint_when_tap_sends_it() -> None:
+    payload = _webhook_payload()
+    payload["card"] = {"id": "card_abc123", "fingerprint": "fp/abc="}
+    payload["customer"] = {"id": "cus_xyz789"}
+
+    event = TapGateway().parse_webhook(
+        headers={"hashstring": _sign(payload)},
+        params={},
+        body=json.dumps(payload).encode(),
+    )
+
+    assert event.saved_card is not None
+    assert event.saved_card.fingerprint == "fp/abc="
+
+
+def test_webhook_without_a_fingerprint_leaves_it_blank() -> None:
+    """Tap's charge object documents no fingerprint - the service fetches it."""
+    payload = _webhook_payload()
+    payload["card"] = {"id": "card_abc123", "brand": "VISA", "last_four": "1019"}
+    payload["customer"] = {"id": "cus_xyz789"}
+
+    event = TapGateway().parse_webhook(
+        headers={"hashstring": _sign(payload)},
+        params={},
+        body=json.dumps(payload).encode(),
+    )
+
+    assert event.saved_card is not None
+    assert event.saved_card.fingerprint == ""
+
+
 def test_webhook_without_stored_card_has_no_saved_card_payload() -> None:
     """A transient card echo (no card_ id) must not look like a vaulted one."""
     payload = _webhook_payload()
@@ -337,6 +393,67 @@ def test_webhook_without_stored_card_has_no_saved_card_payload() -> None:
     )
 
     assert event.saved_card is None
+
+
+@respx.mock
+def test_create_checkout_reuses_the_customer_the_cards_live_under() -> None:
+    route = respx.post(CHARGES).mock(
+        return_value=httpx.Response(
+            200, json={"id": "chg_1", "transaction": {"url": "https://pay.tap/x"}}
+        )
+    )
+
+    TapGateway().create_checkout(request=_request(customer_id="cus_xyz789"))
+
+    body = json.loads(route.calls[0].request.content)
+    assert body["customer"]["id"] == "cus_xyz789"
+    assert body["customer"]["email"] == "omar@example.com"  # still sent
+
+
+@respx.mock
+def test_create_checkout_without_a_customer_lets_tap_create_one() -> None:
+    route = respx.post(CHARGES).mock(
+        return_value=httpx.Response(
+            200, json={"id": "chg_1", "transaction": {"url": "https://pay.tap/x"}}
+        )
+    )
+
+    TapGateway().create_checkout(request=_request())
+
+    body = json.loads(route.calls[0].request.content)
+    assert "id" not in body["customer"]
+
+
+CARD_URL = "https://api.tap.company/v2/card/cus_xyz789/card_abc123"
+
+
+@respx.mock
+def test_saved_card_fingerprint_reads_the_card_api() -> None:
+    route = respx.get(CARD_URL).mock(
+        return_value=httpx.Response(
+            200, json={"id": "card_abc123", "fingerprint": "fp/abc="}
+        )
+    )
+
+    assert TapGateway().saved_card_fingerprint(saved_card=CARD_REF) == "fp/abc="
+    assert route.call_count == 1
+
+
+@pytest.mark.parametrize("status_code", [404, 500])
+@respx.mock
+def test_saved_card_fingerprint_is_blank_when_the_lookup_fails(
+    status_code: int,
+) -> None:
+    respx.get(CARD_URL).mock(return_value=httpx.Response(status_code, json={}))
+
+    assert TapGateway().saved_card_fingerprint(saved_card=CARD_REF) == ""
+
+
+@respx.mock
+def test_saved_card_fingerprint_is_blank_when_tap_omits_it() -> None:
+    respx.get(CARD_URL).mock(return_value=httpx.Response(200, json={"id": "x"}))
+
+    assert TapGateway().saved_card_fingerprint(saved_card=CARD_REF) == ""
 
 
 @respx.mock

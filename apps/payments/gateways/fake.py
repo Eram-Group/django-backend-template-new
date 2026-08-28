@@ -48,6 +48,9 @@ class FakeGateway:
     def delete_saved_card(self, *, saved_card: SavedCardRef) -> bool:
         return True
 
+    def saved_card_fingerprint(self, *, saved_card: SavedCardRef) -> str:
+        return ""  # tests monkeypatch this to exercise the fetch path
+
     def _instant_capture(self, request: CheckoutRequest) -> CheckoutSession:
         return CheckoutSession(
             charge_id=f"fake_charge_{request.reference}",

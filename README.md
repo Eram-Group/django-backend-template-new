@@ -8,13 +8,14 @@ task queue), one Docker image deployed as two ECS services. Arabic-first
 (ar/en).
 
 How the code is organized: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md);
-how clients authenticate: [docs/AUTH_API.md](docs/AUTH_API.md). The
+how clients authenticate: [docs/AUTH_API.md](docs/AUTH_API.md); how the
+lint rule set is chosen: [docs/LINTING.md](docs/LINTING.md). The
 authoritative design document is [PLAN.md](PLAN.md); the remaining build
 sequence lives in [TODO.json](TODO.json).
 
 | | |
 |---|---|
-| Runtime | Python 3.14, Django 6.0, django-ninja (API at `/api/v1/`), allauth headless (`/_allauth/`) |
+| Runtime | Python 3.14, Django 6.1, django-ninja (API at `/api/v1/`), allauth headless (`/_allauth/`) |
 | Data | PostgreSQL 18 (db-generated uuidv7 pks, DatabaseCache, db sessions, django.tasks db backend) |
 | Storage / email | S3 + CloudFront via django-storages; SES via Anymail (Mailpit locally) |
 | Quality | ruff, mypy --strict, pytest (coverage gate ≥ 80%), import-linter contracts, pre-commit |
@@ -26,7 +27,7 @@ Prerequisites: [uv](https://docs.astral.sh/uv/), [just](https://just.systems),
 Docker (for Postgres + Mailpit).
 
 ```bash
-just bootstrap   # deps, .env, git hooks, postgres:18 + mailpit, migrate + cache table
+just bootstrap   # (alias: install, setup) deps, .env, git hooks, postgres:18 + mailpit, migrate + cache table
 just superuser   # admin@example.com / admin (from .env, idempotent)
 just seed        # ~300 realistic fake users (see "Seed data" below)
 just run         # dev server on http://localhost:8000
@@ -223,9 +224,17 @@ Migrations are append-only, enforced by `guard-migrations.yml`
   `SECRET_KEY_FALLBACKS`, drop it after sessions expire.
 - The admin lives at `ADMIN_URL` — randomize it outside local, and consider
   `SECURE_ADMIN_LOGIN=true` (email-code admin login).
-- Provider provisioning: **Tap** — dashboard secret key into
-  `TAP_SECRET_KEY`; register the webhook URL
-  `…/api/v1/payments/webhooks/tap`. **Paymob** — secret/public keys +
-  the dashboard HMAC secret + checkout integration ids
-  (`PAYMOB_INTEGRATION_IDS`, comma-separated); webhook
-  `…/api/v1/payments/webhooks/paymob`.
+- Provider provisioning: **FCM** — create a Firebase service account, then
+  `base64 -i service-account.json` into `FIREBASE_CREDENTIALS_B64`.
+  **Tap** — dashboard secret key into `TAP_SECRET_KEY`; register the webhook
+  URL `…/api/v1/payments/webhooks/tap`. **Paymob** — secret/public keys +
+  the dashboard HMAC secret + the dashboard API key (`PAYMOB_API_KEY`, the
+  transaction-inquiry fallback authenticates with it) + checkout
+  integration ids (`PAYMOB_INTEGRATION_IDS`, comma-separated); webhook
+  `…/api/v1/payments/webhooks/paymob` — set it BOTH as each integration
+  id's "Transaction processed callback" in the dashboard and leave it as the
+  per-intention `notification_url` the code sends: Paymob's regional docs
+  disagree on which one receives the card-token callback, and the
+  per-intention URL only applies to card integrations. **SMS** — OurSMS API key + sender
+  name; SMSMisr username/password/sender (live mode activates only when
+  `ENVIRONMENT=production`).

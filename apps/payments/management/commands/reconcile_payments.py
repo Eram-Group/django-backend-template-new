@@ -6,7 +6,9 @@ is the retry mechanism for both. Cron: EventBridge Scheduler -> ECS run-task.
 
 - PENDING rows older than ``--pending-max-age-minutes`` are re-checked
   against the provider via ``payment_verify`` (the same idempotent
-  transition a webhook drives).
+  transition a webhook drives); those still unpaid past
+  ``constants.PENDING_EXPIRY`` are expired to FAILED (``payment_expire``) so
+  abandoned checkouts stop occupying the oldest-first window.
 - REFUND_PENDING rows older than ``--refunding-max-age-minutes`` are
   re-driven through ``payment_refund_execute`` when the provider was
   provably never contacted (``refund_attempted_at`` unset). Rows already
@@ -44,7 +46,7 @@ class Command(BaseCommand):
     def handle(self, *args: Any, **options: Any) -> None:
         limit: int = options["limit"]
         now = timezone.now()
-        verified = self._sweep_pending(
+        verified, expired = self._sweep_pending(
             cutoff=now - timedelta(minutes=options["pending_max_age_minutes"]),
             limit=limit,
         )
@@ -55,18 +57,20 @@ class Command(BaseCommand):
         self.stdout.write(
             self.style.SUCCESS(
                 f"reconcile_payments OK: {verified} pending verified, "
-                f"{executed} refunds executed, {reconcile} need manual reconciliation"
+                f"{expired} expired, {executed} refunds executed, "
+                f"{reconcile} need manual reconciliation"
             )
         )
 
-    def _sweep_pending(self, *, cutoff: datetime, limit: int) -> int:
+    def _sweep_pending(self, *, cutoff: datetime, limit: int) -> tuple[int, int]:
         checked = 0
+        expired = 0
         stale = Payment.objects.filter(
             status=PaymentStatus.PENDING, updated_at__lt=cutoff
         ).order_by("updated_at")[:limit]
         for payment in stale:
             try:
-                services.payment_verify(payment=payment)
+                verified = services.payment_verify(payment=payment)
             except (PaymentError, OutboundError, GatewayResponseError) as exc:
                 # Provider down or gateway unconfigured: next run retries.
                 logger.warning(
@@ -74,9 +78,15 @@ class Command(BaseCommand):
                     payment_id=str(payment.pk),
                     error=type(exc).__name__,
                 )
-            else:
-                checked += 1
-        return checked
+                continue
+            checked += 1
+            if verified.status == PaymentStatus.PENDING:
+                # Nothing paid: expire it once it is older than any gateway's
+                # hosted-session lifetime (no-op while still fresh).
+                verified = services.payment_expire(payment=verified)
+                if verified.status == PaymentStatus.FAILED:
+                    expired += 1
+        return checked, expired
 
     def _sweep_refunding(self, *, cutoff: datetime, limit: int) -> tuple[int, int]:
         executed = 0
