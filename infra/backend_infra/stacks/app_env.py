@@ -20,6 +20,7 @@ from backend_infra.constructs import roles
 from backend_infra.constructs.containers import fargate_task
 from backend_infra.constructs.database import DedicatedDatabase
 from backend_infra.constructs.network import public_subnets
+from backend_infra.constructs.release_trigger import release_trigger
 from backend_infra.constructs.schedules import scheduled_jobs
 from backend_infra.constructs.storage import MediaStorage
 from backend_infra.constructs.web_express import ExpressWebService
@@ -153,6 +154,14 @@ class AppEnvStack(Stack):
             **common,  # type: ignore[arg-type]
         )
 
+        app_sg = ec2.SecurityGroup(
+            self,
+            "AppSg",
+            vpc=shared.vpc,
+            allow_all_outbound=True,
+            description="worker + one-off tasks",
+        )
+
         # --- Web (Express Mode) -------------------------------------------------
         self.web = ExpressWebService(
             self,
@@ -176,13 +185,6 @@ class AppEnvStack(Stack):
             )
 
         # --- Worker + scheduled jobs (egress-only SG) ----------------------------
-        app_sg = ec2.SecurityGroup(
-            self,
-            "AppSg",
-            vpc=shared.vpc,
-            allow_all_outbound=True,
-            description="worker + one-off tasks",
-        )
         self.worker = worker_service(
             self,
             "Worker",
@@ -193,6 +195,18 @@ class AppEnvStack(Stack):
             desired_count=1,
             spot=cfg.worker_spot,
             scale_to_zero_overnight=cfg.scale_to_zero_schedule,
+        )
+        # First deploy of an environment: migrate + cache table + static files
+        # BEFORE any service task answers /readyz or drains the queue.
+        release_trigger(
+            self,
+            "ReleaseTrigger",
+            cluster=shared.cluster,
+            task_definition=self.worker_task,
+            subnet_ids=subnet_ids,
+            security_group=app_sg,
+            image_tag=image_tag,
+            execute_before=[self.web, self.worker],
         )
         if cfg.worker_bulk_desired_count:
             bulk_task = fargate_task(
