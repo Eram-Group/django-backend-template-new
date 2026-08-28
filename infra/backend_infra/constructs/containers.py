@@ -55,7 +55,12 @@ def fargate_task(
         container_name=MAIN_CONTAINER,
         image=ecs.ContainerImage.from_ecr_repository(repository, image_tag),
         command=command,
-        environment=environment,
+        # manage.py defaults to the local settings module (debug toolbar);
+        # every deployed run mode must run the production module.
+        environment={
+            "DJANGO_SETTINGS_MODULE": "config.settings.production",
+            **environment,
+        },
         secrets=secrets,
         essential=True,
         stop_timeout=stop_timeout,

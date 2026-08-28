@@ -46,6 +46,7 @@ class AppEnvStack(Stack):
         super().__init__(scope, construct_id, **kwargs)
         cfg = env_config
         Tags.of(self).add("env", cfg.name)
+        self._retain = cfg.name == "production"
         subnet_ids = public_subnets(app)
 
         # --- Logs -------------------------------------------------------------
@@ -60,11 +61,13 @@ class AppEnvStack(Stack):
         ]
         if cfg.custom_domain:
             origins.append(f"https://{cfg.custom_domain}")
+        retain = self._retain
         storage = MediaStorage(
             self,
             "Storage",
             bucket_name=naming.bucket_name(app, cfg),
             allowed_origins=origins or ["*"],
+            retain=retain,
         )
 
         # --- Roles --------------------------------------------------------------
@@ -244,6 +247,9 @@ class AppEnvStack(Stack):
             construct_id,
             log_group_name=name,
             retention=logs.RetentionDays.ONE_MONTH,
-            # RETAIN so a rolled-back first deploy still leaves its logs behind.
-            removal_policy=RemovalPolicy.RETAIN,
+            # Production keeps its logs through stack deletion; dev/staging
+            # must be recreatable after a rolled-back deploy.
+            removal_policy=RemovalPolicy.RETAIN
+            if self._retain
+            else RemovalPolicy.DESTROY,
         )

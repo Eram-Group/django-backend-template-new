@@ -18,6 +18,7 @@ class MediaStorage(Construct):
         *,
         bucket_name: str,
         allowed_origins: list[str],
+        retain: bool,
     ) -> None:
         super().__init__(scope, construct_id)
         self.bucket = s3.Bucket(
@@ -27,7 +28,8 @@ class MediaStorage(Construct):
             block_public_access=s3.BlockPublicAccess.BLOCK_ALL,
             encryption=s3.BucketEncryption.S3_MANAGED,
             enforce_ssl=True,
-            removal_policy=RemovalPolicy.RETAIN,
+            removal_policy=RemovalPolicy.RETAIN if retain else RemovalPolicy.DESTROY,
+            auto_delete_objects=not retain,
             cors=[
                 s3.CorsRule(
                     allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.HEAD],

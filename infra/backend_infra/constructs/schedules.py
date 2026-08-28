@@ -1,6 +1,7 @@
 """EventBridge Scheduler -> ecs:RunTask, one schedule per management command."""
 
 from aws_cdk import Duration
+from aws_cdk import RemovalPolicy
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecs as ecs
 from aws_cdk import aws_scheduler as scheduler
@@ -28,7 +29,12 @@ def scheduled_jobs(
     task_definition: ecs.FargateTaskDefinition,
     security_group: ec2.ISecurityGroup,
 ) -> scheduler.ScheduleGroup:
-    group = scheduler.ScheduleGroup(scope, "Jobs", schedule_group_name=group_name)
+    group = scheduler.ScheduleGroup(
+        scope,
+        "Jobs",
+        schedule_group_name=group_name,
+        removal_policy=RemovalPolicy.DESTROY,
+    )
     for job in jobs:
         scheduler.Schedule(
             scope,
