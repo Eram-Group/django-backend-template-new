@@ -125,11 +125,11 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    then fill the values in the console (`SECRET_KEY`, `DATABASE_URL` for
    shared-DB envs, gateway keys…). Production gets its `DATABASE_URL` from
    CDK — leave that key out (`infra-secret-skeleton production` already does).
-6. Dev database on the shared instance: `just infra-run-task dev` is not
-   available before the first deploy, so connect once through ECS Exec on
-   any task in the VPC (or a temporary bastion) and run
-   `CREATE ROLE <app>_dev LOGIN PASSWORD '…'; CREATE DATABASE <app>_dev OWNER <app>_dev;`
-   using the master secret `shared/development-shared-pg18/master`.
+6. Dev database on the shared instance: `just infra-dev-db dev` runs a
+   one-off task inside the VPC that creates the `<app>_dev` role + database
+   and writes `DATABASE_URL` (and `SECRET_KEY`, if empty) straight into the
+   `dev/<app>` secret — no password ever leaves AWS. Re-running rotates the
+   password.
 7. GitHub repo variables: `AWS_ECR_REPOSITORY=eram/<app>`,
    `AWS_OIDC_ROLE_ARN` (Shared output `GithubDeployRoleArn`), `AWS_REGION`.
    Push to `main` → the `build` job pushes `:<sha>` to ECR (the deploy job
