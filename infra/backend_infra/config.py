@@ -28,7 +28,7 @@ class Subnet:
     availability_zone: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class AppConfig:
     """Account-level facts for one application."""
 
@@ -42,10 +42,14 @@ class AppConfig:
     hosted_zone_id: str | None = None
     hosted_zone_name: str | None = None
     ses_identity: str | None = None  # verified SES domain the task role may send from
-    # Account-global resources: exactly one stack in the account may own each.
-    create_github_oidc_provider: bool = True
-    create_shared_dev_db: bool = True
-    shared_dev_db_identifier: str = "development-shared-pg18"
+    # Account-level resources that exist ONCE per AWS account and are only
+    # referenced here - never created - so every app copied from this
+    # template shares them without fighting over ownership
+    # (docs/DEPLOYMENT.md "Account prerequisites").
+    github_oidc_provider_arn: str
+    db_security_group_id: str  # allows 5432 from the VPC; on every RDS instance
+    dev_db_host: str  # shared dev/staging PostgreSQL 18 instance
+    dev_db_master_credentials: str  # Secrets Manager name holding its master password
 
 
 @dataclass(frozen=True)
@@ -194,6 +198,12 @@ APP = AppConfig(
     hosted_zone_id="Z05566011AELTZM3HIA2I",
     hosted_zone_name="eramapps.com",
     ses_identity="eramapps.com",
+    github_oidc_provider_arn=(
+        "arn:aws:iam::975049989256:oidc-provider/token.actions.githubusercontent.com"
+    ),
+    db_security_group_id="sg-0ebcaa5f2e9f3d3fd",
+    dev_db_host="development-shared-pg18.czmo4ogc4d15.eu-central-1.rds.amazonaws.com",
+    dev_db_master_credentials="shared/development-shared-pg18/master",
 )
 
 

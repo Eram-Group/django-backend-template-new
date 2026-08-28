@@ -15,7 +15,7 @@ from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecs as ecs
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_logs as logs
-from aws_cdk import aws_rds as rds
+from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
 from backend_infra.naming import MAIN_CONTAINER
@@ -30,13 +30,12 @@ class DevDbBootstrapTask(Construct):
         construct_id: str,
         *,
         family: str,
-        instance: rds.DatabaseInstance,
+        host: str,
+        master_secret: secretsmanager.ISecret,  # JSON with a "password" key
         vpc: ec2.IVpc,
         log_group: logs.ILogGroup,
     ) -> None:
         super().__init__(scope, construct_id)
-        master = instance.secret
-        assert master is not None  # noqa: S101 - generated credentials
 
         execution_role = iam.Role(
             self,
@@ -101,14 +100,16 @@ class DevDbBootstrapTask(Construct):
                 ),
             ],
             environment={
-                "MASTER_HOST": instance.db_instance_endpoint_address,
+                "MASTER_HOST": host,
                 "MASTER_USER": "postgres",
                 "SCRIPT_B64": script_b64,
                 "APP_DB": "override-me",
                 "TARGET_SECRET": "override-me",
             },
             secrets={
-                "MASTER_PASSWORD": ecs.Secret.from_secrets_manager(master, "password")
+                "MASTER_PASSWORD": ecs.Secret.from_secrets_manager(
+                    master_secret, "password"
+                )
             },
             stop_timeout=Duration.seconds(30),
             logging=ecs.LogDrivers.aws_logs(

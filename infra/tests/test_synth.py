@@ -7,6 +7,7 @@ from backend_infra.config import APP
 from backend_infra.config import ENVIRONMENTS
 from backend_infra.config import SCHEDULES
 from backend_infra.stacks.app_env import AppEnvStack
+from backend_infra.stacks.database import DatabaseStack
 from backend_infra.stacks.shared import SharedStack
 
 
@@ -17,12 +18,19 @@ def templates() -> dict[str, assertions.Template]:
     shared = SharedStack(app, "Shared", app=APP, env=env)
     stacks = {"Shared": shared}
     for name, cfg in ENVIRONMENTS.items():
+        database = None
+        if cfg.database == "dedicated":
+            stacks[f"Db-{name}"] = DatabaseStack(
+                app, f"Db-{name}", app=APP, env_config=cfg, env=env
+            )
+            database = stacks[f"Db-{name}"].database  # type: ignore[attr-defined]
         stacks[f"App-{name}"] = AppEnvStack(
             app,
             f"App-{name}",
             app=APP,
             env_config=cfg,
             shared=shared,
+            database=database,
             image_tag="synth",
             sentry_release="synth",
             env=env,
@@ -44,12 +52,19 @@ def test_shared_owns_cluster_repo_and_deploy_role(
         "AWS::IAM::Role", {"RoleName": f"{APP.name}-github-deploy"}
     )
     t.has_resource_properties(
-        "AWS::RDS::DBInstance", {"Engine": "postgres", "EngineVersion": "18.4"}
+        "AWS::ECS::TaskDefinition", {"Family": f"{APP.name}-dev-db-bootstrap"}
     )
-    t.has_resource_properties(
-        "AWS::ECS::TaskDefinition",
-        {"Family": f"{APP.shared_dev_db_identifier}-bootstrap"},
-    )
+
+
+def test_account_level_resources_are_referenced_not_created(
+    templates: dict[str, assertions.Template],
+) -> None:
+    """Ten apps copy this template: none may own the OIDC provider or dev DB."""
+    for t in templates.values():
+        assert not t.find_resources("Custom::AWSCDKOpenIdConnectProvider")
+        assert not t.find_resources("AWS::IAM::OIDCProvider")
+    templates["Shared"].resource_count_is("AWS::RDS::DBInstance", 0)
+    templates["Shared"].resource_count_is("AWS::EC2::SecurityGroup", 1)  # bootstrap
 
 
 @pytest.mark.parametrize("env_name", list(ENVIRONMENTS))
@@ -134,23 +149,30 @@ def test_schedules_cover_every_job(
         assert '"name":"Main"' in r["Properties"]["Target"]["Input"]
 
 
-def test_production_has_dedicated_protected_database(
+def test_production_database_is_its_own_protected_stack(
     templates: dict[str, assertions.Template],
 ) -> None:
-    t = templates["App-production"]
-    t.has_resource_properties(
+    db = templates["Db-production"]
+    db.has_resource_properties(
         "AWS::RDS::DBInstance",
         {
+            "Engine": "postgres",
+            "EngineVersion": "18.4",
             "DeletionProtection": True,
             "BackupRetentionPeriod": 7,
             "DBInstanceClass": "db.t4g.micro",
+            "VPCSecurityGroups": [APP.db_security_group_id],
         },
     )
-    t.resource_count_is("AWS::CertificateManager::Certificate", 1)
-    t.resource_count_is("AWS::Route53::RecordSet", 1)
+    db.has_resource("AWS::RDS::DBInstance", {"DeletionPolicy": "Retain"})
+    app = templates["App-production"]
+    app.resource_count_is("AWS::RDS::DBInstance", 0)
+    app.resource_count_is("AWS::CertificateManager::Certificate", 1)
+    app.resource_count_is("AWS::Route53::RecordSet", 1)
 
 
 def test_dev_uses_shared_database(templates: dict[str, assertions.Template]) -> None:
+    assert "Db-dev" not in templates
     templates["App-dev"].resource_count_is("AWS::RDS::DBInstance", 0)
 
 

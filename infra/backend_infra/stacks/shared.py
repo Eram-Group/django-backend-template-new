@@ -1,4 +1,10 @@
-"""Account-level resources shared by every environment of the application."""
+"""Per-application resources shared by every environment: ECR, cluster, roles.
+
+Account-level resources (GitHub OIDC provider, shared dev RDS, DB security
+group) are NOT here - they exist once per account and ``AppConfig`` only
+references them, so the many apps copied from this template never compete
+for their ownership.
+"""
 
 from aws_cdk import CfnOutput
 from aws_cdk import Duration
@@ -7,19 +13,15 @@ from aws_cdk import Stack
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_ecs as ecs
-from aws_cdk import aws_iam as iam
 from aws_cdk import aws_logs as logs
-from aws_cdk import aws_rds as rds
+from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
 from backend_infra.config import AppConfig
-from backend_infra.constructs import database
 from backend_infra.constructs import roles
 from backend_infra.constructs.dev_db_bootstrap import DevDbBootstrapTask
 from backend_infra.constructs.network import default_vpc
 from backend_infra.constructs.network import public_subnets
-
-GITHUB_OIDC_URL = "https://token.actions.githubusercontent.com"
 
 
 class SharedStack(Stack):
@@ -61,25 +63,11 @@ class SharedStack(Stack):
         self.infrastructure_role = roles.express_infrastructure_role(
             self, "ExpressInfrastructureRole"
         )
-
-        if app.create_github_oidc_provider:
-            provider = iam.OpenIdConnectProvider(
-                self,
-                "GithubOidc",
-                url=GITHUB_OIDC_URL,
-                client_ids=["sts.amazonaws.com"],
-            )
-            provider_arn = provider.open_id_connect_provider_arn
-        else:
-            provider_arn = (
-                f"arn:aws:iam::{self.account}:oidc-provider/"
-                "token.actions.githubusercontent.com"
-            )
         self.deploy_role = roles.github_deploy_role(
             self,
             "GithubDeployRole",
             role_name=f"{app.name}-github-deploy",
-            provider_arn=provider_arn,
+            provider_arn=app.github_oidc_provider_arn,
             github_repo=app.github_repo,
             ecr_repository_arn=self.repository.repository_arn,
             passable_role_arns=[
@@ -89,51 +77,36 @@ class SharedStack(Stack):
             ],
         )
 
-        self.db_security_group = database.database_security_group(
-            self, "DbSg", self.vpc, app.vpc_cidr
+        # One-off task that creates this app's dev/staging databases on the
+        # shared instance (per app: its family carries the app name).
+        bootstrap_family = f"{app.name}-dev-db-bootstrap"
+        bootstrap = DevDbBootstrapTask(
+            self,
+            "DevDbBootstrap",
+            family=bootstrap_family,
+            host=app.dev_db_host,
+            master_secret=secretsmanager.Secret.from_secret_name_v2(
+                self, "DevDbMasterSecret", app.dev_db_master_credentials
+            ),
+            vpc=self.vpc,
+            log_group=logs.LogGroup(
+                self,
+                "DevDbBootstrapLogs",
+                log_group_name=f"/aws/ecs/{bootstrap_family}",
+                retention=logs.RetentionDays.ONE_MONTH,
+                removal_policy=RemovalPolicy.DESTROY,
+            ),
         )
-        self.shared_dev_db: rds.DatabaseInstance | None = None
-        if app.create_shared_dev_db:
-            self.shared_dev_db = database.shared_dev_instance(
-                self,
-                identifier=app.shared_dev_db_identifier,
-                vpc=self.vpc,
-                security_group=self.db_security_group,
-            )
-            CfnOutput(
-                self,
-                "SharedDevDbEndpoint",
-                value=self.shared_dev_db.db_instance_endpoint_address,
-            )
-            bootstrap = DevDbBootstrapTask(
-                self,
-                "DevDbBootstrap",
-                family=f"{app.shared_dev_db_identifier}-bootstrap",
-                instance=self.shared_dev_db,
-                vpc=self.vpc,
-                log_group=logs.LogGroup(
-                    self,
-                    "DevDbBootstrapLogs",
-                    log_group_name=f"/aws/ecs/{app.shared_dev_db_identifier}-bootstrap",
-                    retention=logs.RetentionDays.ONE_MONTH,
-                    removal_policy=RemovalPolicy.DESTROY,
-                ),
-            )
-            CfnOutput(
-                self, "DevDbBootstrapFamily", value=bootstrap.task_definition.family
-            )
-            CfnOutput(
-                self,
-                "DevDbBootstrapSecurityGroupId",
-                value=bootstrap.security_group.security_group_id,
-            )
 
         CfnOutput(self, "RepositoryUri", value=self.repository.repository_uri)
         CfnOutput(self, "ClusterName", value=self.cluster.cluster_name)
         CfnOutput(self, "GithubDeployRoleArn", value=self.deploy_role.role_arn)
         CfnOutput(self, "PublicSubnets", value=",".join(public_subnets(app)))
+        CfnOutput(self, "DevDbBootstrapFamily", value=bootstrap.task_definition.family)
         CfnOutput(
-            self, "DbSecurityGroupId", value=self.db_security_group.security_group_id
+            self,
+            "DevDbBootstrapSecurityGroupId",
+            value=bootstrap.security_group.security_group_id,
         )
 
 

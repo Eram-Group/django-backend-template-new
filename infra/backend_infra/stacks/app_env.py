@@ -1,4 +1,8 @@
-"""Everything one environment needs: storage, DB, roles, web, worker, jobs."""
+"""Everything one environment needs: storage, roles, web, worker, jobs.
+
+Stateless by design - the dedicated production database lives in ``Db-<env>``
+(``stacks/database.py``) so this stack can be torn down without touching data.
+"""
 
 from aws_cdk import CfnOutput
 from aws_cdk import Duration
@@ -40,6 +44,7 @@ class AppEnvStack(Stack):
         app: AppConfig,
         env_config: EnvConfig,
         shared: SharedStack,
+        database: DedicatedDatabase | None,
         image_tag: str,
         sentry_release: str,
         **kwargs: object,
@@ -95,18 +100,10 @@ class AppEnvStack(Stack):
             key: ecs.Secret.from_secrets_manager(app_secret, key)
             for key in sorted(ENV_SECRET)
         }
-        self.database: DedicatedDatabase | None = None
         if cfg.database == "dedicated":
-            self.database = DedicatedDatabase(
-                self,
-                "Database",
-                identifier=f"{cfg.name}-{app.name}",
-                secret_prefix=naming.app_secret_name(app, cfg),
-                vpc=shared.vpc,
-                security_group=shared.db_security_group,
-            )
+            assert database is not None  # noqa: S101 - app.py pairs them
             secrets["DATABASE_URL"] = ecs.Secret.from_secrets_manager(
-                self.database.url_secret
+                database.url_secret
             )
 
         environment = {

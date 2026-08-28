@@ -51,8 +51,15 @@ dedicated production VPC is the escape hatch).
 
 `dev` and `production` are defined; `staging` is supported by the app
 (`ENVIRONMENT=staging`, test payment keys) and is one more `EnvConfig` entry.
-Each environment is one CloudFormation stack `App-<env>`; account-level
-resources (ECR, cluster, roles, GitHub OIDC, shared dev DB) live in `Shared`.
+Stacks, per app: `Shared` (ECR, cluster, roles, dev-DB bootstrap task),
+`Db-<env>` (the dedicated RDS instance of environments with
+`database="dedicated"`, kept apart so the app stack can be recreated without
+touching data) and `App-<env>` (everything else, stateless). Resources that
+exist **once per AWS account** — the GitHub OIDC provider, the shared dev RDS
+instance `development-shared-pg18` and the database security group — are
+never created by any app's stacks: `AppConfig` references them by value, so
+the ten apps copied from this template share them without one repo owning
+them (see *Account prerequisites*).
 
 ### Who owns what
 
@@ -105,6 +112,23 @@ rejected for the web tier: one request per sandbox means a database
 connection per concurrent request (a t4g.micro would collapse), plus cold
 starts and a second runtime to maintain.
 
+## Account prerequisites (once per AWS account, not per app)
+
+Already in place in the Eram account; every app's `AppConfig` points at
+them. For a new account create them once, then copy the values into
+`config.py`:
+
+| Resource | `AppConfig` field | How |
+|---|---|---|
+| GitHub OIDC provider | `github_oidc_provider_arn` | `aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com --client-id-list sts.amazonaws.com` |
+| DB security group (5432 from the VPC CIDR) | `db_security_group_id` | `aws ec2 create-security-group --group-name postgres-from-vpc --description "Postgres from the VPC" --vpc-id <vpc>` + `authorize-security-group-ingress --protocol tcp --port 5432 --cidr <vpc-cidr>` |
+| Shared dev RDS (PostgreSQL 18, db.t4g.small, gp3 20 GB, private, RDS-managed master password) | `dev_db_host`, `dev_db_master_credentials` | `aws rds create-db-instance --db-instance-identifier development-shared-pg18 --engine postgres --engine-version 18 --db-instance-class db.t4g.small --allocated-storage 20 --storage-type gp3 --storage-encrypted --master-username postgres --manage-master-user-password --no-publicly-accessible --vpc-security-group-ids <sg> --backup-retention-period 1 --deletion-protection` — the managed secret (`rds!db-…`, JSON with a `password` key) is the credentials name |
+
+Why not CDK: an account-global resource in a per-app stack has exactly one
+owner, and a template copied into ten repos cannot express that safely —
+one `cdk destroy` or a flag flipped in two repos would take every dev
+database down.
+
 ## One-time bootstrap
 
 Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
@@ -112,13 +136,11 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
 1. `just infra-install` — Python deps + the pinned CDK CLI.
 2. `cd infra && npx cdk bootstrap aws://<account>/eu-central-1` (once per
    account/region).
-3. Edit `infra/backend_infra/config.py` (`APP`: name, repo, subnets, hosted
-   zone; `ENVIRONMENTS`: sizes, domain, frontend origins). For a **second app
-   in the same account** set `create_github_oidc_provider=False` and
-   `create_shared_dev_db=False` — those are account-global and exactly one
-   stack may own them.
-4. `just infra-deploy-shared` — ECR, cluster, roles, OIDC provider, shared dev
-   DB. If the ECR repository `eram/<app>` already exists, import it first
+3. Edit `infra/backend_infra/config.py`: `APP.name` and `APP.github_repo`
+   (the account-level fields stay as they are for every app in the same
+   account); `ENVIRONMENTS`: sizes, domain, frontend origins.
+4. `just infra-deploy-shared` — ECR, cluster, roles, dev-DB bootstrap task.
+   If the ECR repository `eram/<app>` already exists, import it first
    (`npx cdk import Shared`) or delete it.
 5. Create the app secret with every key present (empty = unset):
    `aws secretsmanager create-secret --name dev/<app> --secret-string "$(just infra-secret-skeleton dev)"`
@@ -149,9 +171,11 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
 10. `just infra-run-task dev python manage.py createsu` (first superuser) and
     `just infra-run-task dev python manage.py shell -c "1/0"` (Sentry smoke:
     the event must carry `environment=dev` and `release=<sha>`).
-11. Production: `just infra-deploy production -- -c image_tag=<sha>` (RDS
-    takes ~10 min; the ACM certificate validates automatically through
-    Route 53), fill `production/<app>`, create the GitHub environment
+11. Production: `just infra-deploy production -- -c image_tag=<sha>` deploys
+    `Db-production` first (RDS takes ~10 min; the instance carries deletion
+    protection and outlives the app stack), then `App-production` (the ACM
+    certificate validates automatically through Route 53); fill
+    `production/<app>`, create the GitHub environment
     `production` with required reviewers, add its variables, then dispatch
     `Deploy production`.
 
@@ -228,8 +252,8 @@ the console (EC2 → Load balancers → listener rules).
 
 ## Migrating an existing App Runner app
 
-1. Copy `infra/` with its own `AppConfig` (name, repo; account-global flags
-   off), deploy `Shared` + `App-production` alongside the App Runner service.
+1. Copy `infra/` with its own `AppConfig` (name, repo), deploy `Shared` +
+   `App-production` alongside the App Runner service.
 2. Point `custom_domain` at the existing hostname; CDK adds the certificate,
    rule and DNS alias — switch the DNS record when the Express URL is verified.
 3. PostgreSQL 17 → 18: new instance + `pg_dump | pg_restore` (uuidv7 defaults

@@ -152,11 +152,11 @@ infra-lint:
 infra-diff env:
     cd infra && npx cdk diff App-{{ env }} $(./scripts/live_context.sh {{ app_name }} {{ env }})
 
-# Deploy account-level resources (ECR, cluster, roles, OIDC, shared dev DB). Once.
+# Deploy the app-level stack (ECR, cluster, roles, dev-DB bootstrap task). Once per app.
 infra-deploy-shared:
     cd infra && npx cdk deploy Shared --require-approval broadening
 
-# Deploy one environment; first deploy: `just infra-deploy dev -- -c image_tag=<sha>`.
+# Deploy one environment (+ its Shared/Db-<env> dependencies); first deploy: `just infra-deploy dev -- -c image_tag=<sha>`.
 infra-deploy env *args:
     cd infra && npx cdk deploy App-{{ env }} --require-approval broadening \
         $(./scripts/live_context.sh {{ app_name }} {{ env }} || true) {{ args }}

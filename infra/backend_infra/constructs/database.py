@@ -1,9 +1,9 @@
-"""RDS for PostgreSQL 18 - the only database engine this stack knows.
+"""RDS for PostgreSQL 18 - one dedicated instance per production environment.
 
-``shared_dev_instance`` is the one instance every dev/staging environment of
-every app shares (their databases are created by hand on it);
-``dedicated_instance`` is one instance per production app, with a CDK-composed
-``DATABASE_URL`` secret so no human ever copies a password.
+Dev/staging databases live on the account's shared instance, which is not
+managed here (``AppConfig.dev_db_host``). ``DedicatedDatabase`` composes the
+``DATABASE_URL`` secret from the generated master password so no human ever
+copies one.
 """
 
 from aws_cdk import Duration
@@ -20,22 +20,6 @@ URL_UNSAFE = " %+~`#$&*()|[]{}:;<>?!'/@\"\\"
 POSTGRES_18 = rds.DatabaseInstanceEngine.postgres(
     version=rds.PostgresEngineVersion.of("18.4", "18")
 )
-
-
-def database_security_group(
-    scope: Construct, construct_id: str, vpc: ec2.IVpc, cidr: str
-) -> ec2.SecurityGroup:
-    sg = ec2.SecurityGroup(
-        scope,
-        construct_id,
-        vpc=vpc,
-        allow_all_outbound=False,
-        description="Postgres from the VPC",
-    )
-    sg.add_ingress_rule(
-        ec2.Peer.ipv4(cidr), ec2.Port.tcp(5432), "postgres from the VPC"
-    )
-    return sg
 
 
 def _instance(
@@ -78,27 +62,6 @@ def _instance(
         ca_certificate=rds.CaCertificate.RDS_CA_RSA2048_G1,
         cloudwatch_logs_exports=["postgresql"],
         enable_performance_insights=False,
-    )
-
-
-def shared_dev_instance(
-    scope: Construct,
-    *,
-    identifier: str,
-    vpc: ec2.IVpc,
-    security_group: ec2.ISecurityGroup,
-) -> rds.DatabaseInstance:
-    return _instance(
-        scope,
-        "SharedDevDb",
-        identifier=identifier,
-        vpc=vpc,
-        security_group=security_group,
-        size=ec2.InstanceSize.SMALL,
-        backup_days=1,
-        username="postgres",
-        secret_name=f"shared/{identifier}/master",
-        database_name=None,
     )
 
 
