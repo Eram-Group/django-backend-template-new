@@ -18,7 +18,7 @@ default:
 # One-time setup: deps, .env, git hooks, services, release step.
 bootstrap:
     uv sync
-    cp .env.example .env
+    [ -f .env ] || cp .env.example .env
     uv run pre-commit install --hook-type pre-commit --hook-type pre-push
     docker compose up -d --wait postgres mailpit
     just migrate
