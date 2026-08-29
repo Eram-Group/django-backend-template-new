@@ -29,7 +29,13 @@
        data-text-calculating="{% translate 'Calculating reach…' %}"
        data-text-failed="{% translate 'Could not estimate reach.' %}"
        data-text-empty="{% translate 'This audience is empty — nothing would be sent.' %}"
-       data-text-confirm="{% translate 'Reaching :recipients recipients across :devices devices.' %}">
+       data-text-confirm="{% translate 'Reaching :recipients recipients across :devices devices.' %}"
+       data-users-url="{{ audience_users_url }}"
+       data-text-no-users="{% translate 'No users match.' %}"
+       data-text-today="{% translate 'Today' %}"
+       data-text-clear="{% translate 'Clear' %}"
+       data-text-prev-month="{% translate 'Previous month' %}"
+       data-text-next-month="{% translate 'Next month' %}">
 
     <div class="bc-head">
       <h1>{% translate "New broadcast" %}</h1>
@@ -77,10 +83,20 @@
 
           <section class="bc-card">
             <h2>{% translate "Audience" %}</h2>
-            <p class="bc-hint bc-hint-lead">
-              {% translate "Leave every filter unset to reach all active users." %}
-            </p>
 
+            <div class="bc-group">
+              <div class="bc-subhead">{{ adminform.form.target.label }}</div>
+              <div class="bc-chips" data-target-chips>
+                {% for radio in adminform.form.target %}
+                  <label class="bc-chip">{{ radio.tag }}{{ radio.choice_label }}</label>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="bc-pane" data-target-pane="filters">
+              <p class="bc-hint bc-hint-lead">
+                {% translate "Leave every filter unset to reach all active users." %}
+              </p>
             <div class="bc-group">
               <div class="bc-subhead">{{ adminform.form.language.label }}</div>
               <div class="bc-chips">
@@ -102,10 +118,46 @@
             <div class="bc-group bc-group-spaced">
               <div class="bc-subhead">{% translate "Signed up between" %}</div>
               <div class="bc-dates">
-                {{ adminform.form.joined_after }}
+                <span class="bc-date-field" data-role="start">
+                  {{ adminform.form.joined_after }}
+                  <button type="button" class="bc-date-btn" aria-label="{% translate 'Open calendar' %}">
+                    <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
+                  </button>
+                </span>
                 <span class="bc-dates-sep">{% translate "and" %}</span>
-                {{ adminform.form.joined_before }}
+                <span class="bc-date-field" data-role="end">
+                  {{ adminform.form.joined_before }}
+                  <button type="button" class="bc-date-btn" aria-label="{% translate 'Open calendar' %}">
+                    <span class="material-symbols-outlined" aria-hidden="true">calendar_month</span>
+                  </button>
+                </span>
               </div>
+            </div>
+            </div>
+
+            <div class="bc-pane" data-target-pane="users" hidden>
+              <p class="bc-hint bc-hint-lead">
+                {% translate "Search by name, email or phone and add each user. Only these users receive the broadcast." %}
+              </p>
+              <div class="bc-user-search">
+                <span class="material-symbols-outlined bc-user-search-icon" aria-hidden="true">search</span>
+                <input type="search" class="bc-input" id="bc-user-query" autocomplete="off"
+                       placeholder="{% translate 'Find a user…' %}" aria-label="{% translate 'Find a user' %}">
+                <div class="bc-user-results" id="bc-user-results" role="listbox" hidden></div>
+              </div>
+              <div class="bc-user-picked" id="bc-user-picked" data-empty="{% translate 'No users picked yet.' %}">
+                {% for user in adminform.form.selected_users %}
+                  <span class="bc-user-chip" data-id="{{ user.id }}">
+                    <input type="hidden" name="recipients" value="{{ user.id }}">
+                    <span class="bc-user-chip-name">{{ user.name }}</span>
+                    <span class="bc-user-chip-mail">{{ user.email }}</span>
+                    <button type="button" class="bc-user-chip-x" aria-label="{% translate 'Remove' %}">×</button>
+                  </span>
+                {% endfor %}
+              </div>
+              {% for error in adminform.form.recipients.errors %}
+                <p class="bc-field-error">{{ error }}</p>
+              {% endfor %}
             </div>
           </section>
         </div>

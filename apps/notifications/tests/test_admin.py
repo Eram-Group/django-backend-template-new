@@ -48,6 +48,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
         "joined_after": "",
         "joined_before": "",
         "channels": [Channel.PUSH],
+        "target": "filters",
     }
     payload.update(overrides)
     return payload
@@ -123,12 +124,74 @@ def test_compose_records_the_audience_filters(client: Client) -> None:
     assert str(broadcast.joined_before) == "2026-06-30"
 
 
+def test_dates_are_iso_text_fields_with_the_composer_calendar(
+    client: Client,
+) -> None:
+    """No browser-native date popover: the composer's own picker fills ISO
+    text inputs, and the form still accepts the same YYYY-MM-DD value."""
+    body = _superuser_client(client).get(reverse(ADD_URL)).content.decode()
+
+    assert 'name="joined_after"' in body
+    assert 'type="date"' not in body
+    assert body.count('class="bc-date-btn"') == 2
+    assert 'placeholder="YYYY-MM-DD"' in body
+
+
 def test_compose_records_selected_channels(client: Client) -> None:
     _superuser_client(client).post(
         reverse(ADD_URL), _payload(channels=[Channel.PUSH, Channel.SMS])
     )
 
     assert sorted(_composed().channels) == sorted([Channel.PUSH, Channel.SMS])
+
+
+def test_compose_with_specific_users(client: Client) -> None:
+    picked = UserFactory.create()
+
+    _superuser_client(client).post(
+        reverse(ADD_URL), _payload(target="users", recipients=[str(picked.pk)])
+    )
+
+    assert _composed().recipient_ids == [str(picked.pk)]
+
+
+def test_specific_users_needs_at_least_one(client: Client) -> None:
+    response = _superuser_client(client).post(
+        reverse(ADD_URL), _payload(target="users", recipients=[])
+    )
+
+    assert response.status_code == 200
+    assert response.context["adminform"].form.errors["recipients"]
+    assert _nothing_composed()
+
+
+def test_filters_target_drops_a_leftover_pick(client: Client) -> None:
+    """Switching back to "everyone" must not silently narrow the audience."""
+    picked = UserFactory.create()
+
+    _superuser_client(client).post(
+        reverse(ADD_URL), _payload(target="filters", recipients=[str(picked.pk)])
+    )
+
+    assert _composed().recipient_ids == []
+
+
+def test_audience_users_search_endpoint(client: Client) -> None:
+    omar = UserFactory.create(name="Omar", email="omar@x.test")
+    client_ = _superuser_client(client)
+
+    body = client_.get(reverse(USERS_URL), {"q": "omar"}).json()
+
+    assert [u["id"] for u in body["users"]] == [str(omar.pk)]
+    assert body["users"][0]["email"] == "omar@x.test"
+
+
+def test_audience_users_search_requires_add_permission(client: Client) -> None:
+    client.force_login(UserFactory.create(is_staff=True))
+
+    response = client.get(reverse(USERS_URL), {"q": "x"})
+
+    assert response.status_code in (302, 403)
 
 
 def test_channels_are_required(client: Client) -> None:
@@ -177,6 +240,7 @@ def test_the_context_field_cannot_be_posted_on_add(client: Client) -> None:
 
 
 ESTIMATE_URL = "admin:notifications_broadcast_audience_estimate"
+USERS_URL = "admin:notifications_broadcast_audience_users"
 
 
 class TestAudienceEstimate:
@@ -212,6 +276,17 @@ class TestAudienceEstimate:
 
         assert body["recipients"] == 1
         assert body["devices"] == 2
+
+    def test_counts_exactly_the_picked_users(self, client: Client) -> None:
+        picked = UserFactory.create()
+        UserFactory.create()
+        client = _superuser_client(client)
+
+        body = client.post(
+            reverse(ESTIMATE_URL), {"target": "users", "recipients": [str(picked.pk)]}
+        ).json()
+
+        assert body["recipients"] == 1
 
     def test_reversed_dates_are_rejected(self, client: Client) -> None:
         _superuser_client(client)

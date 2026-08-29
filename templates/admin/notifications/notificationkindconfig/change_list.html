@@ -47,33 +47,11 @@
 
         <div class="nc-top">
           <h2>{{ card.label }}</h2>
-          <span class="nc-badge {% if card.marketing %}is-marketing{% else %}is-transactional{% endif %}">
-            {{ card.category }}
-          </span>
           <span class="nc-badge is-new" title="{% translate 'Created just now with recommended values - review the channels and message.' %}">
             {% translate "New" %}
           </span>
           <span class="nc-grow"></span>
           <span class="nc-status" aria-live="polite"></span>
-        </div>
-
-        <div class="nc-line">
-          <span class="nc-key">{% translate "Channels" %}</span>
-          <span class="nc-chans">
-            {% for row in card.form.channel_rows %}
-              {% if row.supported %}
-                <label class="nc-chan" title="{{ row.hint }}">
-                  {{ row.tag }}
-                  <span class="nc-chan-face">{{ row.label }}</span>
-                </label>
-              {% else %}
-                <span class="nc-chan is-off" title="{{ row.hint }}">
-                  <span class="nc-chan-face">{{ row.label }}</span>
-                </span>
-              {% endif %}
-            {% endfor %}
-          </span>
-          <span class="nc-error" data-field="{{ card.form.channels.html_name }}"></span>
         </div>
 
         {% if card.vars and card.form.languages %}
@@ -128,6 +106,25 @@
             {% endfor %}
           </div>
         {% endif %}
+
+        <div class="nc-line">
+          <span class="nc-key">{% translate "Channels" %}</span>
+          <span class="nc-chans">
+            {% for row in card.form.channel_rows %}
+              {% if row.supported %}
+                <label class="nc-chan" title="{{ row.hint }}">
+                  {{ row.tag }}
+                  <span class="nc-chan-face">{{ row.label }}</span>
+                </label>
+              {% else %}
+                <span class="nc-chan is-off" title="{{ row.hint }}">
+                  <span class="nc-chan-face">{{ row.label }}</span>
+                </span>
+              {% endif %}
+            {% endfor %}
+          </span>
+          <span class="nc-error" data-field="{{ card.form.channels.html_name }}"></span>
+        </div>
       </section>
     {% endfor %}
 

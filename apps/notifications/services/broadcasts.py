@@ -40,6 +40,7 @@ def notification_broadcast(
     joined_after: date | None,
     joined_before: date | None,
     channels: Sequence[str],
+    recipient_ids: Sequence[str],
     actor: User,
 ) -> Broadcast:
     """Author a DRAFT broadcast; nothing sends until broadcast_dispatch.
@@ -47,10 +48,13 @@ def notification_broadcast(
     ``channels`` is exactly what this send goes out on - every broadcast picks
     its own (a non-empty subset of what the kind supports; "send on nothing"
     is not a broadcast). There is no kind-level default behind it.
+    ``recipient_ids`` hand-picks the audience: non-empty = exactly these
+    users (the language/date filters are then ignored); empty = the filters.
     """
     entry = catalog_entry(kind)
     _validate_context(kind=kind, entry=entry, context=context)
     resolved_channels = _validate_channels(entry=entry, channels=channels)
+    resolved_recipients = _validate_recipients(recipient_ids=recipient_ids)
     if joined_after and joined_before and joined_after > joined_before:
         raise BroadcastAudienceError(
             str(_("The joined-after date must not be later than joined-before."))
@@ -63,6 +67,7 @@ def notification_broadcast(
         joined_after=joined_after,
         joined_before=joined_before,
         channels=resolved_channels,
+        recipient_ids=resolved_recipients,
         created_by=actor,
     )
     broadcast.full_clean()
@@ -89,6 +94,29 @@ def _validate_channels(*, entry: MessageTemplate, channels: Sequence[str]) -> li
             )
         )
     return sorted(selected)
+
+
+def _validate_recipients(*, recipient_ids: Sequence[str]) -> list[str]:
+    """Deduplicated, sorted pks of ACTIVE users - a stale pick (deleted or
+    deactivated since the search) is operator-visible, not silently dropped."""
+    wanted = sorted({str(pk) for pk in recipient_ids})
+    if not wanted:
+        return []
+    found = {
+        str(pk)
+        for pk in User.objects.filter(is_active=True, pk__in=wanted).values_list(
+            "pk", flat=True
+        )
+    }
+    missing = [pk for pk in wanted if pk not in found]
+    if missing:
+        raise BroadcastAudienceError(
+            str(
+                _("%(count)d selected user(s) no longer exist or are inactive.")
+                % {"count": len(missing)}
+            )
+        )
+    return wanted
 
 
 def broadcast_dispatch(*, broadcast: Broadcast) -> Broadcast:

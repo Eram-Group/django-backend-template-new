@@ -2,8 +2,8 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.common.models import BaseModel
-from apps.notifications.constants import Channel
 from apps.notifications.constants import DeliveryStatus
+from apps.notifications.validators import validate_channel
 
 
 class NotificationDelivery(BaseModel):
@@ -31,7 +31,9 @@ class NotificationDelivery(BaseModel):
         related_name="deliveries",
         verbose_name=_("broadcast"),
     )
-    channel = models.CharField(_("channel"), max_length=20, choices=Channel)
+    channel = models.CharField(
+        _("channel"), max_length=20, validators=[validate_channel]
+    )
     status = models.CharField(
         _("status"),
         max_length=20,

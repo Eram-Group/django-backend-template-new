@@ -101,16 +101,6 @@
     border-radius: 999px;
 }
 
-.nc-badge.is-transactional {
-    color: var(--nc-accent);
-    background: var(--nc-accent-quiet);
-}
-
-.nc-badge.is-marketing {
-    color: var(--nc-amber);
-    background: var(--nc-amber-quiet);
-}
-
 .nc-badge.is-new {
     display: none;
     color: var(--nc-alert);

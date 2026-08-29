@@ -10,7 +10,14 @@ ADD_FIELDSETS = (
     (
         _("Audience"),
         {
-            "fields": ("language", "require_device", "joined_after", "joined_before"),
+            "fields": (
+                "target",
+                "recipients",
+                "language",
+                "require_device",
+                "joined_after",
+                "joined_before",
+            ),
             "description": _("Leave every filter unset to reach all active users."),
         },
     ),
@@ -27,6 +34,7 @@ FIELDSETS = (
                 "require_device",
                 "joined_after",
                 "joined_before",
+                "recipient_ids",
                 "channels",
             )
         },

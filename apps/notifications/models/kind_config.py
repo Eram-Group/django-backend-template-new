@@ -9,6 +9,7 @@ from modeltranslation.manager import MultilingualManager
 
 from apps.common.models import BaseModel
 from apps.notifications.constants import NotificationKind
+from apps.notifications.validators import validate_kind
 
 
 def _placeholders(text: str) -> set[str]:
@@ -38,7 +39,7 @@ class NotificationKindConfig(BaseModel):
     objects = MultilingualManager["NotificationKindConfig"]()
 
     kind = models.CharField(
-        _("action"), max_length=50, choices=NotificationKind, unique=True
+        _("action"), max_length=50, unique=True, validators=[validate_kind]
     )
     # JSON list of Channel values; subset-of-supported enforced in clean().
     channels = models.JSONField(_("channels"), default=list, blank=True)
@@ -74,7 +75,7 @@ class NotificationKindConfig(BaseModel):
         try:
             kind = NotificationKind(self.kind)
         except ValueError:
-            return  # invalid choice - clean_fields already reports it
+            return  # not a kind - the field validator already reports it
         # A kind with no catalog entry is a code bug (test_catalog pairs them):
         # let the LookupError escape rather than validate against nothing.
         entry = catalog_entry(kind)

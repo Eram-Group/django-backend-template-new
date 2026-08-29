@@ -77,8 +77,35 @@ class BroadcastAdmin(BaseModelAdmin):
                 self.admin_site.admin_view(self.audience_estimate_view),
                 name="notifications_broadcast_audience_estimate",
             ),
+            path(
+                "audience-users/",
+                self.admin_site.admin_view(self.audience_users_view),
+                name="notifications_broadcast_audience_users",
+            ),
         ]
         return estimate + list(super().get_urls())
+
+    def audience_users_view(self, request: HttpRequest) -> JsonResponse:
+        """The "specific users" picker's search: a short page of active users
+        matching ``q`` by name, email or phone."""
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        users = selectors.broadcast_user_search(query=request.GET.get("q", ""))
+        return JsonResponse(
+            {
+                "ok": True,
+                "users": [
+                    {
+                        "id": str(user.pk),
+                        "name": user.name,
+                        "email": user.email,
+                        "phone": str(user.phone) if user.phone else "",
+                        "language": user.language,
+                    }
+                    for user in users
+                ],
+            }
+        )
 
     def audience_estimate_view(self, request: HttpRequest) -> JsonResponse:
         """Live "who would this reach" for the compose screen.
@@ -112,6 +139,9 @@ class BroadcastAdmin(BaseModelAdmin):
         if add:
             context["audience_estimate_url"] = reverse(
                 "admin:notifications_broadcast_audience_estimate"
+            )
+            context["audience_users_url"] = reverse(
+                "admin:notifications_broadcast_audience_users"
             )
             # The composer replaces the admin's own submit row, so it also has
             # to offer the way back out that the submit row would have.

@@ -24,7 +24,6 @@ from apps.notifications.admin.notificationkindconfig.resource import (
     NotificationKindConfigResource,
 )
 from apps.notifications.catalog import catalog_entry
-from apps.notifications.constants import NotificationCategory
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import NotificationKindConfig
 
@@ -115,8 +114,6 @@ class NotificationKindConfigAdmin(
                     "kind": str(kind),
                     "new": created,
                     "label": kind.label,
-                    "category": NotificationCategory(form.entry.category).label,
-                    "marketing": form.entry.category == NotificationCategory.MARKETING,
                     "vars": form.variables(),
                     "form": form,
                 }

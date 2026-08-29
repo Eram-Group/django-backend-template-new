@@ -24,7 +24,7 @@ class NotificationCategory(models.TextChoices):
 class Channel(models.TextChoices):
     """Delivery channels BEYOND the in-app inbox row (which always exists)."""
 
-    PUSH = "push", _("Push")
+    PUSH = "push", _("App notification")
     SMS = "sms", _("SMS")
     WHATSAPP = "whatsapp", _("WhatsApp")
 

@@ -201,6 +201,369 @@
     color: var(--bc-muted);
 }
 
+/* --- audience panes + specific-user picker ----------------------------------- */
+.bc-pane[hidden] {
+    display: none;
+}
+
+.bc-user-search {
+    position: relative;
+    margin-bottom: 10px;
+}
+
+.bc-user-search .bc-input {
+    padding-left: 34px;
+}
+
+.bc-user-search-icon {
+    position: absolute;
+    top: 50%;
+    left: 10px;
+    font-size: 18px;
+    color: var(--bc-muted);
+    pointer-events: none;
+    transform: translateY(-50%);
+}
+
+.bc-user-results {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    left: 0;
+    z-index: 30;
+    max-height: 260px;
+    padding: 4px;
+    overflow-y: auto;
+    background: var(--bc-raised);
+    border: 1px solid var(--bc-line);
+    border-radius: var(--border-radius, 8px);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+}
+
+.bc-user-results[hidden] {
+    display: none;
+}
+
+.bc-user-row {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 100%;
+    padding: 6px 8px;
+    font: inherit;
+    text-align: start;
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+}
+
+.bc-user-row:hover {
+    background: var(--bc-surface);
+}
+
+.bc-user-row.is-picked {
+    opacity: 0.5;
+}
+
+.bc-user-row-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--bc-strong);
+}
+
+.bc-user-row-meta,
+.bc-user-none {
+    font-size: 11px;
+    color: var(--bc-muted);
+}
+
+.bc-user-none {
+    padding: 8px;
+}
+
+.bc-user-picked {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 34px;
+}
+
+.bc-user-picked.is-empty::before {
+    font-size: 12px;
+    color: var(--bc-muted);
+    content: attr(data-empty);
+}
+
+.bc-user-chip {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 4px 4px 4px 10px;
+    font-size: 12px;
+    color: var(--bc-strong);
+    background: var(--bc-accent-quiet);
+    border: 1px solid var(--bc-accent);
+    border-radius: 999px;
+}
+
+.bc-user-chip-name {
+    font-weight: 600;
+}
+
+.bc-user-chip-mail {
+    font-size: 11px;
+    color: var(--bc-muted);
+}
+
+.bc-user-chip-x {
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    font-size: 14px;
+    line-height: 1;
+    color: var(--bc-muted);
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 50%;
+}
+
+.bc-user-chip-x:hover {
+    color: var(--bc-alert);
+    background: var(--bc-alert-quiet);
+}
+
+.bc-field-error {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--bc-alert);
+}
+
+[dir="rtl"] .bc-user-search .bc-input {
+    padding-right: 34px;
+    padding-left: 11px;
+}
+
+[dir="rtl"] .bc-user-search-icon {
+    right: 10px;
+    left: auto;
+}
+
+/* --- date range picker ------------------------------------------------------- */
+.bc-date-field {
+    position: relative;
+    display: block;
+}
+
+.bc-date-field .bc-input {
+    padding-right: 36px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+.bc-date-btn {
+    position: absolute;
+    top: 50%;
+    right: 6px;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    color: var(--bc-muted);
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+    transform: translateY(-50%);
+}
+
+.bc-date-btn .material-symbols-outlined {
+    font-size: 18px;
+}
+
+.bc-date-btn:hover,
+.bc-date-field.is-open .bc-date-btn {
+    color: var(--bc-accent);
+    background: var(--bc-accent-quiet);
+}
+
+.bc-cal {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 30;
+    width: 272px;
+    padding: 10px;
+    background: var(--bc-raised);
+    border: 1px solid var(--bc-line);
+    border-radius: var(--border-radius, 8px);
+    box-shadow: 0 12px 32px rgb(0 0 0 / 0.18);
+}
+
+.bc-cal[hidden] {
+    display: none;
+}
+
+.bc-cal-head {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.bc-cal-title {
+    font-size: 12.5px;
+    font-weight: 650;
+    color: var(--bc-strong);
+}
+
+.bc-cal-nav {
+    width: 26px;
+    height: 26px;
+    font-size: 18px;
+    line-height: 1;
+    color: var(--bc-muted);
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+}
+
+.bc-cal-nav:hover {
+    color: var(--bc-strong);
+    background: var(--bc-surface);
+}
+
+.bc-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    row-gap: 2px;
+}
+
+.bc-cal-dow {
+    padding: 4px 0;
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--bc-muted);
+}
+
+.bc-cal-day {
+    position: relative;
+    height: 32px;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--bc-body);
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+}
+
+.bc-cal-day:hover {
+    color: var(--bc-strong);
+    background: var(--bc-surface);
+}
+
+.bc-cal-day.is-out {
+    color: var(--bc-muted);
+    opacity: 0.45;
+}
+
+.bc-cal-day.is-today::after {
+    position: absolute;
+    bottom: 4px;
+    left: 50%;
+    width: 4px;
+    height: 4px;
+    content: "";
+    background: var(--bc-accent);
+    border-radius: 50%;
+    transform: translateX(-50%);
+}
+
+.bc-cal-day.is-range {
+    color: var(--bc-strong);
+    background: var(--bc-accent-quiet);
+    border-radius: 0;
+}
+
+.bc-cal-day.is-start {
+    border-radius: 6px 0 0 6px;
+}
+
+.bc-cal-day.is-end {
+    border-radius: 0 6px 6px 0;
+}
+
+.bc-cal-day.is-start.is-end {
+    border-radius: 6px;
+}
+
+.bc-cal-day.is-start,
+.bc-cal-day.is-end,
+.bc-cal-day.is-selected {
+    font-weight: 650;
+    color: #fff;
+    background: var(--bc-accent);
+    opacity: 1;
+}
+
+.dark .bc-cal-day.is-start,
+.dark .bc-cal-day.is-end,
+.dark .bc-cal-day.is-selected {
+    color: #052e16;
+}
+
+.bc-cal-day.is-start.is-today::after,
+.bc-cal-day.is-end.is-today::after,
+.bc-cal-day.is-selected.is-today::after {
+    background: currentcolor;
+}
+
+.bc-cal-foot {
+    display: flex;
+    justify-content: space-between;
+    padding-top: 8px;
+    margin-top: 6px;
+    border-top: 1px solid var(--bc-line-soft);
+}
+
+.bc-cal-link {
+    padding: 3px 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--bc-accent);
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 5px;
+}
+
+.bc-cal-link:hover {
+    background: var(--bc-accent-quiet);
+}
+
+[dir="rtl"] .bc-date-field .bc-input {
+    padding-right: 11px;
+    padding-left: 36px;
+}
+
+[dir="rtl"] .bc-date-btn {
+    right: auto;
+    left: 6px;
+}
+
+[dir="rtl"] .bc-cal {
+    right: 0;
+    left: auto;
+}
+
 /* --- chips (single-choice language filter) ------------------------------- */
 .bc-chips {
     display: flex;

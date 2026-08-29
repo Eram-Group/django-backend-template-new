@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-08-29 18:10+0000\n"
+"POT-Creation-Date: 2026-08-29 20:02+0000\n"
 "PO-Revision-Date: 2026-08-29 00:00+0000\n"
 "Last-Translator: Eram dev team\n"
 "Language-Team: Arabic\n"
@@ -23,98 +23,137 @@ msgstr "اختر إجراءً"
 msgid "Export selected %(verbose_name_plural)s"
 msgstr "تصدير %(verbose_name_plural)s المحددة"
 
-#: apps/notifications/admin/broadcast/admin.py:184
+#: apps/notifications/admin/broadcast/admin.py:214
 msgid "Dispatch"
 msgstr "بث"
 
-#: apps/notifications/admin/broadcast/admin.py:197
+#: apps/notifications/admin/broadcast/admin.py:227
 msgid "Dispatch started - refresh to follow progress."
 msgstr "بدأ البث - حدّث الصفحة لمتابعة التقدم."
 
-#: apps/notifications/admin/broadcast/admin.py:217
+#: apps/notifications/admin/broadcast/admin.py:247
 msgid "Resume incomplete"
 msgstr "استئناف غير المكتمل"
 
-#: apps/notifications/admin/broadcast/admin.py:233
+#: apps/notifications/admin/broadcast/admin.py:263
 #, python-format
 msgid "Resume enqueued: %(summary)s"
 msgstr "تمت جدولة الاستئناف: %(summary)s"
 
 #: apps/notifications/admin/broadcast/change_view.py:11
-#: templates/admin/notifications/broadcast/compose.html:79
+#: templates/admin/notifications/broadcast/compose.html:85
 msgid "Audience"
 msgstr "الجمهور"
 
-#: apps/notifications/admin/broadcast/change_view.py:14
-#: templates/admin/notifications/broadcast/compose.html:81
+#: apps/notifications/admin/broadcast/change_view.py:21
+#: templates/admin/notifications/broadcast/compose.html:98
 msgid "Leave every filter unset to reach all active users."
 msgstr "اترك جميع عوامل التصفية فارغة للوصول إلى جميع المستخدمين النشطين."
 
-#: apps/notifications/admin/broadcast/change_view.py:17
-#: apps/notifications/admin/broadcast/form.py:139
+#: apps/notifications/admin/broadcast/change_view.py:24
+#: apps/notifications/admin/broadcast/form.py:191
 #: apps/notifications/admin/notificationkindconfig/form.py:45
-#: templates/admin/notifications/notificationkindconfig/change_list.html:61
+#: templates/admin/notifications/notificationkindconfig/change_list.html:111
 msgid "Channels"
 msgstr "القنوات"
 
-#: apps/notifications/admin/broadcast/form.py:41
+#: apps/notifications/admin/broadcast/form.py:42
 msgid "Every registered device."
 msgstr "كل جهاز مسجّل."
 
-#: apps/notifications/admin/broadcast/form.py:42
+#: apps/notifications/admin/broadcast/form.py:43
 msgid "Billed per message."
 msgstr "تُحتسب التكلفة لكل رسالة."
 
-#: apps/notifications/admin/broadcast/form.py:43
+#: apps/notifications/admin/broadcast/form.py:44
 msgid "Sent through the approved template."
 msgstr "يُرسل عبر القالب المعتمد."
 
-#: apps/notifications/admin/broadcast/form.py:89
+#: apps/notifications/admin/broadcast/form.py:79
+#: templates/admin/notifications/broadcast/compose.html:181
+msgid "Send to"
+msgstr "إرسال إلى"
+
+#: apps/notifications/admin/broadcast/form.py:81
+msgid "Everyone matching the filters"
+msgstr "كل من تنطبق عليه عوامل التصفية"
+
+#: apps/notifications/admin/broadcast/form.py:82
+msgid "Specific users"
+msgstr "مستخدمون محددون"
+
+#: apps/notifications/admin/broadcast/form.py:91 config/settings/base.py:320
+#: config/settings/base.py:323
+msgid "Users"
+msgstr "المستخدمون"
+
+#: apps/notifications/admin/broadcast/form.py:122
 msgid "All languages"
 msgstr "جميع اللغات"
 
-#: apps/notifications/admin/broadcast/form.py:103
+#: apps/notifications/admin/broadcast/form.py:131
+msgid "Pick at least one user."
+msgstr "اختر مستخدماً واحداً على الأقل."
+
+#: apps/notifications/admin/broadcast/form.py:141
 msgid "Must be on or after the joined-after date."
 msgstr "يجب أن يكون في تاريخ «الانضمام بعد» أو بعده."
 
-#: apps/notifications/admin/broadcast/form.py:128
+#: apps/notifications/admin/broadcast/form.py:180
 msgid "Title"
 msgstr "العنوان"
 
-#: apps/notifications/admin/broadcast/form.py:131
+#: apps/notifications/admin/broadcast/form.py:183
 msgid "The headline recipients see in the notification tray."
 msgstr "العنوان الذي يراه المستلمون في لوحة الإشعارات."
 
-#: apps/notifications/admin/broadcast/form.py:134
+#: apps/notifications/admin/broadcast/form.py:186
 msgid "Body"
 msgstr "النص"
 
-#: apps/notifications/admin/broadcast/form.py:136
+#: apps/notifications/admin/broadcast/form.py:188
 msgid "The text every recipient sees. Sent as-is, in one piece."
 msgstr "النص الذي يراه كل مستلم. يُرسل كما هو، قطعة واحدة."
 
-#: apps/notifications/admin/broadcast/form.py:142
+#: apps/notifications/admin/broadcast/form.py:194
 msgid ""
 "Where this broadcast goes out. The in-app inbox entry is always written."
 msgstr "وجهة هذا البث. يُكتب إدخال صندوق الوارد داخل التطبيق دائماً."
+
+#: apps/notifications/admin/broadcast/list_view.py:11
+#: apps/notifications/admin/broadcast/list_view.py:22
+#: apps/notifications/admin/notification/list_view.py:12
+#: apps/notifications/admin/notification/list_view.py:18
+#: apps/notifications/models/broadcast.py:23
+#: apps/notifications/models/notification.py:25
+#: apps/payments/models/payment.py:32
+#: apps/payments/models/wallet_transaction.py:23
+msgid "kind"
+msgstr "النوع"
 
 #: apps/notifications/admin/device/list_view.py:9
 msgid "Search by user email or registration token."
 msgstr "ابحث بالبريد الإلكتروني للمستخدم أو رمز التسجيل."
 
-#: apps/notifications/admin/notification/list_view.py:13
+#: apps/notifications/admin/notification/list_view.py:23
 msgid "Search by recipient email."
 msgstr "ابحث بالبريد الإلكتروني للمستلم."
 
-#: apps/notifications/admin/notificationdelivery/list_view.py:22
+#: apps/notifications/admin/notificationdelivery/list_view.py:12
+#: apps/notifications/admin/notificationdelivery/list_view.py:20
+#: apps/notifications/models/delivery.py:35
+msgid "channel"
+msgstr "القناة"
+
+#: apps/notifications/admin/notificationdelivery/list_view.py:26
 msgid "Search by provider message id or recipient email."
 msgstr "ابحث بمعرّف الرسالة لدى المزوّد أو البريد الإلكتروني للمستلم."
 
-#: apps/notifications/admin/notificationkindconfig/admin.py:149
+#: apps/notifications/admin/notificationkindconfig/admin.py:146
 msgid "Unknown action."
 msgstr "إجراء غير معروف."
 
-#: apps/notifications/admin/notificationkindconfig/admin.py:163
+#: apps/notifications/admin/notificationkindconfig/admin.py:160
 msgid "Nothing to save."
 msgstr "لا يوجد ما يُحفظ."
 
@@ -152,6 +191,11 @@ msgstr "العربية"
 #, python-format
 msgid "WhatsApp sends the Meta-approved template \"%(name)s\"."
 msgstr "يرسل واتساب القالب \"%(name)s\" المعتمد من Meta."
+
+#: apps/notifications/admin/notificationkindconfig/list_view.py:13
+#: apps/notifications/models/kind_config.py:42
+msgid "action"
+msgstr "الإجراء"
 
 #: apps/notifications/apis/webhooks.py:82
 #: apps/notifications/apis/webhooks.py:87
@@ -207,8 +251,8 @@ msgid "Marketing"
 msgstr "تسويق"
 
 #: apps/notifications/constants.py:27
-msgid "Push"
-msgstr "إشعار فوري"
+msgid "App notification"
+msgstr "إشعار التطبيق"
 
 #: apps/notifications/constants.py:28
 msgid "SMS"
@@ -274,20 +318,13 @@ msgstr "iOS"
 msgid "Web"
 msgstr "الويب"
 
-#: apps/notifications/models/broadcast.py:23
-#: apps/notifications/models/notification.py:25
-#: apps/payments/models/payment.py:32
-#: apps/payments/models/wallet_transaction.py:23
-msgid "kind"
-msgstr "النوع"
-
 #: apps/notifications/models/broadcast.py:24
 #: apps/notifications/models/notification.py:26
 msgid "context"
 msgstr "السياق"
 
 #: apps/notifications/models/broadcast.py:26
-#: apps/notifications/models/delivery.py:36 apps/payments/models/payment.py:42
+#: apps/notifications/models/delivery.py:38 apps/payments/models/payment.py:42
 msgid "status"
 msgstr "الحالة"
 
@@ -316,45 +353,49 @@ msgid "joined on or before"
 msgstr "انضم في أو قبل"
 
 #: apps/notifications/models/broadcast.py:50
-#: apps/notifications/models/kind_config.py:44
+msgid "specific recipients"
+msgstr "مستلمون محددون"
+
+#: apps/notifications/models/broadcast.py:54
+#: apps/notifications/models/kind_config.py:45
 msgid "channels"
 msgstr "القنوات"
 
-#: apps/notifications/models/broadcast.py:55
+#: apps/notifications/models/broadcast.py:59
 msgid "created by"
 msgstr "أنشأه"
 
-#: apps/notifications/models/broadcast.py:57
+#: apps/notifications/models/broadcast.py:61
 msgid "dispatch cursor"
 msgstr "مؤشر البث"
 
-#: apps/notifications/models/broadcast.py:58
+#: apps/notifications/models/broadcast.py:62
 msgid "total recipients"
 msgstr "إجمالي المستلمين"
 
-#: apps/notifications/models/broadcast.py:59
+#: apps/notifications/models/broadcast.py:63
 msgid "total deliveries"
 msgstr "إجمالي عمليات التسليم"
 
-#: apps/notifications/models/broadcast.py:60
+#: apps/notifications/models/broadcast.py:64
 msgid "sent"
 msgstr "المرسَل"
 
-#: apps/notifications/models/broadcast.py:61
+#: apps/notifications/models/broadcast.py:65
 msgid "failed"
 msgstr "الفاشل"
 
-#: apps/notifications/models/broadcast.py:62
+#: apps/notifications/models/broadcast.py:66
 msgid "skipped"
 msgstr "المتخطّى"
 
-#: apps/notifications/models/broadcast.py:65
+#: apps/notifications/models/broadcast.py:69
 #: apps/notifications/models/delivery.py:32
 #: apps/notifications/models/notification.py:34
 msgid "broadcast"
 msgstr "بث"
 
-#: apps/notifications/models/broadcast.py:66
+#: apps/notifications/models/broadcast.py:70
 msgid "broadcasts"
 msgstr "عمليات البث"
 
@@ -363,35 +404,31 @@ msgstr "عمليات البث"
 msgid "notification"
 msgstr "إشعار"
 
-#: apps/notifications/models/delivery.py:34
-msgid "channel"
-msgstr "القناة"
-
-#: apps/notifications/models/delivery.py:41
+#: apps/notifications/models/delivery.py:43
 msgid "provider"
 msgstr "المزوّد"
 
-#: apps/notifications/models/delivery.py:43
+#: apps/notifications/models/delivery.py:45
 msgid "provider message id"
 msgstr "معرّف الرسالة لدى المزوّد"
 
-#: apps/notifications/models/delivery.py:45
+#: apps/notifications/models/delivery.py:47
 msgid "detail"
 msgstr "التفاصيل"
 
-#: apps/notifications/models/delivery.py:46
+#: apps/notifications/models/delivery.py:48
 msgid "sent at"
 msgstr "وقت الإرسال"
 
-#: apps/notifications/models/delivery.py:47
+#: apps/notifications/models/delivery.py:49
 msgid "attempts"
 msgstr "المحاولات"
 
-#: apps/notifications/models/delivery.py:50
+#: apps/notifications/models/delivery.py:52
 msgid "notification delivery"
 msgstr "تسليم إشعار"
 
-#: apps/notifications/models/delivery.py:51
+#: apps/notifications/models/delivery.py:53
 msgid "notification deliveries"
 msgstr "عمليات تسليم الإشعارات"
 
@@ -416,34 +453,30 @@ msgstr "جهاز"
 msgid "devices"
 msgstr "الأجهزة"
 
-#: apps/notifications/models/kind_config.py:41
-msgid "action"
-msgstr "الإجراء"
-
-#: apps/notifications/models/kind_config.py:45
+#: apps/notifications/models/kind_config.py:46
 msgid "title"
 msgstr "العنوان"
 
-#: apps/notifications/models/kind_config.py:46
+#: apps/notifications/models/kind_config.py:47
 msgid "body"
 msgstr "النص"
 
-#: apps/notifications/models/kind_config.py:58
+#: apps/notifications/models/kind_config.py:59
 msgid "notification action"
 msgstr "إجراء إشعار"
 
-#: apps/notifications/models/kind_config.py:59
+#: apps/notifications/models/kind_config.py:60
 msgid "notification actions"
 msgstr "إجراءات الإشعارات"
 
-#: apps/notifications/models/kind_config.py:87
+#: apps/notifications/models/kind_config.py:88
 #: apps/notifications/tests/test_models.py:84
 #, python-format
 msgid ""
 "%(kind)s does not support: %(channels)s. Supported channels: %(supported)s."
 msgstr "%(kind)s لا يدعم: %(channels)s. القنوات المدعومة: %(supported)s."
 
-#: apps/notifications/models/kind_config.py:104
+#: apps/notifications/models/kind_config.py:105
 #, python-format
 msgid "Unknown placeholders: %(unknown)s. This action provides: %(keys)s."
 msgstr "متغيرات غير معروفة: %(unknown)s. يوفر هذا الإجراء: %(keys)s."
@@ -460,30 +493,36 @@ msgstr "وقت القراءة"
 msgid "notifications"
 msgstr "الإشعارات"
 
-#: apps/notifications/selectors/notifications.py:21
+#: apps/notifications/selectors/notifications.py:31
 msgid "Notification not found."
 msgstr "الإشعار غير موجود."
 
-#: apps/notifications/services/broadcasts.py:56
+#: apps/notifications/services/broadcasts.py:60
 msgid "The joined-after date must not be later than joined-before."
 msgstr "يجب ألا يكون تاريخ «الانضمام بعد» لاحقًا لتاريخ «الانضمام قبل»."
 
-#: apps/notifications/services/broadcasts.py:81
-#: apps/notifications/tests/test_broadcasts.py:175
+#: apps/notifications/services/broadcasts.py:86
+#: apps/notifications/tests/test_broadcasts.py:177
 msgid "Pick at least one channel."
 msgstr "اختر قناة واحدة على الأقل."
 
-#: apps/notifications/services/broadcasts.py:87
+#: apps/notifications/services/broadcasts.py:92
 #, python-format
 msgid "This notification kind cannot be sent on: %(channels)s."
 msgstr "لا يمكن إرسال هذا النوع من الإشعارات عبر: %(channels)s."
 
-#: apps/notifications/services/broadcasts.py:100
+#: apps/notifications/services/broadcasts.py:115
+#: apps/notifications/tests/test_broadcasts.py:410
+#, python-format
+msgid "%(count)d selected user(s) no longer exist or are inactive."
+msgstr "%(count)d من المستخدمين المحددين لم يعودوا موجودين أو غير نشطين."
+
+#: apps/notifications/services/broadcasts.py:128
 msgid "Broadcast was already dispatched."
 msgstr "تم بث هذا البث من قبل."
 
 #: apps/notifications/services/config.py:53
-#: apps/notifications/tests/test_config_admin.py:306
+#: apps/notifications/tests/test_config_admin.py:318
 msgid ""
 "This action's message is authored per broadcast - compose it from the "
 "Broadcasts page."
@@ -492,6 +531,16 @@ msgstr "رسالة هذا الإجراء تُكتب لكل بث على حدة - 
 #: apps/notifications/services/deliveries.py:117
 msgid "Broadcast has not been dispatched."
 msgstr "لم يُبث هذا البث بعد."
+
+#: apps/notifications/validators.py:20
+#, python-format
+msgid "%(value)s is not a notification kind."
+msgstr "%(value)s ليس نوع إشعار."
+
+#: apps/notifications/validators.py:26
+#, python-format
+msgid "%(value)s is not a channel."
+msgstr "%(value)s ليست قناة."
 
 #: apps/payments/admin/payment/admin.py:60 apps/payments/constants.py:62
 msgid "Refund"
@@ -801,64 +850,60 @@ msgstr "المستخدم غير موجود."
 msgid "This code expires in %(minutes)s minutes."
 msgstr "تنتهي صلاحية هذا الرمز خلال %(minutes)s دقائق."
 
-#: config/settings/base.py:297 config/settings/base.py:300
-msgid "Users"
-msgstr "المستخدمون"
-
-#: config/settings/base.py:308
-msgid "Email addresses"
-msgstr "عناوين البريد الإلكتروني"
-
-#: config/settings/base.py:316
-msgid "Sessions"
-msgstr "الجلسات"
-
-#: config/settings/base.py:326
-msgid "Groups"
-msgstr "المجموعات"
-
-#: config/settings/base.py:336 config/settings/base.py:339
-msgid "Notifications"
-msgstr "الإشعارات"
-
-#: config/settings/base.py:349
-msgid "Deliveries"
-msgstr "عمليات التسليم"
-
-#: config/settings/base.py:359
+#: config/settings/base.py:297 config/settings/base.py:364
 msgid "Broadcasts"
 msgstr "عمليات البث"
 
-#: config/settings/base.py:369
+#: config/settings/base.py:304 config/settings/base.py:359
+msgid "Notifications"
+msgstr "الإشعارات"
+
+#: config/settings/base.py:331
+msgid "Email addresses"
+msgstr "عناوين البريد الإلكتروني"
+
+#: config/settings/base.py:339
+msgid "Sessions"
+msgstr "الجلسات"
+
+#: config/settings/base.py:349
+msgid "Groups"
+msgstr "المجموعات"
+
+#: config/settings/base.py:374
+msgid "Deliveries"
+msgstr "عمليات التسليم"
+
+#: config/settings/base.py:384
 msgid "Devices"
 msgstr "الأجهزة"
 
-#: config/settings/base.py:377
+#: config/settings/base.py:392
 #: templates/admin/notifications/notificationkindconfig/change_list.html:36
 msgid "Notification actions"
 msgstr "إجراءات الإشعارات"
 
-#: config/settings/base.py:389 config/settings/base.py:392
+#: config/settings/base.py:404 config/settings/base.py:407
 msgid "Payments"
 msgstr "المدفوعات"
 
-#: config/settings/base.py:400
+#: config/settings/base.py:415
 msgid "Wallets"
 msgstr "المحافظ"
 
-#: config/settings/base.py:408
+#: config/settings/base.py:423
 msgid "Wallet transactions"
 msgstr "معاملات المحافظ"
 
-#: config/settings/base.py:420
+#: config/settings/base.py:435
 msgid "Operations"
 msgstr "العمليات"
 
-#: config/settings/base.py:423
+#: config/settings/base.py:438
 msgid "Task results"
 msgstr "نتائج المهام"
 
-#: config/settings/base.py:433
+#: config/settings/base.py:448
 msgid "Login attempts"
 msgstr "محاولات تسجيل الدخول"
 
@@ -921,13 +966,13 @@ msgid "Create an account"
 msgstr "إنشاء حساب"
 
 #: templates/admin/notifications/broadcast/compose.html:25
-#: templates/admin/notifications/broadcast/compose.html:120
+#: templates/admin/notifications/broadcast/compose.html:172
 #: templates/admin/notifications/notificationkindconfig/change_list.html:30
 msgid "Your title"
 msgstr "عنوانك"
 
 #: templates/admin/notifications/broadcast/compose.html:26
-#: templates/admin/notifications/broadcast/compose.html:121
+#: templates/admin/notifications/broadcast/compose.html:173
 msgid "Your message body appears here."
 msgstr "يظهر نص رسالتك هنا."
 
@@ -940,7 +985,7 @@ msgid ":n devices reachable"
 msgstr ":n جهازًا يمكن الوصول إليه"
 
 #: templates/admin/notifications/broadcast/compose.html:29
-#: templates/admin/notifications/broadcast/compose.html:132
+#: templates/admin/notifications/broadcast/compose.html:184
 msgid "Calculating reach…"
 msgstr "جارٍ حساب مدى الوصول…"
 
@@ -956,11 +1001,31 @@ msgstr "هذا الجمهور فارغ — لن يُرسل شيء."
 msgid "Reaching :recipients recipients across :devices devices."
 msgstr "الوصول إلى :recipients مستلمًا عبر :devices جهازًا."
 
+#: templates/admin/notifications/broadcast/compose.html:34
+msgid "No users match."
+msgstr "لا يوجد مستخدمون مطابقون."
+
 #: templates/admin/notifications/broadcast/compose.html:35
+msgid "Today"
+msgstr "اليوم"
+
+#: templates/admin/notifications/broadcast/compose.html:36
+msgid "Clear"
+msgstr "مسح"
+
+#: templates/admin/notifications/broadcast/compose.html:37
+msgid "Previous month"
+msgstr "الشهر السابق"
+
+#: templates/admin/notifications/broadcast/compose.html:38
+msgid "Next month"
+msgstr "الشهر التالي"
+
+#: templates/admin/notifications/broadcast/compose.html:41
 msgid "New broadcast"
 msgstr "بث جديد"
 
-#: templates/admin/notifications/broadcast/compose.html:37
+#: templates/admin/notifications/broadcast/compose.html:43
 msgid ""
 "Compose once, deliver to every targeted recipient. Nothing sends until you "
 "dispatch the draft from the broadcast page."
@@ -968,60 +1033,85 @@ msgstr ""
 "اكتب مرة واحدة، ويصل إلى كل مستلم مستهدف. لا يُرسل شيء حتى تبث المسودة من "
 "صفحة البث."
 
-#: templates/admin/notifications/broadcast/compose.html:57
+#: templates/admin/notifications/broadcast/compose.html:63
 msgid "Message"
 msgstr "الرسالة"
 
-#: templates/admin/notifications/broadcast/compose.html:103
+#: templates/admin/notifications/broadcast/compose.html:119
 msgid "Signed up between"
 msgstr "سجّل بين"
 
-#: templates/admin/notifications/broadcast/compose.html:106
+#: templates/admin/notifications/broadcast/compose.html:123
+#: templates/admin/notifications/broadcast/compose.html:130
+msgid "Open calendar"
+msgstr "فتح التقويم"
+
+#: templates/admin/notifications/broadcast/compose.html:127
 msgid "and"
 msgstr "و"
 
-#: templates/admin/notifications/broadcast/compose.html:115
+#: templates/admin/notifications/broadcast/compose.html:140
+msgid ""
+"Search by name, email or phone and add each user. Only these users receive "
+"the broadcast."
+msgstr ""
+"ابحث بالاسم أو البريد الإلكتروني أو الهاتف وأضف كل مستخدم. هؤلاء المستخدمون "
+"فقط يستلمون البث."
+
+#: templates/admin/notifications/broadcast/compose.html:145
+msgid "Find a user…"
+msgstr "ابحث عن مستخدم…"
+
+#: templates/admin/notifications/broadcast/compose.html:145
+msgid "Find a user"
+msgstr "ابحث عن مستخدم"
+
+#: templates/admin/notifications/broadcast/compose.html:148
+msgid "No users picked yet."
+msgstr "لم يتم اختيار أي مستخدم بعد."
+
+#: templates/admin/notifications/broadcast/compose.html:154
+msgid "Remove"
+msgstr "إزالة"
+
+#: templates/admin/notifications/broadcast/compose.html:167
 msgid "Preview"
 msgstr "معاينة"
 
-#: templates/admin/notifications/broadcast/compose.html:118
-#: templates/admin/notifications/notificationkindconfig/change_list.html:121
+#: templates/admin/notifications/broadcast/compose.html:170
+#: templates/admin/notifications/notificationkindconfig/change_list.html:99
 msgid "APP"
 msgstr "التطبيق"
 
-#: templates/admin/notifications/broadcast/compose.html:124
+#: templates/admin/notifications/broadcast/compose.html:176
 msgid "Approximate — each platform truncates differently."
 msgstr "تقريبي — كل منصة تقتطع النص بطريقة مختلفة."
 
-#: templates/admin/notifications/broadcast/compose.html:129
-msgid "Send to"
-msgstr "إرسال إلى"
-
-#: templates/admin/notifications/broadcast/compose.html:147
+#: templates/admin/notifications/broadcast/compose.html:199
 msgid ""
 "SMS is billed per message. Check the reach above before creating this draft."
 msgstr ""
 "تُحتسب تكلفة الرسائل النصية لكل رسالة. راجع مدى الوصول أعلاه قبل إنشاء هذه "
 "المسودة."
 
-#: templates/admin/notifications/broadcast/compose.html:154
-#: templates/admin/notifications/broadcast/compose.html:177
+#: templates/admin/notifications/broadcast/compose.html:206
+#: templates/admin/notifications/broadcast/compose.html:229
 msgid "Create draft"
 msgstr "إنشاء مسودة"
 
-#: templates/admin/notifications/broadcast/compose.html:159
+#: templates/admin/notifications/broadcast/compose.html:211
 msgid "Back to broadcasts"
 msgstr "العودة إلى عمليات البث"
 
-#: templates/admin/notifications/broadcast/compose.html:169
+#: templates/admin/notifications/broadcast/compose.html:221
 msgid "Create this broadcast?"
 msgstr "إنشاء هذا البث؟"
 
-#: templates/admin/notifications/broadcast/compose.html:172
+#: templates/admin/notifications/broadcast/compose.html:224
 msgid "Creates a draft only. You dispatch it from the broadcast page."
 msgstr "يُنشئ مسودة فقط. تبثها من صفحة البث."
 
-#: templates/admin/notifications/broadcast/compose.html:175
+#: templates/admin/notifications/broadcast/compose.html:227
 msgid "Cancel"
 msgstr "إلغاء"
 
@@ -1071,30 +1161,30 @@ msgstr ""
 "إدخال صندوق الوارد داخل التطبيق دائمًا — تعطيل جميع القنوات يعني صندوق الوارد "
 "فقط."
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:53
+#: templates/admin/notifications/notificationkindconfig/change_list.html:50
 msgid ""
 "Created just now with recommended values - review the channels and message."
 msgstr "أُنشئ الآن بقيم موصى بها - راجع القنوات والرسالة."
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:54
+#: templates/admin/notifications/notificationkindconfig/change_list.html:51
 msgid "New"
 msgstr "جديد"
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:81
+#: templates/admin/notifications/notificationkindconfig/change_list.html:59
 msgid "Variables"
 msgstr "المتغيرات"
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:85
+#: templates/admin/notifications/notificationkindconfig/change_list.html:63
 #, python-format
 msgid "Insert %(token)s — for example %(sample)s"
 msgstr "أدرج %(token)s — مثال: %(sample)s"
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:119
+#: templates/admin/notifications/notificationkindconfig/change_list.html:97
 #, python-format
 msgid "Preview (%(language)s)"
 msgstr "معاينة (%(language)s)"
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:137
+#: templates/admin/notifications/notificationkindconfig/change_list.html:134
 msgid "Save changes"
 msgstr "حفظ التغييرات"
 

@@ -287,6 +287,29 @@ UNFOLD = {
             },
         },
     },
+    # Broadcasts and the notifications they produce share one screen: tabs
+    # on both changelists, Broadcasts first (the operator's entry point).
+    "TABS": [
+        {
+            "models": ["notifications.broadcast", "notifications.notification"],
+            "items": [
+                {
+                    "title": _("Broadcasts"),
+                    "link": reverse_lazy("admin:notifications_broadcast_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "notifications.view_broadcast"
+                    ),
+                },
+                {
+                    "title": _("Notifications"),
+                    "link": reverse_lazy("admin:notifications_notification_changelist"),
+                    "permission": lambda request: request.user.has_perm(
+                        "notifications.view_notification"
+                    ),
+                },
+            ],
+        },
+    ],
     "SIDEBAR": {
         "show_search": True,
         "show_all_applications": True,
@@ -335,14 +358,16 @@ UNFOLD = {
             {
                 "title": _("Notifications"),
                 "items": [
+                    # Broadcasts is the entry point; the Notifications list
+                    # sits behind it as a tab (UNFOLD["TABS"]).
                     {
-                        "title": _("Notifications"),
-                        "icon": "notifications",
+                        "title": _("Broadcasts"),
+                        "icon": "campaign",
                         "link": reverse_lazy(
-                            "admin:notifications_notification_changelist"
+                            "admin:notifications_broadcast_changelist"
                         ),
                         "permission": lambda request: request.user.has_perm(
-                            "notifications.view_notification"
+                            "notifications.view_broadcast"
                         ),
                     },
                     {
@@ -353,16 +378,6 @@ UNFOLD = {
                         ),
                         "permission": lambda request: request.user.has_perm(
                             "notifications.view_notificationdelivery"
-                        ),
-                    },
-                    {
-                        "title": _("Broadcasts"),
-                        "icon": "campaign",
-                        "link": reverse_lazy(
-                            "admin:notifications_broadcast_changelist"
-                        ),
-                        "permission": lambda request: request.user.has_perm(
-                            "notifications.view_broadcast"
                         ),
                     },
                     {

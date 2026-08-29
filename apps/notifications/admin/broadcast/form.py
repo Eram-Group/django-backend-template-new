@@ -20,6 +20,7 @@ from apps.notifications.catalog import catalog_entry
 from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import Broadcast
+from apps.users.models import User
 
 # Only ANNOUNCEMENT is operator-authored: its title and body are literally
 # "{title}" and "{message}". The other kinds are per-user events - WELCOME
@@ -53,12 +54,45 @@ def _channel_choices() -> list[tuple[str, str]]:
     ]
 
 
+DATE_ATTRS = {
+    "type": "text",
+    "class": "bc-input bc-date",
+    "inputmode": "numeric",
+    "placeholder": "YYYY-MM-DD",
+    "autocomplete": "off",
+    "maxlength": "10",
+}
+
+
+TARGET_FILTERS = "filters"
+TARGET_USERS = "users"
+
+
 class BroadcastAudienceForm(forms.ModelForm[Broadcast]):
-    """Just the audience filters.
+    """Just the audience: the filters, or a hand-picked list of users.
 
     Split out so the live reach estimate can validate a half-written audience
     without demanding the message the operator has not typed yet.
     """
+
+    target = forms.ChoiceField(
+        label=_("Send to"),
+        choices=[
+            (TARGET_FILTERS, _("Everyone matching the filters")),
+            (TARGET_USERS, _("Specific users")),
+        ],
+        initial=TARGET_FILTERS,
+        required=False,  # absent (an estimate with no filters yet) = filters
+        widget=forms.RadioSelect,
+    )
+    # Posted as repeated hidden inputs by the composer's user picker; the
+    # queryset is the validation (an inactive or unknown pk is a field error).
+    recipients = forms.ModelMultipleChoiceField(
+        label=_("Users"),
+        queryset=User.objects.filter(is_active=True),
+        required=False,
+        widget=forms.MultipleHiddenInput,
+    )
 
     class Meta:
         model = Broadcast
@@ -73,12 +107,11 @@ class BroadcastAudienceForm(forms.ModelForm[Broadcast]):
             # chips, and "no filter" has to be a visible, clickable option
             # instead of an empty row that reads as "nothing chosen yet".
             "language": forms.RadioSelect,
-            "joined_after": forms.DateInput(
-                attrs={"type": "date", "class": "bc-input"}
-            ),
-            "joined_before": forms.DateInput(
-                attrs={"type": "date", "class": "bc-input"}
-            ),
+            # ISO text fields: the composer's own calendar (broadcast_compose.js)
+            # fills them, typing still works, and the value posted is the same
+            # YYYY-MM-DD the form always accepted - no browser-native popover.
+            "joined_after": forms.DateInput(attrs=DATE_ATTRS, format="%Y-%m-%d"),
+            "joined_before": forms.DateInput(attrs=DATE_ATTRS, format="%Y-%m-%d"),
         }
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -93,6 +126,11 @@ class BroadcastAudienceForm(forms.ModelForm[Broadcast]):
     def clean(self) -> dict[str, Any]:
         super().clean()
         cleaned = self.cleaned_data
+        if (cleaned.get("target") or TARGET_FILTERS) == TARGET_USERS:
+            if not cleaned.get("recipients"):
+                self.add_error("recipients", _("Pick at least one user."))
+        else:
+            cleaned["recipients"] = []  # a leftover pick must not narrow "everyone"
         joined_after = cleaned.get("joined_after")
         joined_before = cleaned.get("joined_before")
         if joined_after and joined_before and joined_after > joined_before:
@@ -118,7 +156,21 @@ class BroadcastAudienceForm(forms.ModelForm[Broadcast]):
             require_device=cleaned["require_device"],
             joined_after=cleaned["joined_after"],
             joined_before=cleaned["joined_before"],
+            recipient_ids=self.recipient_ids(),
         )
+
+    def recipient_ids(self) -> list[str]:
+        return [str(user.pk) for user in self.cleaned_data.get("recipients", [])]
+
+    def selected_users(self) -> list[dict[str, str]]:
+        """The picked users for re-rendering the chips after a failed POST."""
+        raw = self.data.getlist("recipients") if hasattr(self.data, "getlist") else []
+        if not raw:
+            return []
+        return [
+            {"id": str(user.pk), "name": user.name, "email": user.email}
+            for user in User.objects.filter(is_active=True, pk__in=raw).order_by("name")
+        ]
 
 
 class BroadcastComposeForm(BroadcastAudienceForm):
@@ -181,4 +233,5 @@ class BroadcastComposeForm(BroadcastAudienceForm):
             "joined_after": cleaned["joined_after"],
             "joined_before": cleaned["joined_before"],
             "channels": cleaned["channels"],
+            "recipient_ids": self.recipient_ids(),
         }

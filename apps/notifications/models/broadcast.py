@@ -4,7 +4,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.common.models import BaseModel
 from apps.notifications.constants import BroadcastStatus
-from apps.notifications.constants import NotificationKind
+from apps.notifications.validators import validate_kind
 from apps.users.constants import Language
 
 
@@ -20,7 +20,7 @@ class Broadcast(BaseModel):
     "refresh progress" action recounts to fix any drift.
     """
 
-    kind = models.CharField(_("kind"), max_length=50, choices=NotificationKind)
+    kind = models.CharField(_("kind"), max_length=50, validators=[validate_kind])
     context = models.JSONField(_("context"), default=dict, blank=True)
     status = models.CharField(
         _("status"),
@@ -44,6 +44,10 @@ class Broadcast(BaseModel):
     )
     joined_after = models.DateField(_("joined on or after"), null=True, blank=True)
     joined_before = models.DateField(_("joined on or before"), null=True, blank=True)
+    # Hand-picked audience: user pks (as strings). Non-empty = send to exactly
+    # these users (still active, ``require_device`` still applies) and the
+    # language/date filters are ignored. Empty = the filters decide.
+    recipient_ids = models.JSONField(_("specific recipients"), default=list, blank=True)
     # Exactly the channels this send goes out on - every broadcast picks its
     # own, there is no kind-level default. Never empty (blank=False rejects
     # [] in full_clean; the service validates the subset).

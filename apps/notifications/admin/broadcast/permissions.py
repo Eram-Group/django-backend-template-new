@@ -23,6 +23,7 @@ FIELD_PERMISSIONS = FieldPermissions(
         "require_device": on_change,
         "joined_after": on_change,
         "joined_before": on_change,
+        "recipient_ids": on_change,
         "channels": on_change,
     },
 )

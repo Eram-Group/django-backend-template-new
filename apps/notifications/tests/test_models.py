@@ -134,3 +134,17 @@ def test_kind_config_accepts_supported_channels_and_known_placeholders() -> None
     config.body_ar = "الرصيد الجديد: {balance}."
 
     config.full_clean()  # does not raise
+
+
+def test_enum_columns_are_validated_without_choices() -> None:
+    """No ``choices=`` on kind/channel (a new kind must not need a
+    migration) - the validators still reject anything outside the enum."""
+    from apps.notifications.models import NotificationDelivery
+    from apps.notifications.models import NotificationKindConfig
+
+    with pytest.raises(ValidationError, match="kind"):
+        NotificationKindConfig(kind="carrier_pigeon").full_clean()
+    with pytest.raises(ValidationError, match="channel"):
+        NotificationDelivery(channel="carrier_pigeon").full_clean(
+            exclude=["notification"]
+        )
