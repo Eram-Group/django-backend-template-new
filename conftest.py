@@ -9,18 +9,18 @@ import stamina
 from django.core.cache import cache
 from pytest_django import Settings
 
-from apps.notifications.services import notification_config_seed
+from apps.notifications.tests.factories import seed_kind_configs
 from apps.users.models import User
 from apps.users.tests.factories import UserFactory
 
 
 @pytest.fixture(scope="session")
 def django_db_setup(django_db_setup: None, django_db_blocker: Any) -> None:
-    """The test database gets the same release step as a deployment: the
-    NotificationKindConfig rows the send path requires (idempotent, so a
-    --reuse-db database is topped up, never rewritten)."""
+    """Every kind's NotificationKindConfig row exists from the start, as if
+    an operator had saved each card once (idempotent on a --reuse-db
+    database)."""
     with django_db_blocker.unblock():
-        notification_config_seed()
+        seed_kind_configs()
 
 
 @pytest.fixture(autouse=True, scope="session")

@@ -39,21 +39,18 @@ def notification_broadcast(
     require_device: bool,
     joined_after: date | None,
     joined_before: date | None,
-    channels: Sequence[str] | None,
+    channels: Sequence[str],
     actor: User,
 ) -> Broadcast:
     """Author a DRAFT broadcast; nothing sends until broadcast_dispatch.
 
-    ``channels`` is the per-broadcast override: ``None`` = the kind's config
-    row decides at dispatch time; a list = exactly these channels for this
-    send (a subset of what the kind supports, never empty - "send on nothing"
-    is not a broadcast).
+    ``channels`` is exactly what this send goes out on - every broadcast picks
+    its own (a non-empty subset of what the kind supports; "send on nothing"
+    is not a broadcast). There is no kind-level default behind it.
     """
     entry = catalog_entry(kind)
     _validate_context(kind=kind, entry=entry, context=context)
-    resolved_channels = (
-        [] if channels is None else _validate_channels(entry=entry, channels=channels)
-    )
+    resolved_channels = _validate_channels(entry=entry, channels=channels)
     if joined_after and joined_before and joined_after > joined_before:
         raise BroadcastAudienceError(
             str(_("The joined-after date must not be later than joined-before."))
@@ -81,9 +78,7 @@ def _validate_channels(*, entry: MessageTemplate, channels: Sequence[str]) -> li
     """
     selected = set(map(str, channels))
     if not selected:
-        raise BroadcastAudienceError(
-            str(_("Pick at least one channel, or leave the kind's policy in place."))
-        )
+        raise BroadcastAudienceError(str(_("Pick at least one channel.")))
     supported = {str(channel) for channel in entry.supported_channels}
     unsupported = sorted(selected - supported)
     if unsupported:

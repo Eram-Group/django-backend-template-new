@@ -73,8 +73,18 @@ def execute_deliveries(*, delivery_ids: list[str]) -> None:
         .order_by("channel", "pk")
     )
     by_channel: dict[str, list[NotificationDelivery]] = defaultdict(list)
+    retired: list[NotificationDelivery] = []
     for row in rows:
+        if row.notification.kind not in NotificationKind.values:
+            # The kind left the enum after this row was queued: nothing can
+            # render it. Terminal, so the sweep does not retry it forever.
+            row.status = DeliveryStatus.SKIPPED
+            row.detail = "kind retired"
+            retired.append(row)
+            continue
         by_channel[row.channel].append(row)
+    if retired:
+        _record_outcomes(retired)
     # One config query for the whole batch - rendering per row must not be.
     configs = selectors.notification_config_map()
     for channel, channel_rows in by_channel.items():

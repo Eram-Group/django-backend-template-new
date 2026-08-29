@@ -5,8 +5,8 @@
  * puts on <html>.
  *
  * Density is the point: each card is a few tight rows (header / channels /
- * copy / preview), hints live in tooltips, and nothing stretches to fill a
- * column it does not need. */
+ * variables / copy), hints live in tooltips, and the composer shows both
+ * languages side by side so nothing is hidden behind a tab. */
 
 .nc {
     --nc-surface: #f9fafb;
@@ -22,7 +22,9 @@
     --nc-amber: #b45309;
     --nc-amber-quiet: rgb(180 83 9 / 0.1);
 
-    max-width: 880px;
+    box-sizing: border-box;
+    max-width: 1600px;
+    padding: 0 24px;
     margin: 0 auto;
     color: var(--nc-body);
 }
@@ -109,20 +111,14 @@
     background: var(--nc-amber-quiet);
 }
 
-.nc-vars {
-    display: inline-flex;
-    gap: 4px;
-    cursor: default;
+.nc-badge.is-new {
+    display: none;
+    color: var(--nc-alert);
+    background: rgb(185 28 28 / 0.1);
 }
 
-.nc-vars code {
-    padding: 1px 6px;
-    font-family: ui-monospace, monospace;
-    font-size: 10px;
-    color: var(--nc-muted);
-    background: var(--nc-surface);
-    border: 1px solid var(--nc-line-soft);
-    border-radius: 5px;
+.nc-card[data-new="1"] .nc-badge.is-new {
+    display: inline-block;
 }
 
 .nc-grow {
@@ -140,17 +136,6 @@
 
 .nc-status.is-bad {
     color: var(--nc-alert);
-}
-
-.nc-full-link {
-    font-size: 11px;
-    color: var(--nc-muted);
-    text-decoration: none;
-}
-
-.nc-full-link:hover {
-    color: var(--nc-body);
-    text-decoration: underline;
 }
 
 .nc-btn {
@@ -173,6 +158,41 @@
     cursor: default;
     background: var(--nc-surface);
     border-color: var(--nc-line);
+}
+
+/* --- sticky save bar (one save for every edited card) ---------------------- */
+.nc-bar {
+    position: sticky;
+    bottom: 12px;
+    z-index: 30;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px 8px 16px;
+    margin-top: 4px;
+    background: var(--nc-raised);
+    border: 1px solid var(--nc-amber);
+    border-radius: var(--border-radius, 8px);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+}
+
+.nc-bar[hidden] {
+    display: none;
+}
+
+.nc-bar-status {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--nc-body);
+}
+
+.nc-bar-status.is-good {
+    color: var(--nc-accent);
+}
+
+.nc-bar-status.is-bad {
+    color: var(--nc-alert);
 }
 
 /* --- generic row: small key + content ------------------------------------ */
@@ -266,19 +286,28 @@
     opacity: 0.6;
 }
 
-/* --- message fields (2-up EN/AR grid) ------------------------------------ */
-.nc-fields {
+/* --- composer: one pane per language, both on screen, previews underneath -- */
+.nc-compose {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px 12px;
-    padding: 12px 0;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 4px 24px;
+    padding: 12px 0 14px;
     border-top: 1px solid var(--nc-line-soft);
 }
 
-@media (max-width: 640px) {
-    .nc-fields {
+@media (max-width: 720px) {
+    .nc-compose {
         grid-template-columns: 1fr;
     }
+}
+
+.nc-pane {
+    min-width: 0;
+}
+
+.nc-field {
+    position: relative;
+    margin-bottom: 10px;
 }
 
 .nc-label {
@@ -290,34 +319,126 @@
     color: var(--nc-muted);
 }
 
-.nc-input,
-.nc-textarea {
+/* The form's real inputs: hydration source and save transport only. */
+.nc-src {
+    display: none;
+}
+
+.nc-editor {
     width: 100%;
+    min-height: 34px;
     padding: 6px 10px;
-    font-family: inherit;
-    font-size: 12.5px;
+    font-size: 13px;
+    line-height: 1.55;
     color: var(--nc-strong);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
     background: var(--nc-surface);
     border: 1px solid var(--nc-line);
     border-radius: 6px;
 }
 
-.nc-textarea {
-    min-height: 52px;
-    line-height: 1.45;
-    resize: vertical;
+.nc-editor[data-single="0"] {
+    min-height: 64px;
 }
 
-.nc-input:focus,
-.nc-textarea:focus {
+.nc-editor:focus {
     outline: none;
     border-color: var(--nc-accent);
     box-shadow: 0 0 0 3px var(--nc-accent-quiet);
 }
 
-.nc-input.is-invalid,
-.nc-textarea.is-invalid {
+.nc-editor.is-invalid {
     border-color: var(--nc-alert);
+}
+
+/* --- variable pills (in the editor, the menu and the palette) --------------- */
+.nc-tok {
+    display: inline-block;
+    padding: 0 6px;
+    margin: 0 1px;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--nc-accent);
+    vertical-align: baseline;
+    user-select: none;
+    unicode-bidi: isolate;
+    background: var(--nc-accent-quiet);
+    border: 1px solid transparent;
+    border-radius: 5px;
+}
+
+.nc-editor .nc-tok:hover {
+    border-color: var(--nc-accent);
+}
+
+.nc-tok.is-unknown {
+    color: var(--nc-alert);
+    text-decoration: line-through;
+    background: rgb(185 28 28 / 0.1);
+}
+
+/* --- "{" menu ----------------------------------------------------------------- */
+.nc-menu {
+    position: absolute;
+    z-index: 20;
+    min-width: 220px;
+    padding: 4px;
+    background: var(--nc-raised);
+    border: 1px solid var(--nc-line);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.14);
+}
+
+.nc-menu-item {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 8px;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+.nc-menu-item.is-on,
+.nc-menu-item:hover {
+    background: var(--nc-surface);
+}
+
+/* --- variable palette: a pill row beside the Channels row ------------------- */
+.nc-palette {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.nc-var {
+    padding: 2px 4px;
+    font: inherit;
+    cursor: pointer;
+    background: none;
+    border: 0;
+    border-radius: 6px;
+}
+
+.nc-var:hover .nc-tok {
+    border-color: var(--nc-accent);
+}
+
+.nc-var:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--nc-accent-quiet);
+}
+
+/* The example value only shows in the "{" menu now; the row keeps tooltips. */
+.nc-var-sample {
+    overflow: hidden;
+    font-size: 11.5px;
+    color: var(--nc-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .nc-error {
@@ -335,36 +456,16 @@
     margin-top: 0;
 }
 
-/* --- locked message (announcement) ---------------------------------------- */
-.nc-locked-note {
-    font-size: 12px;
-    color: var(--nc-muted);
-}
-
-.nc-locked-link {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--nc-accent);
-    text-decoration: none;
-    white-space: nowrap;
-}
-
-.nc-locked-link:hover {
-    text-decoration: underline;
-}
-
-/* --- footer: one-line preview + language flip ------------------------------ */
-.nc-foot {
-    justify-content: space-between;
+/* --- push preview: one per language, under its own editor column ----------- */
+.nc-preview {
+    min-width: 0;
 }
 
 .nc-push {
     display: flex;
-    flex: 1;
     gap: 9px;
-    align-items: center;
+    align-items: flex-start;
     min-width: 0;
-    max-width: 520px;
     padding: 7px 10px;
     background: var(--nc-surface);
     border: 1px solid var(--nc-line-soft);
@@ -386,14 +487,21 @@
 
 .nc-push-body {
     min-width: 0;
+    flex: 1;
 }
 
 .nc-push-title,
 .nc-push-text {
-    overflow: hidden;
     font-size: 11.5px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.nc-push-title.is-empty,
+.nc-push-text.is-empty {
+    font-style: italic;
+    color: var(--nc-muted);
 }
 
 .nc-push-title {
@@ -405,28 +513,10 @@
     color: var(--nc-body);
 }
 
-.nc-langs {
-    display: inline-flex;
-    gap: 2px;
-    padding: 2px;
-    background: var(--nc-surface);
-    border: 1px solid var(--nc-line);
-    border-radius: 7px;
-}
-
-.nc-lang {
-    padding: 2px 8px;
-    font-size: 10px;
-    font-weight: 650;
-    color: var(--nc-muted);
-    cursor: pointer;
-    background: none;
-    border: 0;
-    border-radius: 5px;
-}
-
-.nc-lang.is-on {
-    color: var(--nc-strong);
-    background: var(--nc-raised);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+/* A placeholder rendered as its example value inside a preview. */
+.nc-sample {
+    padding: 0 3px;
+    color: var(--nc-accent);
+    background: var(--nc-accent-quiet);
+    border-radius: 3px;
 }

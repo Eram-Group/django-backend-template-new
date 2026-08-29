@@ -1,0 +1,14 @@
+{% extends "emails/base.html" %}
+{% load i18n %}
+
+{% block preheader %}{% translate "No account with this email" %}{% endblock %}
+
+{% block content %}
+  <h1 style="margin:0 0 16px; font-size:20px; color:#0f172a;">{% translate "No account with this email" %}</h1>
+  <p style="margin:0 0 16px;">{% translate "Someone asked for a sign-in code with this email address, but there is no account for it." %}</p>
+  <p style="margin:0 0 24px;">{% translate "If that was you, create an account first:" %}</p>
+  <a href="{{ signup_url }}" style="display:inline-block; background:#16a34a; color:#ffffff; text-decoration:none; padding:12px 24px; border-radius:8px; font-weight:700;">{% translate "Create an account" %}</a>
+  {# The plain-text part is derived from this HTML with tags stripped, so the URL must also appear as text. #}
+  <p style="margin:16px 0 0; color:#64748b; font-size:13px; word-break:break-all;" dir="ltr">{{ signup_url }}</p>
+  <p style="margin:24px 0 0; color:#94a3b8; font-size:13px;">{% translate "This mail can be safely ignored if you did not initiate this action." %}</p>
+{% endblock content %}

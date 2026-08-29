@@ -13,13 +13,13 @@ validates against:
 - ``category`` and the WhatsApp template mapping (Meta hosts the approved
   per-language bodies, so entries carry only the template NAME plus the
   ordered context keys that fill its {{1}}, {{2}}, ... slots).
-- ``title``/``body``/``default_channels``: SEED values only - what
-  ``manage.py seed_notification_config`` (release step) writes into a kind's
-  config row when it has none, and what the test reset restores; edits here
-  do not change a database that already has its rows.
+- ``title``/``body``/``default_channels``: RECOMMENDED values only - what
+  the Notification actions page writes into a kind's config row when it
+  opens and finds none (and what the test reset writes); edits here do not
+  change a database that already has its rows.
 
-Entries are append-only: adding a NotificationKind gets its row on the next
-release; removing one requires a data migration for surviving rows.
+Entries are append-only: adding a NotificationKind puts its card on the
+actions page; removing one requires a data migration for surviving rows.
 test_catalog and test_config keep everything in lockstep.
 """
 
@@ -102,9 +102,9 @@ CATALOG: Mapping[NotificationKind, MessageTemplate] = {
         body="{message}",
         category=NotificationCategory.MARKETING,
         supported_channels=frozenset({Channel.PUSH, Channel.SMS, Channel.WHATSAPP}),
-        # SMS costs money and Egyptian SMS loops per message; WhatsApp waits
-        # on the connector + tier ramp. Operators pin them on per campaign.
-        default_channels=frozenset({Channel.PUSH}),
+        # Every broadcast picks its own channels in the composer; the config
+        # row's channels are never consulted for this kind.
+        default_channels=frozenset(),
         context_keys=frozenset({"title", "message"}),
         # One variable still: Meta approved this template body with a single
         # {{1}} slot and the slot count is fixed on their side, so carrying the

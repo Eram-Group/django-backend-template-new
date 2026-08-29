@@ -25,7 +25,12 @@
        data-text-saved="{% translate 'Saved' %}"
        data-text-failed="{% translate 'Could not save' %}"
        data-text-invalid="{% translate 'Fix the highlighted fields' %}"
-       data-text-unsaved="{% translate 'Unsaved changes' %}">
+       data-text-unsaved="{% translate 'Unsaved changes' %}"
+       data-text-unknown="{% translate 'Not available for this action:' %}"
+       data-text-empty-title="{% translate 'Your title' %}"
+       data-text-empty-body="{% translate 'Your message appears here.' %}"
+       data-text-dirty-one="{% translate '1 action changed' %}"
+       data-text-dirty-many="{% translate '%(count)s actions changed' %}">
 
     <div class="nc-head">
       <h1>{% translate "Notification actions" %}</h1>
@@ -34,27 +39,22 @@
       </p>
     </div>
 
+    <form id="nc-form" novalidate>
+      {% csrf_token %}
     {% for card in config_cards %}
-      <form class="nc-card" data-kind="{{ card.kind }}" novalidate>
-        {% csrf_token %}
-        <input type="hidden" name="kind" value="{{ card.kind }}">
+      <section class="nc-card" data-kind="{{ card.kind }}"{% if card.new %} data-new="1"{% endif %}>
+        <input type="hidden" name="kind" value="{{ card.kind }}" disabled>
 
         <div class="nc-top">
           <h2>{{ card.label }}</h2>
           <span class="nc-badge {% if card.marketing %}is-marketing{% else %}is-transactional{% endif %}">
             {{ card.category }}
           </span>
-          {% if card.needs %}
-            <span class="nc-vars" title="{% translate 'The variables this action provides — the only placeholders its message may use.' %}">
-              {% for key in card.needs %}<code>{{ key }}</code>{% endfor %}
-            </span>
-          {% endif %}
+          <span class="nc-badge is-new" title="{% translate 'Created just now with recommended values - review the channels and message.' %}">
+            {% translate "New" %}
+          </span>
           <span class="nc-grow"></span>
           <span class="nc-status" aria-live="polite"></span>
-          <a class="nc-full-link" href="{{ card.change_url }}">{% translate "Full form" %}</a>
-          {% if config_can_save %}
-            <button type="submit" class="nc-btn" disabled>{% translate "Save" %}</button>
-          {% endif %}
         </div>
 
         <div class="nc-line">
@@ -76,47 +76,67 @@
           <span class="nc-error" data-field="{{ card.form.channels.html_name }}"></span>
         </div>
 
-        {% if card.locked %}
+        {% if card.vars and card.form.languages %}
           <div class="nc-line">
-            <span class="nc-key">{% translate "Message" %}</span>
-            <span class="nc-locked-note">
-              {% translate "Written per broadcast — title and body pass through exactly as the operator types them." %}
-            </span>
-            <a class="nc-locked-link" href="{% url 'admin:notifications_broadcast_changelist' %}">
-              {% translate "Go to broadcasts" %}
-            </a>
-          </div>
-        {% else %}
-          <div class="nc-fields">
-            {% for pair in card.form.message_pairs %}
-              <div class="nc-field">
-                <label class="nc-label" for="{{ pair.english.id_for_label }}">{{ pair.english.label }}</label>
-                {{ pair.english }}
-                <span class="nc-error" data-field="{{ pair.english.html_name }}"></span>
-              </div>
-              <div class="nc-field">
-                <label class="nc-label" for="{{ pair.arabic.id_for_label }}">{{ pair.arabic.label }}</label>
-                {{ pair.arabic }}
-                <span class="nc-error" data-field="{{ pair.arabic.html_name }}"></span>
-              </div>
-            {% endfor %}
-          </div>
-
-          <div class="nc-line nc-foot">
-            <div class="nc-push">
-              <div class="nc-push-icon" aria-hidden="true">{% translate "APP" %}</div>
-              <div class="nc-push-body">
-                <div class="nc-push-title" data-preview="title"></div>
-                <div class="nc-push-text" data-preview="body"></div>
-              </div>
-            </div>
-            <span class="nc-langs">
-              <button type="button" class="nc-lang is-on" data-lang="en">EN</button>
-              <button type="button" class="nc-lang" data-lang="ar">AR</button>
+            <span class="nc-key">{% translate "Variables" %}</span>
+            <span class="nc-palette">
+              {% for var in card.vars %}
+                <button type="button" class="nc-var" data-key="{{ var.key }}" data-sample="{{ var.sample }}"
+                        title="{% blocktranslate with token=var.token sample=var.sample %}Insert {{ token }} — for example {{ sample }}{% endblocktranslate %}">
+                  <span class="nc-tok">{{ var.key }}</span>
+                </button>
+              {% endfor %}
             </span>
           </div>
         {% endif %}
-      </form>
+
+        {% if card.form.languages %}
+          <div class="nc-compose">
+            {% for pane in card.form.languages %}
+              <div class="nc-pane" data-lang="{{ pane.code }}">
+                <div class="nc-field">
+                  <label class="nc-label" id="{{ pane.title.id_for_label }}-lbl">{{ pane.title.label }}</label>
+                  {{ pane.title }}
+                  <div class="nc-editor" contenteditable="true" role="textbox" spellcheck="true"
+                       data-for="{{ pane.title.html_name }}" data-single="1" dir="{{ pane.dir }}"
+                       aria-labelledby="{{ pane.title.id_for_label }}-lbl"></div>
+                  <span class="nc-error" data-field="{{ pane.title.html_name }}"></span>
+                </div>
+                <div class="nc-field">
+                  <label class="nc-label" id="{{ pane.body.id_for_label }}-lbl">{{ pane.body.label }}</label>
+                  {{ pane.body }}
+                  <div class="nc-editor" contenteditable="true" role="textbox" aria-multiline="true" spellcheck="true"
+                       data-for="{{ pane.body.html_name }}" data-single="0" dir="{{ pane.dir }}"
+                       aria-labelledby="{{ pane.body.id_for_label }}-lbl"></div>
+                  <span class="nc-error" data-field="{{ pane.body.html_name }}"></span>
+                </div>
+              </div>
+            {% endfor %}
+
+            {# Composer row three: each language's preview, under its own column. #}
+            {% for pane in card.form.languages %}
+              <div class="nc-preview" data-lang="{{ pane.code }}">
+                <div class="nc-label">{% blocktranslate with language=pane.label %}Preview ({{ language }}){% endblocktranslate %}</div>
+                <div class="nc-push">
+                  <div class="nc-push-icon" aria-hidden="true">{% translate "APP" %}</div>
+                  <div class="nc-push-body" dir="{{ pane.dir }}">
+                    <div class="nc-push-title" data-preview="title"></div>
+                    <div class="nc-push-text" data-preview="body"></div>
+                  </div>
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </section>
     {% endfor %}
+
+      {% if config_can_save %}
+        <div class="nc-bar" hidden>
+          <span class="nc-bar-status" aria-live="polite"></span>
+          <button type="submit" class="nc-btn" disabled>{% translate "Save changes" %}</button>
+        </div>
+      {% endif %}
+    </form>
   </div>
 {% endblock %}

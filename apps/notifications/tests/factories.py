@@ -74,10 +74,9 @@ class BroadcastFactory(DjangoModelFactory[Broadcast]):
     kind = NotificationKind.ANNOUNCEMENT
     context = {"title": "Maintenance", "message": "Scheduled maintenance tonight."}
     created_by = SubFactory(UserFactory)
-    # Audience/channel defaults mirror an unfiltered send: every active user,
-    # channels decided by the kind's policy. Tests opt in per case.
+    # Audience default mirrors an unfiltered push send: every active user.
     require_device = False
-    channels: list[str] = []
+    channels: list[str] = [str(Channel.PUSH)]
 
 
 class NotificationDeliveryFactory(DjangoModelFactory[NotificationDelivery]):
@@ -114,10 +113,19 @@ def kind_config_seed(kind: str) -> dict[str, Any]:
     }
 
 
+def seed_kind_configs() -> None:
+    """Every kind's row in its catalog starting state - the test-suite
+    equivalent of an operator having saved each card once."""
+    for kind in NotificationKind:
+        NotificationKindConfig.objects.update_or_create(
+            kind=kind, defaults=kind_config_seed(kind)
+        )
+
+
 class NotificationKindConfigFactory(DjangoModelFactory[NotificationKindConfig]):
     """Exists for the factory-coverage and admin gates.
 
-    Every kind's row already exists (seed command + the conftest reset), so
+    Every kind's row already exists (the conftest reset seeds them), so
     get_or_create returns the SEEDED row and ignores other kwargs - tests that
     want a different policy edit the row directly, they don't call this.
     """

@@ -47,6 +47,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
         "language": "",
         "joined_after": "",
         "joined_before": "",
+        "channels": [Channel.PUSH],
     }
     payload.update(overrides)
     return payload
@@ -130,10 +131,13 @@ def test_compose_records_selected_channels(client: Client) -> None:
     assert sorted(_composed().channels) == sorted([Channel.PUSH, Channel.SMS])
 
 
-def test_empty_channels_defer_to_the_kind_policy(client: Client) -> None:
-    _superuser_client(client).post(reverse(ADD_URL), _payload())
+def test_channels_are_required(client: Client) -> None:
+    """No kind-level default: a broadcast must say where it goes."""
+    response = _superuser_client(client).post(reverse(ADD_URL), _payload(channels=[]))
 
-    assert _composed().channels == []
+    assert response.status_code == 200  # the form re-renders with the error
+    assert "channels" in response.context["adminform"].form.errors
+    assert _nothing_composed()
 
 
 def test_reversed_dates_are_rejected_as_a_field_error(client: Client) -> None:

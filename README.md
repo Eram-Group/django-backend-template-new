@@ -136,7 +136,7 @@ definitions with secrets pulled from Secrets Manager.
 
 One image, three run modes: **web** (gunicorn, ECS Express Mode), **worker**
 (`db_worker`, Fargate), **release task** (`check --deploy` + `migrate` +
-`createcachetable` + `seed_notification_config` + `collectstatic`, run before
+`createcachetable` + `collectstatic`, run before
 each rollout from the exact revision being deployed). Infrastructure is code: [`infra/`](infra) (AWS CDK,
 Python — `just infra-*`; needs Node, `jq` and AWS credentials in the shell,
 e.g. `AWS_PROFILE=<profile> just infra-deploy dev`). The full runbook —

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-08-29 11:39+0000\n"
+"POT-Creation-Date: 2026-08-29 18:10+0000\n"
 "PO-Revision-Date: 2026-08-29 00:00+0000\n"
 "Last-Translator: Eram dev team\n"
 "Language-Team: Arabic\n"
@@ -52,7 +52,7 @@ msgstr "اترك جميع عوامل التصفية فارغة للوصول إل
 
 #: apps/notifications/admin/broadcast/change_view.py:17
 #: apps/notifications/admin/broadcast/form.py:139
-#: apps/notifications/admin/notificationkindconfig/form.py:30
+#: apps/notifications/admin/notificationkindconfig/form.py:45
 #: templates/admin/notifications/notificationkindconfig/change_list.html:61
 msgid "Channels"
 msgstr "القنوات"
@@ -93,13 +93,10 @@ msgstr "النص"
 msgid "The text every recipient sees. Sent as-is, in one piece."
 msgstr "النص الذي يراه كل مستلم. يُرسل كما هو، قطعة واحدة."
 
-#: apps/notifications/admin/broadcast/form.py:143
+#: apps/notifications/admin/broadcast/form.py:142
 msgid ""
-"Leave every channel off to use this kind's configured policy. Turning any on "
-"overrides that policy for this broadcast only."
-msgstr ""
-"اترك جميع القنوات معطّلة لاستخدام السياسة المضبوطة لهذا النوع. تفعيل أي قناة "
-"يتجاوز تلك السياسة لهذا البث فقط."
+"Where this broadcast goes out. The in-app inbox entry is always written."
+msgstr "وجهة هذا البث. يُكتب إدخال صندوق الوارد داخل التطبيق دائماً."
 
 #: apps/notifications/admin/device/list_view.py:9
 msgid "Search by user email or registration token."
@@ -113,31 +110,45 @@ msgstr "ابحث بالبريد الإلكتروني للمستلم."
 msgid "Search by provider message id or recipient email."
 msgstr "ابحث بمعرّف الرسالة لدى المزوّد أو البريد الإلكتروني للمستلم."
 
-#: apps/notifications/admin/notificationkindconfig/admin.py:128
+#: apps/notifications/admin/notificationkindconfig/admin.py:149
 msgid "Unknown action."
 msgstr "إجراء غير معروف."
 
-#: apps/notifications/admin/notificationkindconfig/form.py:45
+#: apps/notifications/admin/notificationkindconfig/admin.py:163
+msgid "Nothing to save."
+msgstr "لا يوجد ما يُحفظ."
+
+#: apps/notifications/admin/notificationkindconfig/form.py:60
 msgid "Title (Arabic)"
 msgstr "العنوان (بالعربية)"
 
-#: apps/notifications/admin/notificationkindconfig/form.py:46
+#: apps/notifications/admin/notificationkindconfig/form.py:61
 msgid "Title (English)"
 msgstr "العنوان (بالإنجليزية)"
 
-#: apps/notifications/admin/notificationkindconfig/form.py:47
+#: apps/notifications/admin/notificationkindconfig/form.py:62
 msgid "Body (Arabic)"
 msgstr "النص (بالعربية)"
 
-#: apps/notifications/admin/notificationkindconfig/form.py:48
+#: apps/notifications/admin/notificationkindconfig/form.py:63
 msgid "Body (English)"
 msgstr "النص (بالإنجليزية)"
 
-#: apps/notifications/admin/notificationkindconfig/form.py:84
+#: apps/notifications/admin/notificationkindconfig/form.py:105
 msgid "Not available for this action."
 msgstr "غير متاح لهذا الإجراء."
 
-#: apps/notifications/admin/notificationkindconfig/form.py:113
+#: apps/notifications/admin/notificationkindconfig/form.py:128
+#: apps/users/constants.py:7 config/settings/base.py:204
+msgid "English"
+msgstr "الإنجليزية"
+
+#: apps/notifications/admin/notificationkindconfig/form.py:135
+#: apps/users/constants.py:6 config/settings/base.py:203
+msgid "Arabic"
+msgstr "العربية"
+
+#: apps/notifications/admin/notificationkindconfig/form.py:169
 #, python-format
 msgid "WhatsApp sends the Meta-approved template \"%(name)s\"."
 msgstr "يرسل واتساب القالب \"%(name)s\" المعتمد من Meta."
@@ -304,46 +315,46 @@ msgstr "انضم في أو بعد"
 msgid "joined on or before"
 msgstr "انضم في أو قبل"
 
-#: apps/notifications/models/broadcast.py:52
+#: apps/notifications/models/broadcast.py:50
 #: apps/notifications/models/kind_config.py:44
 msgid "channels"
 msgstr "القنوات"
 
-#: apps/notifications/models/broadcast.py:57
+#: apps/notifications/models/broadcast.py:55
 msgid "created by"
 msgstr "أنشأه"
 
-#: apps/notifications/models/broadcast.py:59
+#: apps/notifications/models/broadcast.py:57
 msgid "dispatch cursor"
 msgstr "مؤشر البث"
 
-#: apps/notifications/models/broadcast.py:60
+#: apps/notifications/models/broadcast.py:58
 msgid "total recipients"
 msgstr "إجمالي المستلمين"
 
-#: apps/notifications/models/broadcast.py:61
+#: apps/notifications/models/broadcast.py:59
 msgid "total deliveries"
 msgstr "إجمالي عمليات التسليم"
 
-#: apps/notifications/models/broadcast.py:62
+#: apps/notifications/models/broadcast.py:60
 msgid "sent"
 msgstr "المرسَل"
 
-#: apps/notifications/models/broadcast.py:63
+#: apps/notifications/models/broadcast.py:61
 msgid "failed"
 msgstr "الفاشل"
 
-#: apps/notifications/models/broadcast.py:64
+#: apps/notifications/models/broadcast.py:62
 msgid "skipped"
 msgstr "المتخطّى"
 
-#: apps/notifications/models/broadcast.py:67
+#: apps/notifications/models/broadcast.py:65
 #: apps/notifications/models/delivery.py:32
 #: apps/notifications/models/notification.py:34
 msgid "broadcast"
 msgstr "بث"
 
-#: apps/notifications/models/broadcast.py:68
+#: apps/notifications/models/broadcast.py:66
 msgid "broadcasts"
 msgstr "عمليات البث"
 
@@ -453,26 +464,26 @@ msgstr "الإشعارات"
 msgid "Notification not found."
 msgstr "الإشعار غير موجود."
 
-#: apps/notifications/services/broadcasts.py:59
+#: apps/notifications/services/broadcasts.py:56
 msgid "The joined-after date must not be later than joined-before."
 msgstr "يجب ألا يكون تاريخ «الانضمام بعد» لاحقًا لتاريخ «الانضمام قبل»."
 
-#: apps/notifications/services/broadcasts.py:85
-#: apps/notifications/tests/test_broadcasts.py:182
-msgid "Pick at least one channel, or leave the kind's policy in place."
-msgstr "اختر قناة واحدة على الأقل، أو أبقِ سياسة النوع كما هي."
+#: apps/notifications/services/broadcasts.py:81
+#: apps/notifications/tests/test_broadcasts.py:175
+msgid "Pick at least one channel."
+msgstr "اختر قناة واحدة على الأقل."
 
-#: apps/notifications/services/broadcasts.py:92
+#: apps/notifications/services/broadcasts.py:87
 #, python-format
 msgid "This notification kind cannot be sent on: %(channels)s."
 msgstr "لا يمكن إرسال هذا النوع من الإشعارات عبر: %(channels)s."
 
-#: apps/notifications/services/broadcasts.py:105
+#: apps/notifications/services/broadcasts.py:100
 msgid "Broadcast was already dispatched."
 msgstr "تم بث هذا البث من قبل."
 
-#: apps/notifications/services/config.py:78
-#: apps/notifications/tests/test_config_admin.py:183
+#: apps/notifications/services/config.py:53
+#: apps/notifications/tests/test_config_admin.py:306
 msgid ""
 "This action's message is authored per broadcast - compose it from the "
 "Broadcasts page."
@@ -764,14 +775,6 @@ msgstr "ابحث بالبريد الإلكتروني أو الاسم الكام�
 msgid "Recent sessions"
 msgstr "الجلسات الأخيرة"
 
-#: apps/users/constants.py:6 config/settings/base.py:203
-msgid "Arabic"
-msgstr "العربية"
-
-#: apps/users/constants.py:7 config/settings/base.py:204
-msgid "English"
-msgstr "الإنجليزية"
-
 #: apps/users/models/user.py:76
 msgid "email address"
 msgstr "البريد الإلكتروني"
@@ -831,7 +834,7 @@ msgid "Devices"
 msgstr "الأجهزة"
 
 #: config/settings/base.py:377
-#: templates/admin/notifications/notificationkindconfig/change_list.html:31
+#: templates/admin/notifications/notificationkindconfig/change_list.html:36
 msgid "Notification actions"
 msgstr "إجراءات الإشعارات"
 
@@ -870,14 +873,13 @@ msgid ""
 "already exists. Sign in instead - a code is emailed to you each time, no "
 "password needed."
 msgstr ""
-"حاول شخص ما إنشاء حساب بهذا البريد الإلكتروني، لكن يوجد حساب به بالفعل. "
-"سجّل دخولك بدلًا من ذلك؛ يصلك رمز عبر البريد في كل مرة دون الحاجة إلى كلمة "
-"مرور."
+"حاول شخص ما إنشاء حساب بهذا البريد الإلكتروني، لكن يوجد حساب به بالفعل. سجّل "
+"دخولك بدلًا من ذلك؛ يصلك رمز عبر البريد في كل مرة دون الحاجة إلى كلمة مرور."
 
 #: templates/account/email/account_already_exists_message.html:9
 #: templates/account/email/email_confirmation_message.html:10
 #: templates/account/email/login_code_message.html:11
-#: templates/account/email/unknown_account_message.html:11
+#: templates/account/email/unknown_account_message.html:13
 msgid "This mail can be safely ignored if you did not initiate this action."
 msgstr "يمكنك تجاهل هذه الرسالة بأمان إن لم تكن أنت من بدأ هذا الإجراء."
 
@@ -920,6 +922,7 @@ msgstr "إنشاء حساب"
 
 #: templates/admin/notifications/broadcast/compose.html:25
 #: templates/admin/notifications/broadcast/compose.html:120
+#: templates/admin/notifications/notificationkindconfig/change_list.html:30
 msgid "Your title"
 msgstr "عنوانك"
 
@@ -966,7 +969,6 @@ msgstr ""
 "صفحة البث."
 
 #: templates/admin/notifications/broadcast/compose.html:57
-#: templates/admin/notifications/notificationkindconfig/change_list.html:81
 msgid "Message"
 msgstr "الرسالة"
 
@@ -983,7 +985,7 @@ msgid "Preview"
 msgstr "معاينة"
 
 #: templates/admin/notifications/broadcast/compose.html:118
-#: templates/admin/notifications/notificationkindconfig/change_list.html:107
+#: templates/admin/notifications/notificationkindconfig/change_list.html:121
 msgid "APP"
 msgstr "التطبيق"
 
@@ -1043,7 +1045,24 @@ msgstr "صحّح الحقول المميزة"
 msgid "Unsaved changes"
 msgstr "تغييرات غير محفوظة"
 
+#: templates/admin/notifications/notificationkindconfig/change_list.html:29
+msgid "Not available for this action:"
+msgstr "غير متاح لهذا الإجراء:"
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:31
+msgid "Your message appears here."
+msgstr "يظهر نص رسالتك هنا."
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:32
+msgid "1 action changed"
+msgstr "تغيّر إجراء واحد"
+
 #: templates/admin/notifications/notificationkindconfig/change_list.html:33
+#, python-format
+msgid "%%(count)s actions changed"
+msgstr "تغيّرت %%(count)s إجراءات"
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:38
 msgid ""
 "What each action sends, and where. Changes apply to the very next send; the "
 "in-app inbox entry is always written — all channels off means inbox only."
@@ -1052,31 +1071,32 @@ msgstr ""
 "إدخال صندوق الوارد داخل التطبيق دائمًا — تعطيل جميع القنوات يعني صندوق الوارد "
 "فقط."
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:48
+#: templates/admin/notifications/notificationkindconfig/change_list.html:53
 msgid ""
-"The variables this action provides — the only placeholders its message may "
-"use."
-msgstr ""
-"المتغيرات التي يوفرها هذا الإجراء — وهي المتغيرات الوحيدة التي يمكن لرسالته "
-"استخدامها."
+"Created just now with recommended values - review the channels and message."
+msgstr "أُنشئ الآن بقيم موصى بها - راجع القنوات والرسالة."
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:54
-msgid "Full form"
-msgstr "النموذج الكامل"
+msgid "New"
+msgstr "جديد"
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:56
-msgid "Save"
-msgstr "حفظ"
+#: templates/admin/notifications/notificationkindconfig/change_list.html:81
+msgid "Variables"
+msgstr "المتغيرات"
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:83
-msgid ""
-"Written per broadcast — title and body pass through exactly as the operator "
-"types them."
-msgstr "تُكتب لكل بث على حدة — يمرّ العنوان والنص تمامًا كما يكتبهما المشغّل."
+#: templates/admin/notifications/notificationkindconfig/change_list.html:85
+#, python-format
+msgid "Insert %(token)s — for example %(sample)s"
+msgstr "أدرج %(token)s — مثال: %(sample)s"
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:86
-msgid "Go to broadcasts"
-msgstr "الانتقال إلى عمليات البث"
+#: templates/admin/notifications/notificationkindconfig/change_list.html:119
+#, python-format
+msgid "Preview (%(language)s)"
+msgstr "معاينة (%(language)s)"
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:137
+msgid "Save changes"
+msgstr "حفظ التغييرات"
 
 #: templates/emails/welcome.html:4
 msgid "Welcome aboard!"
@@ -1090,3 +1110,53 @@ msgstr "مرحبًا بك معنا يا %(name)s!"
 #: templates/emails/welcome.html:8
 msgid "Your account is ready. We're glad to have you with us."
 msgstr "حسابك جاهز. يسعدنا انضمامك إلينا."
+
+#~ msgid ""
+#~ "This action has no saved settings yet - it sends inbox-only with its name "
+#~ "as the message until you save."
+#~ msgstr ""
+#~ "لا توجد إعدادات محفوظة لهذا الإجراء بعد - يُرسل إلى صندوق الوارد فقط "
+#~ "وباسمه كنص الرسالة حتى تحفظ."
+
+#~ msgid "Not set up"
+#~ msgstr "لم يُضبط بعد"
+
+#~ msgid "Type { to insert a variable, or click one from the row above."
+#~ msgstr "اكتب { لإدراج متغير، أو انقر على أحد المتغيرات في الصف أعلاه."
+
+#~ msgid "Insert"
+#~ msgstr "إدراج"
+
+#~ msgid ""
+#~ "Leave every channel off to use this kind's configured policy. Turning any "
+#~ "on overrides that policy for this broadcast only."
+#~ msgstr ""
+#~ "اترك جميع القنوات معطّلة لاستخدام السياسة المضبوطة لهذا النوع. تفعيل أي "
+#~ "قناة يتجاوز تلك السياسة لهذا البث فقط."
+
+#~ msgid "Pick at least one channel, or leave the kind's policy in place."
+#~ msgstr "اختر قناة واحدة على الأقل، أو أبقِ سياسة النوع كما هي."
+
+#~ msgid ""
+#~ "The variables this action provides — the only placeholders its message "
+#~ "may use."
+#~ msgstr ""
+#~ "المتغيرات التي يوفرها هذا الإجراء — وهي المتغيرات الوحيدة التي يمكن "
+#~ "لرسالته استخدامها."
+
+#~ msgid ""
+#~ "Written per broadcast — title and body pass through exactly as the "
+#~ "operator types them."
+#~ msgstr "تُكتب لكل بث على حدة — يمرّ العنوان والنص تمامًا كما يكتبهما المشغّل."
+
+#~ msgid "Go to broadcasts"
+#~ msgstr "الانتقال إلى عمليات البث"
+
+#~ msgid "Save"
+#~ msgstr "حفظ"
+
+#~ msgid "Insert a variable"
+#~ msgstr "إدراج متغير"
+
+#~ msgid "example"
+#~ msgstr "مثال"

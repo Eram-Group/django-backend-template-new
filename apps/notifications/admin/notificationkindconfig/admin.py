@@ -3,6 +3,7 @@ from typing import Any
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.http import HttpRequest
 from django.http import HttpResponse
 from django.http import JsonResponse
@@ -22,6 +23,7 @@ from apps.notifications.admin.notificationkindconfig.form import KindConfigForm
 from apps.notifications.admin.notificationkindconfig.resource import (
     NotificationKindConfigResource,
 )
+from apps.notifications.catalog import catalog_entry
 from apps.notifications.constants import NotificationCategory
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import NotificationKindConfig
@@ -34,11 +36,12 @@ class NotificationKindConfigAdmin(
     """Per-action channel + message config.
 
     The changelist template is replaced by the single-page editor (every
-    action as an editable card, saved per card through config_save_view ->
-    services.notification_config_update). The standard change form stays as
-    the no-JS fallback: TabbedTranslationAdmin swaps ``title``/``body`` for
-    their ar/en shadow fields, and FieldPermissions rules auto-cover the
-    shadows, so the ANNOUNCEMENT message lock holds on both tabs.
+    action as an editable card; one Save posts every edited card to
+    config_save_view -> services.notification_config_update, atomically).
+    The standard change form stays as the no-JS fallback:
+    TabbedTranslationAdmin swaps ``title``/``body`` for their ar/en shadow
+    fields, and FieldPermissions rules auto-cover the shadows, so the
+    ANNOUNCEMENT message lock holds on both tabs.
     """
 
     can_add = permissions.CAN_ADD
@@ -93,53 +96,85 @@ class NotificationKindConfigAdmin(
         configs = selectors.notification_config_map()
         cards: list[dict[str, Any]] = []
         for kind in sorted(NotificationKind, key=str):  # matches Meta.ordering
-            config = configs[kind]
+            if catalog_entry(kind).authored_per_send:
+                # The broadcast composer: message AND channels are picked per
+                # broadcast, so the row has nothing an operator sets here.
+                continue
+            config = configs.get(kind)
+            created = config is None
+            if created:
+                # Opening the page is the setup step: a kind with no row gets
+                # one with the catalog's recommended values, flagged on this
+                # visit so the operator reviews it.
+                config = services.notification_config_update(
+                    kind=kind, **KindConfigForm.starting_values(kind)
+                )
             form = KindConfigForm(instance=config, kind=kind, prefix=kind.value)
             cards.append(
                 {
                     "kind": str(kind),
+                    "new": created,
                     "label": kind.label,
                     "category": NotificationCategory(form.entry.category).label,
                     "marketing": form.entry.category == NotificationCategory.MARKETING,
-                    "locked": form.entry.authored_per_send,
-                    "needs": [f"{{{key}}}" for key in sorted(form.entry.context_keys)],
+                    "vars": form.variables(),
                     "form": form,
-                    "change_url": reverse(
-                        "admin:notifications_notificationkindconfig_change",
-                        args=[config.pk],
-                    ),
                 }
             )
         return cards
 
     def config_save_view(self, request: HttpRequest) -> JsonResponse:
-        """Per-card save for the editor - same seam as the change form.
+        """One save for every edited card - all or nothing.
 
-        Field invariants surface as form errors (ModelForm._post_clean runs
-        the model's clean()); the service adds the authored-message lock and
-        is the single writer either way.
+        The page posts the fields of each dirty card under its own kind
+        prefix plus one ``kind`` value per card; a kind with no row yet is
+        created by its first save. Every form is validated
+        first (ModelForm._post_clean runs the model's clean()); a single
+        invalid card fails the whole request with errors keyed by kind, and
+        the writes happen in one transaction through the service, which
+        stays the single writer.
         """
         if not self.has_change_permission(request):
             raise PermissionDenied
-        try:
-            kind = NotificationKind(request.POST.get("kind", ""))
-        except ValueError:
+        forms: list[KindConfigForm] = []
+        errors: dict[str, Any] = {}
+        configs = selectors.notification_config_map()
+        for raw in request.POST.getlist("kind"):
+            try:
+                kind = NotificationKind(raw)
+                if catalog_entry(kind).authored_per_send:
+                    raise ValueError(raw)  # noqa: TRY301 - same envelope as unknown
+            except ValueError:
+                return JsonResponse(
+                    {"ok": False, "errors": {"__all__": [_("Unknown action.")]}},
+                    status=400,
+                )
+            form = KindConfigForm(
+                data=request.POST,
+                instance=configs.get(kind),  # None = this save creates the row
+                kind=kind,
+                prefix=str(kind),
+            )
+            if not form.is_valid():
+                errors[str(kind)] = form.errors
+            forms.append(form)
+        if not forms:
             return JsonResponse(
-                {"ok": False, "errors": {"__all__": [_("Unknown action.")]}},
+                {"ok": False, "errors": {"__all__": [_("Nothing to save.")]}},
                 status=400,
             )
-        config = selectors.notification_config_get(kind=kind)
-        form = KindConfigForm(
-            data=request.POST, instance=config, kind=kind, prefix=str(kind)
-        )
-        if not form.is_valid():
-            return JsonResponse({"ok": False, "errors": form.errors}, status=400)
+        if errors:
+            return JsonResponse({"ok": False, "errors": errors}, status=400)
         try:
-            services.notification_config_update(**form.service_kwargs())
+            with transaction.atomic():
+                for form in forms:
+                    services.notification_config_update(**form.service_kwargs())
         except ApplicationError as exc:
             return JsonResponse(
                 {"ok": False, "errors": {"__all__": [exc.message]}}, status=400
             )
         except ValidationError as exc:
-            return JsonResponse({"ok": False, "errors": exc.message_dict}, status=400)
-        return JsonResponse({"ok": True})
+            return JsonResponse(
+                {"ok": False, "errors": {"__all__": exc.messages}}, status=400
+            )
+        return JsonResponse({"ok": True, "saved": [str(form.kind) for form in forms]})

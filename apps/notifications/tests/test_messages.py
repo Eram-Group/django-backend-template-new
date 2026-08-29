@@ -63,10 +63,35 @@ def test_a_preloaded_config_map_adds_no_queries(
         )
 
 
-def test_missing_rows_raise_with_seeding_guidance() -> None:
+def test_a_row_of_a_retired_kind_is_ignored() -> None:
+    """A kind removed from the enum leaves its row behind - the map skips
+    it rather than failing every caller (no data migration to retire)."""
+    NotificationKindConfig.objects.filter(kind=NotificationKind.WELCOME).update(
+        kind="retired_kind"
+    )
+
+    configs = notification_config_map()
+
+    assert "retired_kind" not in {str(kind) for kind in configs}
+    assert NotificationKind.WELCOME not in configs
+    assert NotificationKind.PAYMENT_PAID in configs
+
+
+def test_missing_row_renders_the_kind_label() -> None:
     NotificationKindConfig.objects.all().delete()
 
-    with pytest.raises(LookupError, match="seed"):
-        notification_config_map()
-    with pytest.raises(LookupError, match="seed"):
+    configs = notification_config_map()
+    with translation.override("en"):
+        message = notification_render(
+            kind=NotificationKind.WELCOME, context={"name": "x"}, configs=configs
+        )
+
+    assert configs == {}
+    assert (message.title, message.body) == ("Welcome", "Welcome")
+
+
+def test_config_get_is_loud_for_a_missing_row() -> None:
+    NotificationKindConfig.objects.all().delete()
+
+    with pytest.raises(LookupError, match="Notification actions"):
         notification_config_get(kind=NotificationKind.WELCOME)

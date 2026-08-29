@@ -15,7 +15,6 @@ RELEASE_COMMAND = (
     "python manage.py check --deploy --fail-level WARNING"
     " && python manage.py migrate --noinput"
     " && python manage.py createcachetable"
-    " && python manage.py seed_notification_config"
     " && python manage.py collectstatic --noinput"
 )
 HANDLER = Path(__file__).resolve().parents[1] / "assets" / "release_trigger.py"

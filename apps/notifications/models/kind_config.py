@@ -25,14 +25,14 @@ class NotificationKindConfig(BaseModel):
     (django-manager-missing otherwise). Declaring it keeps runtime and static
     views identical.
 
-    There is no fallback layer - the row IS the policy (empty ``channels`` =
-    inbox-only) and the copy source (``title``/``body`` have ar/en columns via
-    modeltranslation; rendering resolves the active language). Rows are born
-    in the release step (``manage.py seed_notification_config``, one per
-    kind, existing rows untouched) and are never added or deleted through
-    the admin; ``selectors.messages`` raises loudly when one is missing. The
-    catalog keeps the code-side contract (context keys, supported channels,
-    category, WhatsApp template) plus the seed values these rows start from.
+    The row IS the policy (empty ``channels`` = inbox-only) and the copy
+    source (``title``/``body`` have ar/en columns via modeltranslation;
+    rendering resolves the active language). A kind's row is created with
+    the catalog's recommended values the first time the Notification actions
+    page is opened (no seed step); until then the kind sends inbox-only with
+    its label as the message. The catalog keeps the code-side contract (context keys,
+    supported channels, category, WhatsApp template) plus the starting
+    values a new card is prefilled with.
     """
 
     objects = MultilingualManager["NotificationKindConfig"]()

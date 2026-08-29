@@ -64,7 +64,6 @@ typecheck:
 migrate:
     uv run manage.py migrate
     uv run manage.py createcachetable
-    uv run manage.py seed_notification_config
 
 # makemigrations passthrough, e.g. `just makemigrations users`.
 makemigrations *args:

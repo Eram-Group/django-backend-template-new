@@ -14,6 +14,7 @@ from apps.notifications.constants import Channel
 from apps.notifications.constants import DeliveryStatus
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import Device
+from apps.notifications.models import Notification
 from apps.notifications.selectors import notification_config_map
 from apps.notifications.selectors import notification_render
 from apps.notifications.tasks.delivery import deliver_notifications
@@ -108,6 +109,20 @@ def test_push_renders_under_recipient_language() -> None:
         )
     assert push_outbox[0].title == expected.title
     assert push_outbox[0].body == expected.body
+
+
+def test_a_delivery_of_a_retired_kind_is_skipped() -> None:
+    """The kind left the enum after the row was queued: terminal SKIPPED,
+    so the sweep never retries it and the batch's other rows still send."""
+    delivery = _delivery(channel=Channel.PUSH)
+    Notification.objects.filter(pk=delivery.notification_id).update(kind="retired_kind")
+
+    execute_deliveries(delivery_ids=[str(delivery.pk)])
+
+    delivery.refresh_from_db()
+    assert delivery.status == DeliveryStatus.SKIPPED
+    assert delivery.detail == "kind retired"
+    assert push_outbox == []
 
 
 def test_push_without_devices_is_skipped_not_sent() -> None:

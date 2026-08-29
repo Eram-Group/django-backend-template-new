@@ -137,12 +137,10 @@ class BroadcastComposeForm(BroadcastAudienceForm):
     )
     channels = forms.MultipleChoiceField(
         label=_("Channels"),
-        required=False,
         widget=forms.CheckboxSelectMultiple,
         help_text=_(
-            "Leave every channel off to use this kind's configured policy. "
-            "Turning any on overrides that policy for this broadcast only."
-        ),  # [] from the widget -> channels=None for the service
+            "Where this broadcast goes out. The in-app inbox entry is always written."
+        ),
     )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -175,7 +173,6 @@ class BroadcastComposeForm(BroadcastAudienceForm):
         ``cleaned_data`` (blank optional fields as ""/None/False/[]).
         """
         cleaned = self.cleaned_data
-        selected: list[str] = cleaned["channels"]
         return {
             "kind": COMPOSABLE_KIND,
             "context": {"title": cleaned["title"], "message": cleaned["message"]},
@@ -183,5 +180,5 @@ class BroadcastComposeForm(BroadcastAudienceForm):
             "require_device": cleaned["require_device"],
             "joined_after": cleaned["joined_after"],
             "joined_before": cleaned["joined_before"],
-            "channels": selected or None,
+            "channels": cleaned["channels"],
         }

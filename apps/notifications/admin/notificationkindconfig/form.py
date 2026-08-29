@@ -9,9 +9,11 @@ authored_per_send kinds (the composer's ANNOUNCEMENT) drop the message fields
 entirely - their copy is written per broadcast, not here.
 """
 
+from collections.abc import Mapping
 from typing import Any
 
 from django import forms
+from django.utils import translation
 from django.utils.translation import gettext_lazy as _
 
 from apps.notifications.admin.broadcast.form import CHANNEL_HINTS
@@ -23,6 +25,19 @@ from apps.notifications.constants import NotificationKind
 from apps.notifications.models import NotificationKindConfig
 
 MESSAGE_FIELDS = ("title_ar", "title_en", "body_ar", "body_en")
+
+# One realistic example per catalog context key: the editor's preview renders
+# the message with these instead of raw {placeholders}, and each insert chip
+# shows its example as a tooltip. A new context key needs a sample here in the
+# same change (test_config_admin enforces the pairing).
+SAMPLE_VALUES: Mapping[str, str] = {
+    "name": "Omar",
+    "amount": "150.00",
+    "currency": "SAR",
+    "balance": "1,250.00",
+    "title": "Weekend offer",
+    "message": "20% off everything until Sunday.",
+}
 
 
 class KindConfigForm(forms.ModelForm[NotificationKindConfig]):
@@ -47,14 +62,16 @@ class KindConfigForm(forms.ModelForm[NotificationKindConfig]):
             "body_ar": _("Body (Arabic)"),
             "body_en": _("Body (English)"),
         }
+        # The real form fields are the transport: the token editor hydrates
+        # from them and writes back into them; CSS hides them (.nc-src).
         widgets = {
-            "title_ar": forms.TextInput(attrs={"class": "nc-input", "dir": "rtl"}),
-            "title_en": forms.TextInput(attrs={"class": "nc-input", "dir": "ltr"}),
+            "title_ar": forms.TextInput(attrs={"class": "nc-src", "dir": "rtl"}),
+            "title_en": forms.TextInput(attrs={"class": "nc-src", "dir": "ltr"}),
             "body_ar": forms.Textarea(
-                attrs={"class": "nc-textarea", "rows": 2, "dir": "rtl"}
+                attrs={"class": "nc-src", "rows": 2, "dir": "rtl"}
             ),
             "body_en": forms.Textarea(
-                attrs={"class": "nc-textarea", "rows": 2, "dir": "ltr"}
+                attrs={"class": "nc-src", "rows": 2, "dir": "ltr"}
             ),
         }
 
@@ -62,6 +79,10 @@ class KindConfigForm(forms.ModelForm[NotificationKindConfig]):
         super().__init__(*args, **kwargs)
         self.kind = kind
         self.entry: MessageTemplate = catalog_entry(kind)
+        if self.instance._state.adding:
+            # A save that arrives before the page ever created the row: the
+            # kind is not a form field, so set it here for the model's clean().
+            self.instance.kind = kind
         supported = self.entry.supported_channels
         self.fields["channels"].choices = [  # type: ignore[attr-defined]
             (str(channel), str(channel.label))
@@ -97,13 +118,48 @@ class KindConfigForm(forms.ModelForm[NotificationKindConfig]):
             )
         return rows
 
-    def message_pairs(self) -> list[dict[str, Any]]:
-        """(arabic, english) bound-field pairs for the card's message block."""
+    def languages(self) -> list[dict[str, Any]]:
+        """One composer pane per language: its title/body bound fields."""
         if self.entry.authored_per_send:
             return []
         return [
-            {"arabic": self["title_ar"], "english": self["title_en"]},
-            {"arabic": self["body_ar"], "english": self["body_en"]},
+            {
+                "code": "en",
+                "label": _("English"),
+                "dir": "ltr",
+                "title": self["title_en"],
+                "body": self["body_en"],
+            },
+            {
+                "code": "ar",
+                "label": _("Arabic"),
+                "dir": "rtl",
+                "title": self["title_ar"],
+                "body": self["body_ar"],
+            },
+        ]
+
+    @classmethod
+    def starting_values(cls, kind: NotificationKind) -> dict[str, Any]:
+        """The recommended row for a kind that has none: the catalog's
+        starting copy (English in BOTH language columns - operators
+        localize) and channels. Written when the actions page is opened."""
+        entry = catalog_entry(kind)
+        with translation.override("en"):
+            title, body = str(entry.title), str(entry.body)
+        return {
+            "channels": sorted(str(channel) for channel in entry.default_channels),
+            "title_ar": title,
+            "title_en": title,
+            "body_ar": body,
+            "body_en": body,
+        }
+
+    def variables(self) -> list[dict[str, str]]:
+        """The kind's placeholders as insert chips: token + example value."""
+        return [
+            {"key": key, "token": f"{{{key}}}", "sample": SAMPLE_VALUES[key]}
+            for key in sorted(self.entry.context_keys)
         ]
 
     def whatsapp_note(self) -> str:

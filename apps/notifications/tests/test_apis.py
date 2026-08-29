@@ -57,6 +57,22 @@ def test_inbox_lists_only_own_rows_rendered(client: Client) -> None:
     assert "next_cursor" in body
 
 
+def test_inbox_hides_rows_of_a_retired_kind(client: Client) -> None:
+    """A kind removed from the enum cannot be rendered; its old rows vanish
+    from the list, the detail and the unread count instead of 500ing."""
+    user = UserFactory.create()
+    kept = NotificationFactory.create(recipient=user, context={"name": "Omar"})
+    gone = NotificationFactory.create(recipient=user, context={"name": "Omar"})
+    Notification.objects.filter(pk=gone.pk).update(kind="retired_kind")
+    client.force_login(user)
+
+    body = client.get(f"{LIST}/").json()
+
+    assert [item["id"] for item in body["items"]] == [str(kept.pk)]
+    assert client.get(f"{LIST}/{gone.pk}/").status_code == 404
+    assert client.get(f"{LIST}/unread-count").json() == {"unread": 1}
+
+
 def test_inbox_renders_edited_copy_per_request_locale(client: Client) -> None:
     """Render-at-read against the LIVE config row: an admin edit shows up in
     old inbox rows immediately, in the requester's language."""

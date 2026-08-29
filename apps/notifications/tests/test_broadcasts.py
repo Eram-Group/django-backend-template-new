@@ -5,6 +5,7 @@ from datetime import timedelta
 from typing import Any
 
 import pytest
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.utils import timezone
 from django.utils.translation import gettext
@@ -93,14 +94,11 @@ def test_dispatch_writes_inbox_rows_even_for_ineligible_users(
 def test_dispatch_respects_channel_capabilities(
     django_capture_on_commit_callbacks: Any,
 ) -> None:
-    NotificationKindConfig.objects.filter(kind=NotificationKind.ANNOUNCEMENT).update(
-        channels=[Channel.PUSH, Channel.SMS]
-    )
     with_phone = UserFactory.create(phone="+966501234567")
     DeviceFactory.create(user=with_phone)
     phoneless = UserFactory.create()
     DeviceFactory.create(user=phoneless)
-    broadcast = BroadcastFactory.create()
+    broadcast = BroadcastFactory.create(channels=[Channel.PUSH, Channel.SMS])
 
     _dispatch(broadcast, django_capture_on_commit_callbacks)
 
@@ -151,7 +149,7 @@ def _author(**overrides: Any) -> Any:
         "require_device": False,
         "joined_after": None,
         "joined_before": None,
-        "channels": None,
+        "channels": [Channel.PUSH],
         "actor": UserFactory.create(),
     }
     return services.notification_broadcast(**{**kwargs, **overrides})
@@ -162,12 +160,8 @@ def test_broadcast_validates_context() -> None:
         _author(context={"message": "x", "extra": "y"})
 
 
-class TestChannelOverride:
-    """``channels=None`` = the kind's policy at dispatch time (stored as
-    ``[]``); a list is an explicit, non-empty, supported override."""
-
-    def test_none_defers_to_the_kind_policy(self) -> None:
-        assert _author(channels=None).channels == []
+class TestChannels:
+    """Every broadcast carries its own non-empty, supported channel list."""
 
     def test_a_selection_is_stored_sorted(self) -> None:
         assert _author(channels=[Channel.SMS, Channel.PUSH]).channels == [
@@ -178,9 +172,7 @@ class TestChannelOverride:
     def test_an_empty_override_is_rejected(self) -> None:
         with pytest.raises(BroadcastAudienceError) as excinfo:
             _author(channels=[])
-        assert excinfo.value.message == gettext(
-            "Pick at least one channel, or leave the kind's policy in place."
-        )
+        assert excinfo.value.message == gettext("Pick at least one channel.")
 
     def test_an_unsupported_channel_is_rejected(self) -> None:
         with pytest.raises(BroadcastAudienceError, match="carrier_pigeon"):
@@ -400,22 +392,22 @@ class TestAudienceFilters:
 
 
 class TestPerBroadcastChannels:
-    def test_selected_channels_override_the_kind_policy(self) -> None:
+    def test_a_broadcast_sends_on_exactly_its_own_channels(self) -> None:
+        """The kind's config row is not consulted - the pick is the policy."""
+        NotificationKindConfig.objects.filter(
+            kind=NotificationKind.ANNOUNCEMENT
+        ).update(channels=[Channel.PUSH])
         broadcast = BroadcastFactory.create(channels=[Channel.SMS])
 
         channels = selectors.effective_channels(
             kind=NotificationKind.ANNOUNCEMENT, broadcast=broadcast
         )
 
-        # ANNOUNCEMENT defaults to PUSH; this send is SMS only.
         assert channels == frozenset({Channel.SMS})
 
-    def test_empty_selection_falls_back_to_the_kind_policy(self) -> None:
-        broadcast = BroadcastFactory.create(channels=[])
-
-        assert selectors.effective_channels(
-            kind=NotificationKind.ANNOUNCEMENT, broadcast=broadcast
-        ) == selectors.effective_channels(kind=NotificationKind.ANNOUNCEMENT)
+    def test_a_broadcast_with_no_channels_is_invalid(self) -> None:
+        with pytest.raises(ValidationError, match="channels"):
+            BroadcastFactory.build(channels=[]).full_clean()
 
     def test_a_channel_the_kind_no_longer_supports_is_dropped(self) -> None:
         """Defence in depth: a row written before a channel was withdrawn from

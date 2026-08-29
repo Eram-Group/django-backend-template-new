@@ -44,12 +44,10 @@ class Broadcast(BaseModel):
     )
     joined_after = models.DateField(_("joined on or after"), null=True, blank=True)
     joined_before = models.DateField(_("joined on or before"), null=True, blank=True)
-    # Empty = the kind's channel policy (its NotificationKindConfig row) at
-    # dispatch time. A non-empty list overrides it for this send only, so one
-    # announcement can add SMS without changing policy for every announcement.
-    # ``services.notification_broadcast`` takes ``None`` for the former and
-    # rejects an empty override - the column is the storage form, not the API.
-    channels = models.JSONField(_("channels"), default=list, blank=True)
+    # Exactly the channels this send goes out on - every broadcast picks its
+    # own, there is no kind-level default. Never empty (blank=False rejects
+    # [] in full_clean; the service validates the subset).
+    channels = models.JSONField(_("channels"), default=list)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,

@@ -27,22 +27,17 @@ def outboxes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _catalog_seed_config(request: pytest.FixtureRequest) -> None:
-    """Every DB test starts from catalog-seeded config rows.
+    """Every DB test starts from every kind's row in its catalog starting
+    state (as if an operator had saved each card once).
 
-    --reuse-db keeps edits committed by earlier runs, and rendering has no
-    code fallback - so each test restores the exact state the seed command
-    writes (which also self-heals a reused DB that predates the rows). Tests
-    that WANT different channels or copy edit rows after this ran.
-    Client-only tests (no django_db marker) skip the queries entirely.
+    --reuse-db keeps edits committed by earlier runs, so each test restores
+    the exact state. Tests that WANT different channels or copy (or no row)
+    edit after this ran. Client-only tests (no django_db marker) skip the
+    queries entirely.
     """
     if request.node.get_closest_marker("django_db") is None:
         return
     request.getfixturevalue("db")
-    from apps.notifications.constants import NotificationKind
-    from apps.notifications.models import NotificationKindConfig
-    from apps.notifications.tests.factories import kind_config_seed
+    from apps.notifications.tests.factories import seed_kind_configs
 
-    for kind in NotificationKind:
-        NotificationKindConfig.objects.update_or_create(
-            kind=kind, defaults=kind_config_seed(kind)
-        )
+    seed_kind_configs()

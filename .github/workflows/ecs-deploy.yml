@@ -67,7 +67,6 @@ jobs:
             "python manage.py check --deploy --fail-level WARNING &&
             python manage.py migrate --noinput &&
             python manage.py createcachetable &&
-            python manage.py seed_notification_config &&
             python manage.py collectstatic --noinput"]}]
           run-task-subnets: ${{ vars.ECS_SUBNETS }}
           run-task-security-groups: ${{ vars.ECS_SECURITY_GROUPS }}

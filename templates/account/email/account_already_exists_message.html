@@ -1,0 +1,10 @@
+{% extends "emails/base.html" %}
+{% load i18n %}
+
+{% block preheader %}{% translate "You already have an account" %}{% endblock %}
+
+{% block content %}
+  <h1 style="margin:0 0 16px; font-size:20px; color:#0f172a;">{% translate "You already have an account" %}</h1>
+  <p style="margin:0 0 24px;">{% translate "Someone tried to sign up with this email address, but an account with it already exists. Sign in instead - a code is emailed to you each time, no password needed." %}</p>
+  <p style="margin:0; color:#94a3b8; font-size:13px;">{% translate "This mail can be safely ignored if you did not initiate this action." %}</p>
+{% endblock content %}

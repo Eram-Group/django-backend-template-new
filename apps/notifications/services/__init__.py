@@ -1,6 +1,5 @@
 from apps.notifications.services.broadcasts import broadcast_dispatch
 from apps.notifications.services.broadcasts import notification_broadcast
-from apps.notifications.services.config import notification_config_seed
 from apps.notifications.services.config import notification_config_update
 from apps.notifications.services.deliveries import deliveries_resume
 from apps.notifications.services.deliveries import delivery_update_status
@@ -19,7 +18,6 @@ __all__ = [
     "device_register",
     "device_unregister",
     "notification_broadcast",
-    "notification_config_seed",
     "notification_config_update",
     "notification_delete",
     "notification_delete_all",

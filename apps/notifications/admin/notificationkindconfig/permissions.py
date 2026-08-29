@@ -1,9 +1,9 @@
 """Capability + field decisions for the NotificationKindConfig admin.
 
 THE operator surface for "this action sends on these channels, saying this".
-Rows are born in migration 0005, exactly one per kind - operators edit
-channels and copy, never the row set itself (a missing row fails sends
-loudly, so add/delete stay off).
+The actions page shows one card per kind and creates a missing row with the
+catalog's recommended values when opened (no generic add form) - the kind set
+is the catalog's, never the operator's, so add/delete stay off.
 """
 
 from typing import cast
@@ -12,9 +12,9 @@ from apps.common.admin import AdminContext
 from apps.common.admin import FieldPermissions
 from apps.notifications.constants import NotificationKind
 
-CAN_ADD = False  # one row per kind, born in migration 0005
+CAN_ADD = False  # one card per catalog kind; the actions page creates the row
 CAN_CHANGE = True
-CAN_DELETE = False  # a deleted row = LookupError on the next send
+CAN_DELETE = False  # a deleted row = label-only, inbox-only sends
 
 
 def message_locked(context: AdminContext) -> bool:

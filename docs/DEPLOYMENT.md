@@ -11,7 +11,7 @@ flows. The reasoning behind the design is in
 ```
 GitHub Actions (OIDC, arm64 build) ──push :sha──▶ ECR eram/<app>
         │
-        ├─ 1. release  : ECS RunTask (worker family)  check --deploy, migrate, createcachetable, seed_notification_config, collectstatic
+        ├─ 1. release  : ECS RunTask (worker family)  check --deploy, migrate, createcachetable, collectstatic
         ├─ 2. web      : update ECS Express Mode service   canary, auto-rollback on 5XX / unhealthy
         └─ 3. worker   : update ECS Fargate service        db_worker --queue-name default,bulk
 
@@ -164,8 +164,8 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    on a missing one — it does not skip.
 8. `just infra-deploy-first dev <sha>` — first environment deploy
    (≈ 10 min; the Express service provisions the ALB). The stack's release
-   trigger runs `check --deploy`, `migrate`, `createcachetable`,
-   `seed_notification_config` and `collectstatic` on the worker task
+   trigger runs `check --deploy`, `migrate`, `createcachetable` and
+   `collectstatic` on the worker task
    definition *before* the services are
    created, so `/readyz` is green on the first task.
 9. Create the GitHub environment `dev` and copy the `<app>-App-dev` outputs into
@@ -194,7 +194,7 @@ identity and change `AppConfig.ses_identity`).
 1. **release** — `amazon-ecs-deploy-task-definition` registers a worker
    revision with the new image and runs it once (on-demand Fargate) with the
    command `check --deploy --fail-level WARNING && migrate && createcachetable
-   && seed_notification_config && collectstatic`. Any Django deploy warning
+   && collectstatic`. Any Django deploy warning
    stops the rollout before the
    database is touched. Migrations must be expand/contract: web rolls before
    worker by design. (`cdk deploy` runs the same command through its release

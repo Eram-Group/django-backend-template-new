@@ -6,43 +6,47 @@ context under the ACTIVE locale - callers set it first (delivery tasks use
 translation.override(recipient.language); the API renders under the request
 locale). Rendered text is never stored - that would freeze one language.
 
-There is no code fallback: a missing row is a deploy error and raises
-immediately. Two reads, one road each: ``notification_config_get`` is the
-single-row query for a single-kind caller (a send resolving its channels, a
-config edit); ``notification_render`` takes the map from
-``notification_config_map`` - loaded ONCE per executor batch / API request,
-never cached across requests (a live admin edit must be authoritative
-immediately, and workers are separate processes).
+A kind without a row still renders: title and body fall back to the kind's
+label, so a send never fails on missing copy. Two reads, one road each:
+``notification_config_get`` is the single-row query for a config edit (loud
+when missing - there is nothing to edit); ``notification_render`` takes the
+map from ``notification_config_map`` - loaded ONCE per executor batch / API
+request, never cached across requests (a live admin edit must be
+authoritative immediately, and workers are separate processes).
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+import structlog
+
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import NotificationKindConfig
 
 ConfigMap = Mapping[NotificationKind, NotificationKindConfig]
 
+logger = structlog.get_logger(__name__)
+
 _MISSING_ROW_HINT = (
-    "seeded by `manage.py seed_notification_config` in the release step; a new "
-    "NotificationKind needs its catalog entry in the same change "
-    "(test_config enforces the pairing)"
+    "opening the Notification actions page creates it with recommended values"
 )
 
 
 def notification_config_map() -> dict[NotificationKind, NotificationKindConfig]:
-    """All config rows in ONE query - the batch/request-scoped copy source."""
-    configs = {
-        NotificationKind(row.kind): row for row in NotificationKindConfig.objects.all()
-    }
-    missing = [kind.name for kind in NotificationKind if kind not in configs]
-    if missing:
-        msg = (
-            f"NotificationKindConfig rows missing for: {', '.join(missing)} "
-            f"({_MISSING_ROW_HINT})."
-        )
-        raise LookupError(msg)
+    """All existing config rows in ONE query - the batch/request-scoped copy
+    source. A kind without a row is simply absent (``notification_render``
+    falls back to its label); a row whose kind was removed from
+    ``NotificationKind`` is ignored (logged once per load) instead of
+    crashing every page and worker that loads the map - no data migration
+    needed to retire a kind.
+    """
+    configs: dict[NotificationKind, NotificationKindConfig] = {}
+    for row in NotificationKindConfig.objects.all():
+        try:
+            configs[NotificationKind(row.kind)] = row
+        except ValueError:
+            logger.warning("notification_kind_retired", kind=row.kind, config_id=row.pk)
     return configs
 
 
@@ -69,8 +73,14 @@ def notification_render(
     context: Mapping[str, Any],
     configs: ConfigMap,
 ) -> RenderedMessage:
-    """Render one message under the ACTIVE locale - callers set it first."""
-    config = configs[kind]
+    """Render one message under the ACTIVE locale - callers set it first.
+
+    No config row: the kind's label stands in for both title and body.
+    """
+    config = configs.get(kind)
+    if config is None:
+        label = str(kind.label)
+        return RenderedMessage(title=label, body=label)
     return RenderedMessage(
         title=config.title.format(**context),
         body=config.body.format(**context),
