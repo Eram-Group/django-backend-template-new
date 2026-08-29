@@ -235,7 +235,7 @@ requires-dist = [
     { name = "django-import-export", specifier = ">=4.4.1" },
     { name = "django-modeltranslation", specifier = ">=0.20.3" },
     { name = "django-ninja", specifier = ">=1.6.2" },
-    { name = "django-phonenumber-field", extras = ["phonenumbers"], specifier = ">=8.4" },
+    { name = "django-phonenumber-field", extras = ["phonenumbers"], specifier = ">=8.5.0" },
     { name = "django-ratelimit", specifier = ">=4.1.0" },
     { name = "django-storages", extras = ["s3"], specifier = ">=1.14.6" },
     { name = "django-structlog", specifier = ">=10.1.0" },
