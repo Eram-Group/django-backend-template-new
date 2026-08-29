@@ -42,7 +42,6 @@ def scheduled_jobs(
             schedule_name=f"{group_name}-{job.name}",
             schedule_group=group,
             schedule=_expression(job.cron),
-            enabled=job.enabled,
             description=" ".join(job.command),
             # Sweeps are idempotent and frequent: never stack a retry on top
             # of the next tick, and drop invocations older than five minutes.

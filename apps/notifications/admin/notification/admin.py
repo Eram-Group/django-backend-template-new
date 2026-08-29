@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from apps.common.admin import ExportableModelAdmin
+from apps.common.admin import BaseModelAdmin
 from apps.notifications.admin.notification import change_view
 from apps.notifications.admin.notification import list_view
 from apps.notifications.admin.notification import permissions
@@ -12,7 +12,7 @@ from apps.notifications.models import Notification
 
 
 @admin.register(Notification)
-class NotificationAdmin(ExportableModelAdmin):
+class NotificationAdmin(BaseModelAdmin):
     can_add = permissions.CAN_ADD
     can_change = permissions.CAN_CHANGE
     can_delete = permissions.CAN_DELETE

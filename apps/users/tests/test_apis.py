@@ -138,7 +138,9 @@ def test_full_passwordless_flow_and_x_session_token(
 
     # Passwordless signup: allauth answers 401 with login_by_code pending
     # and emails a 6-digit code (which doubles as email verification).
-    signup = client.post("/_allauth/app/v1/auth/signup", {"email": email}, **headers)
+    signup = client.post(
+        "/_allauth/app/v1/auth/signup", {"email": email, "name": "Flow"}, **headers
+    )
     assert signup.status_code == 401
     body = signup.json()
     pending = [f["id"] for f in body["data"]["flows"] if f.get("is_pending")]

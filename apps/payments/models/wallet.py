@@ -10,7 +10,7 @@ from apps.payments.constants import Currency
 
 
 class Wallet(BaseModel):
-    """One wallet per user, provisioned at signup (users.user_post_signup).
+    """One wallet per user, provisioned at signup (users.user_create).
 
     ALL balance movement goes through services.wallet_apply (row lock +
     ledger entry) - nothing else may write ``balance``.

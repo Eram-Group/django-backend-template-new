@@ -19,10 +19,12 @@ from django.utils.translation import gettext_lazy as _
 from ninja import Router
 
 from apps.payments import services
+from apps.payments.exceptions import PaymentGatewayUnavailableError
 from apps.payments.exceptions import PaymentNotFoundError
 from apps.payments.exceptions import WebhookRejectedError
 from apps.payments.gateways import gateway_by_name
-from apps.payments.gateways.base import WebhookEventKind
+from apps.payments.gateways.base import CardTokenEvent
+from apps.payments.gateways.base import GatewayResponseError
 from apps.payments.gateways.base import WebhookVerificationError
 
 logger = structlog.get_logger(__name__)
@@ -40,24 +42,33 @@ def payment_webhook(request: HttpRequest, gateway_name: str) -> dict[str, bool]:
     # A rejected webhook is money the provider took and we did not record -
     # ERROR so it reaches Sentry instead of hiding in the access log (a wrong
     # HMAC secret on a fresh deployment rejects every callback this way).
-    gateway = gateway_by_name(gateway_name)
-    if gateway is None:
-        logger.error(
-            "payment_webhook_rejected", gateway=gateway_name, reason="unknown gateway"
+    # Reasons are fixed strings - never the posted signature or body.
+    try:
+        gateway = gateway_by_name(gateway_name)
+    except PaymentGatewayUnavailableError as exc:
+        logger.error(  # noqa: TRY400 - the reason string is the signal
+            "payment_webhook_rejected",
+            gateway=gateway_name,
+            reason="unknown or unconfigured gateway",
         )
-        raise WebhookRejectedError(str(_("Unknown payment gateway.")))
+        raise WebhookRejectedError(str(_("Unknown payment gateway."))) from exc
     try:
         event = gateway.parse_webhook(
             headers=request.headers, params=request.GET, body=request.body
         )
     except WebhookVerificationError as exc:
-        # str(exc) is one of the gateway's fixed reason strings - never the
-        # posted signature or body.
-        logger.error(  # noqa: TRY400 - the reason string is the signal; a traceback into hmac.compare_digest adds nothing
+        logger.error(  # noqa: TRY400 - a traceback into hmac.compare_digest adds nothing
             "payment_webhook_rejected", gateway=gateway_name, reason=str(exc)
         )
         raise WebhookRejectedError(str(_("Webhook verification failed."))) from exc
-    if event.kind == WebhookEventKind.CARD_TOKEN:
+    except GatewayResponseError as exc:
+        # Signed, but not the documented shape: retrying cannot fix it, so
+        # the provider gets a 400 and Sentry gets the traceback.
+        logger.exception(
+            "payment_webhook_rejected", gateway=gateway_name, reason="malformed payload"
+        )
+        raise WebhookRejectedError(str(_("Webhook payload is malformed."))) from exc
+    if isinstance(event, CardTokenEvent):
         services.saved_card_store_from_event(gateway_name=gateway_name, event=event)
         return {"ok": True}
     try:

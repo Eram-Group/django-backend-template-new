@@ -109,22 +109,16 @@ class KindConfigForm(forms.ModelForm[NotificationKindConfig]):
     def whatsapp_note(self) -> str:
         if Channel.WHATSAPP not in self.entry.supported_channels:
             return ""
-        template = self.entry.whatsapp
-        if template is None:  # unreachable while catalog __post_init__ holds
-            return ""
         return str(
             _('WhatsApp sends the Meta-approved template "%(name)s".')
-            % {"name": template.name}
+            % {"name": self.entry.whatsapp_template.name}
         )
 
     def service_kwargs(self) -> dict[str, Any]:
         """The save endpoint's payload for services.notification_config_update."""
         cleaned = self.cleaned_data
-        kwargs: dict[str, Any] = {
-            "kind": self.kind,
-            "channels": cleaned.get("channels") or [],
-        }
+        kwargs: dict[str, Any] = {"kind": self.kind, "channels": cleaned["channels"]}
         for field in MESSAGE_FIELDS:
             if field in self.fields:
-                kwargs[field] = cleaned.get(field)
+                kwargs[field] = cleaned[field]
         return kwargs

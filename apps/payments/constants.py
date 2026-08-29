@@ -3,14 +3,23 @@ from datetime import timedelta
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
+from apps.users.constants import Language
+
 
 class Currency(models.TextChoices):
     SAR = "SAR", _("Saudi riyal")
     EGP = "EGP", _("Egyptian pound")
 
 
-#: Currency of the wallet provisioned at signup (user_post_signup).
-DEFAULT_CURRENCY = Currency.SAR
+#: Currency of the wallet provisioned at signup, by the user's language -
+#: the only market signal a fresh account carries. Every Language member is
+#: mapped (test_constants pins that); both currently land on SAR, the
+#: launch market. Sending a language to EGP is a one-line change here,
+#: never an inline condition at the call site.
+CURRENCY_BY_LANGUAGE: dict[Language, Currency] = {
+    Language.ARABIC: Currency.SAR,
+    Language.ENGLISH: Currency.SAR,
+}
 
 
 class PaymentKind(models.TextChoices):
@@ -46,7 +55,6 @@ PENDING_EXPIRY = timedelta(hours=2)
 class GatewayName(models.TextChoices):
     TAP = "tap", "Tap"
     PAYMOB = "paymob", "Paymob"
-    FAKE = "fake", _("Fake (local)")
 
 
 class WalletTransactionKind(models.TextChoices):

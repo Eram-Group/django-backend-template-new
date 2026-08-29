@@ -6,19 +6,21 @@ settings consume the ``env`` singleton exclusively.
 All fields are REQUIRED and carry no code defaults: local values come from
 ``.env`` (copy ``.env.example``), deployed values from the task-definition
 environment. Missing values fail at import time, and pydantic lists every
-missing field in one error. ``X | None`` fields are the exception - they are
-feature toggles whose absence disables the feature (OAuth provider, Sentry,
-S3/CloudFront, cookie domain).
+missing field in one error.
+
+``X | None`` fields are provider credentials: apps built from this template
+use different providers, and an unset provider is absent - never a fallback.
+Deployment-only fields (Sentry, S3/CloudFront, SES) are ``X | None`` for the
+same reason locally, and ``_deployed_fields_present`` makes them required in
+every deployed environment.
 """
 
 from typing import Annotated
 from typing import Literal
 from typing import Self
-from typing import get_args
 
 from pydantic import Field
 from pydantic import SecretStr
-from pydantic import ValidationInfo
 from pydantic import field_validator
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
@@ -26,6 +28,16 @@ from pydantic_settings import NoDecode
 from pydantic_settings import SettingsConfigDict
 
 type CommaSeparated[T] = Annotated[list[T], NoDecode]
+
+#: Deployment-only fields - present in every deployed environment.
+_DEPLOYED_REQUIRED = (
+    "AWS_STORAGE_BUCKET_NAME",
+    "AWS_S3_REGION_NAME",
+    "AWS_S3_CUSTOM_DOMAIN",
+    "AWS_SES_REGION",
+    "SENTRY_DSN",
+    "SENTRY_RELEASE",
+)
 
 #: Which kind of gateway keys each environment may hold.
 _PAYMENT_MODE_BY_ENVIRONMENT = {
@@ -54,6 +66,7 @@ class Env(BaseSettings):
     # Core
     ENVIRONMENT: Literal["local", "dev", "staging", "production"]
     SECRET_KEY: SecretStr
+    # env_ignore_empty: `KEY=` is unset, which for a list means no items.
     SECRET_KEY_FALLBACKS: CommaSeparated[SecretStr] = Field(default_factory=list)
     ALLOWED_HOSTS: CommaSeparated[str]
     ADMIN_URL: str
@@ -66,20 +79,15 @@ class Env(BaseSettings):
     DB_POOL_MAX_LIFETIME: float
     DB_POOL_MAX_IDLE: float
 
-    # Tasks: true = run inline (local dev, no worker); false = DB queue + db_worker
-    TASKS_IMMEDIATE: bool
-
-    # Superuser bootstrap (createsuperuser --noinput)
+    # Superuser bootstrap (manage.py createsu)
     DJANGO_SUPERUSER_EMAIL: str
     DJANGO_SUPERUSER_PASSWORD: SecretStr
-
-    # Auth toggles
-    ACCOUNT_ALLOW_REGISTRATION: bool
-    SECURE_ADMIN_LOGIN: bool
 
     # Frontend / cross-origin
     FRONTEND_BASE_URL: str
     FRONTEND_ALLOWED_ORIGINS: CommaSeparated[str]
+    # Django two-state setting: None = host-only cookies (local), a parent
+    # domain = shared across subdomains.
     COOKIE_DOMAIN: str | None = None
 
     # OAuth providers (absent creds = provider disabled)
@@ -95,19 +103,17 @@ class Env(BaseSettings):
     EMAIL_HOST: str
     EMAIL_PORT: int
 
-    # AWS (S3 static/media, SES email) - production settings consume these
+    # Deployed-only (required whenever ENVIRONMENT != local, see the validator)
     AWS_STORAGE_BUCKET_NAME: str | None = None
     AWS_S3_REGION_NAME: str | None = None
     AWS_S3_CUSTOM_DOMAIN: str | None = None  # CloudFront domain
     AWS_SES_REGION: str | None = None
-
-    # Observability (absent DSN = Sentry disabled)
     SENTRY_DSN: str | None = None
     SENTRY_RELEASE: str | None = None  # git sha, injected by CD at render time
     SENTRY_TRACES_SAMPLE_RATE: float
 
-    # Notifications: FCM push + SMS + WhatsApp providers (absent creds = not
-    # configured; local/test use console/locmem backends regardless)
+    # Notifications: FCM push + SMS + WhatsApp providers (absent creds = the
+    # provider is absent; tests swap in in-memory outboxes)
     FIREBASE_CREDENTIALS_B64: SecretStr | None = None  # base64 service-account JSON
     OURSMS_API_KEY: SecretStr | None = None
     OURSMS_SENDER: str | None = None
@@ -131,9 +137,7 @@ class Env(BaseSettings):
     # inquiry API; unset = payment_verify/reconcile refuse loudly on paymob.
     PAYMOB_API_KEY: SecretStr | None = None
     PAYMOB_INTEGRATION_IDS: CommaSeparated[int] = Field(default_factory=list)
-    # Card-on-file: one-click CIT checkout (unset = fall back to
-    # PAYMOB_INTEGRATION_IDS, which works in Paymob test mode) and MOTO for
-    # server-side MIT charges (unset = MIT refused on paymob).
+    # Card-on-file: one-click CIT checkout and MOTO for server-side MIT charges.
     PAYMOB_COF_INTEGRATION_ID: int | None = None
     PAYMOB_MOTO_INTEGRATION_ID: int | None = None
 
@@ -149,28 +153,6 @@ class Env(BaseSettings):
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
-
-    @field_validator("*", mode="before")
-    @classmethod
-    def _blank_optional_is_unset(cls, value: object, info: ValidationInfo) -> object:
-        """Treat a blank string as unset on the optional feature-toggle fields.
-
-        ``env_ignore_empty`` only catches an *exactly* empty value, so a
-        whitespace-only one parses as a real ``SecretStr('   ')`` and slips
-        past every ``is None`` not-configured guard downstream - surfacing far
-        away as a decode error at send time, or worse: ``paymob._expected_hmac``
-        computes a signature with a blank key instead of refusing the webhook.
-
-        Only fields that already permit ``None`` are normalised, so required
-        fields keep failing loudly at import and the ``CommaSeparated`` lists
-        (never optional) still collapse to an empty list.
-        """
-        if not isinstance(value, str) or value.strip():
-            return value
-        field = cls.model_fields.get(info.field_name or "")
-        if field is None or type(None) not in get_args(field.annotation):
-            return value
-        return None
 
     @model_validator(mode="after")
     def _payment_keys_match_environment(self) -> Self:
@@ -189,6 +171,17 @@ class Env(BaseSettings):
             if mode not in key:
                 msg = f"{name} is not a {mode} key (ENVIRONMENT={self.ENVIRONMENT})"
                 raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _deployed_fields_present(self) -> Self:
+        """A deployed environment runs with S3, SES and Sentry - or not at all."""
+        if self.ENVIRONMENT == "local":
+            return self
+        missing = [name for name in _DEPLOYED_REQUIRED if getattr(self, name) is None]
+        if missing:
+            msg = f"required when ENVIRONMENT={self.ENVIRONMENT}: {', '.join(missing)}"
+            raise ValueError(msg)
         return self
 
 

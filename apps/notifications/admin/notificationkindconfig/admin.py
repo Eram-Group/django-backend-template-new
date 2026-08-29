@@ -19,13 +19,16 @@ from apps.notifications.admin.notificationkindconfig import change_view
 from apps.notifications.admin.notificationkindconfig import list_view
 from apps.notifications.admin.notificationkindconfig import permissions
 from apps.notifications.admin.notificationkindconfig.form import KindConfigForm
+from apps.notifications.admin.notificationkindconfig.resource import (
+    NotificationKindConfigResource,
+)
 from apps.notifications.constants import NotificationCategory
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import NotificationKindConfig
 
 
 @admin.register(NotificationKindConfig)
-class NotificationKindConfigAdmin(  # type: ignore[misc]  # dual-base get_fieldsets signatures differ
+class NotificationKindConfigAdmin(
     BaseModelAdmin, TabbedTranslationAdmin[NotificationKindConfig]
 ):
     """Per-action channel + message config.
@@ -42,6 +45,7 @@ class NotificationKindConfigAdmin(  # type: ignore[misc]  # dual-base get_fields
     can_change = permissions.CAN_CHANGE
     can_delete = permissions.CAN_DELETE
     field_permissions = permissions.FIELD_PERMISSIONS
+    resource_classes = [NotificationKindConfigResource]
 
     list_display = list_view.LIST_DISPLAY
     list_filter = list_view.LIST_FILTER

@@ -5,14 +5,12 @@ import string
 import pytest
 
 from apps.notifications.catalog import CATALOG
-from apps.notifications.catalog import WHATSAPP_LANGUAGE_CODES
 from apps.notifications.catalog import MessageTemplate
 from apps.notifications.catalog import WhatsAppTemplate
 from apps.notifications.catalog import catalog_entry
 from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationCategory
 from apps.notifications.constants import NotificationKind
-from apps.users.constants import Language
 
 
 def _placeholders(text: str) -> set[str]:
@@ -34,8 +32,10 @@ def test_seed_placeholders_match_context_keys() -> None:
         assert found == entry.context_keys, kind
 
 
-def test_every_user_language_has_a_whatsapp_language_code() -> None:
-    assert set(WHATSAPP_LANGUAGE_CODES) == set(Language.values)
+def test_whatsapp_template_accessor_is_loud_for_non_whatsapp_kinds() -> None:
+    assert catalog_entry(NotificationKind.ANNOUNCEMENT).whatsapp_template.name
+    with pytest.raises(LookupError, match="WHATSAPP"):
+        _ = catalog_entry(NotificationKind.WELCOME).whatsapp_template
 
 
 def test_only_announcement_is_authored_per_send() -> None:

@@ -47,4 +47,14 @@ FIELDSETS = (
     ),
     ("Meta", {"fields": ("created_by", "created_at", "updated_at")}),
 )
-READONLY_FIELDS = ()
+# Code-owned: stamped from request.user / written by the dispatcher.
+READONLY_FIELDS = (
+    "created_by",
+    "status",
+    "dispatch_cursor",
+    "total_recipients",
+    "total_deliveries",
+    "sent_count",
+    "failed_count",
+    "skipped_count",
+)

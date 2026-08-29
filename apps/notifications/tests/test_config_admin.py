@@ -5,6 +5,7 @@ tests cover what the replacement adds: the cards, the per-card JSON save
 routed through services.notification_config_update, and the locks.
 """
 
+import re
 from typing import Any
 
 import pytest
@@ -18,6 +19,7 @@ from apps.notifications.constants import NotificationKind
 from apps.notifications.exceptions import NotificationConfigError
 from apps.notifications.models import NotificationKindConfig
 from apps.notifications.selectors import effective_channels
+from apps.notifications.selectors import notification_config_map
 from apps.notifications.selectors import notification_render
 from apps.users.tests.factories import UserFactory
 
@@ -93,13 +95,14 @@ class TestConfigSave:
             {Channel.PUSH, Channel.SMS}
         )
         context = {"amount": "10", "currency": "SAR", "balance": "60.00"}
+        configs = notification_config_map()
         with translation.override("en"):
             english = notification_render(
-                kind=NotificationKind.WALLET_CREDITED, context=context
+                kind=NotificationKind.WALLET_CREDITED, context=context, configs=configs
             )
         with translation.override("ar"):
             arabic = notification_render(
-                kind=NotificationKind.WALLET_CREDITED, context=context
+                kind=NotificationKind.WALLET_CREDITED, context=context, configs=configs
             )
         assert english.title == "Wallet topped up"
         assert english.body == "Your new balance is 60.00"
@@ -176,7 +179,11 @@ class TestConfigSave:
 
 class TestConfigService:
     def test_authored_kind_rejects_message_edits(self) -> None:
-        with pytest.raises(NotificationConfigError, match="authored per broadcast"):
+        expected = translation.gettext(
+            "This action's message is authored per broadcast - "
+            "compose it from the Broadcasts page."
+        )
+        with pytest.raises(NotificationConfigError, match=re.escape(expected)):
             services.notification_config_update(
                 kind=NotificationKind.ANNOUNCEMENT,
                 channels=[Channel.PUSH],

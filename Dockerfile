@@ -27,12 +27,8 @@ COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev
 
-# Bake translations when any exist (locale/ starts as empty skeletons)
-RUN if [ -n "$(find locale -name '*.po' -print -quit 2>/dev/null)" ]; then \
-        .venv/bin/django-admin compilemessages --ignore .venv; \
-    else \
-        echo "no .po files - skipping compilemessages"; \
-    fi
+# Bake the Arabic catalog (locale/ar) - a missing catalog fails the build.
+RUN .venv/bin/django-admin compilemessages --ignore .venv
 
 # --- Runtime stage: slim, non-root -------------------------------------------
 # Debian codename pinned to match the builder base - the .venv (and any
@@ -40,7 +36,8 @@ RUN if [ -n "$(find locale -name '*.po' -print -quit 2>/dev/null)" ]; then \
 FROM python:3.14-slim-bookworm AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
-    PATH="/app/.venv/bin:$PATH"
+    PATH="/app/.venv/bin:$PATH" \
+    DJANGO_SETTINGS_MODULE=config.settings.production
 
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 
@@ -52,10 +49,4 @@ RUN mkdir -p /app/media && chown app:app /app /app/media
 USER app
 EXPOSE 8000
 
-# Workers scale via gunicorn-native WEB_CONCURRENCY; recycled workers guard
-# against slow leaks.
-CMD ["gunicorn", "config.wsgi:application", \
-     "--bind", "0.0.0.0:8000", \
-     "--max-requests", "1000", \
-     "--max-requests-jitter", "100", \
-     "--access-logfile", "-"]
+CMD ["gunicorn", "config.wsgi:application", "--config", "gunicorn.conf.py"]

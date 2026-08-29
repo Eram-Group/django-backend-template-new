@@ -74,7 +74,6 @@ class ScheduledJob:
     name: str
     cron: str  # minute hour day month weekday year - EventBridge 6-field cron (UTC)
     command: tuple[str, ...]
-    enabled: bool = True
 
 
 # --- Env-var ownership --------------------------------------------------------
@@ -90,10 +89,7 @@ ENV_PLAIN: frozenset[str] = frozenset(
         "DB_POOL_TIMEOUT",
         "DB_POOL_MAX_LIFETIME",
         "DB_POOL_MAX_IDLE",
-        "TASKS_IMMEDIATE",
         "DJANGO_SUPERUSER_EMAIL",
-        "ACCOUNT_ALLOW_REGISTRATION",
-        "SECURE_ADMIN_LOGIN",
         "FRONTEND_BASE_URL",
         "FRONTEND_ALLOWED_ORIGINS",
         "COOKIE_DOMAIN",
@@ -170,12 +166,6 @@ SCHEDULES: tuple[ScheduledJob, ...] = (
         "*/15 * * * ? *",
         ("python", "manage.py", "sweep_deliveries"),
     ),
-    ScheduledJob(
-        "sample-scheduled-job",
-        "0 4 * * ? *",
-        ("python", "manage.py", "sample_scheduled_job"),
-        enabled=False,  # template reference only
-    ),
 )
 
 # --- This application ------------------------------------------------------------
@@ -214,10 +204,7 @@ def _plain_env(*, environment: EnvName, base_url: str, hosts: str) -> dict[str, 
         "DB_POOL_TIMEOUT": "10",
         "DB_POOL_MAX_LIFETIME": "1800",
         "DB_POOL_MAX_IDLE": "300",
-        "TASKS_IMMEDIATE": "false",
         "DJANGO_SUPERUSER_EMAIL": "admin@eramapps.com",
-        "ACCOUNT_ALLOW_REGISTRATION": "true",
-        "SECURE_ADMIN_LOGIN": "false",
         "FRONTEND_BASE_URL": base_url,
         "FRONTEND_ALLOWED_ORIGINS": base_url,
         "COOKIE_DOMAIN": "",

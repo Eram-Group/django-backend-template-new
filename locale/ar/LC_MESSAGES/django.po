@@ -1,1059 +1,1021 @@
-# SOME DESCRIPTIVE TITLE.
-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
-# This file is distributed under the same license as the PACKAGE package.
-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
-#
-#, fuzzy
+# Arabic catalog - the product's first language.
 msgid ""
 msgstr ""
-"Project-Id-Version: PACKAGE VERSION\n"
+"Project-Id-Version: backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-28 16:00+0000\n"
-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
-"Language-Team: LANGUAGE <LL@li.org>\n"
-"Language: \n"
+"POT-Creation-Date: 2026-08-29 11:34+0300\n"
+"PO-Revision-Date: 2026-08-29 00:00+0000\n"
+"Last-Translator: Eram dev team\n"
+"Language-Team: Arabic\n"
+"Language: ar\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=6; plural=n==0 ? 0 : n==1 ? 1 : n==2 ? 2 : n%100>=3 "
 "&& n%100<=10 ? 3 : n%100>=11 && n%100<=99 ? 4 : 5;\n"
 
-#: apps/common/validators.py:20
-msgid "Use Arabic text only - Latin letters are not allowed."
-msgstr ""
+#: apps/common/admin/model_admin.py:171
+msgid "Select action"
+msgstr "اختر إجراءً"
 
-#: apps/common/validators.py:27
-msgid "Use English text only - Arabic letters are not allowed."
-msgstr ""
+#: apps/common/admin/model_admin.py:200
+#, python-format
+msgid "Export selected %(verbose_name_plural)s"
+msgstr "تصدير %(verbose_name_plural)s المحددة"
 
-#: apps/notifications/admin/broadcast/admin.py:177
+#: apps/notifications/admin/broadcast/admin.py:184
 msgid "Dispatch"
-msgstr ""
+msgstr "بث"
 
-#: apps/notifications/admin/broadcast/admin.py:190
+#: apps/notifications/admin/broadcast/admin.py:197
 msgid "Dispatch started - refresh to follow progress."
-msgstr ""
+msgstr "بدأ البث - حدّث الصفحة لمتابعة التقدم."
 
-#: apps/notifications/admin/broadcast/admin.py:208
+#: apps/notifications/admin/broadcast/admin.py:217
 msgid "Resume incomplete"
-msgstr ""
+msgstr "استئناف غير المكتمل"
 
-#: apps/notifications/admin/broadcast/admin.py:222
+#: apps/notifications/admin/broadcast/admin.py:233
 #, python-format
 msgid "Resume enqueued: %(summary)s"
-msgstr ""
+msgstr "تمت جدولة الاستئناف: %(summary)s"
 
 #: apps/notifications/admin/broadcast/change_view.py:11
 #: templates/admin/notifications/broadcast/compose.html:79
 msgid "Audience"
-msgstr ""
+msgstr "الجمهور"
 
 #: apps/notifications/admin/broadcast/change_view.py:14
 #: templates/admin/notifications/broadcast/compose.html:81
 msgid "Leave every filter unset to reach all active users."
-msgstr ""
+msgstr "اترك جميع عوامل التصفية فارغة للوصول إلى جميع المستخدمين النشطين."
 
 #: apps/notifications/admin/broadcast/change_view.py:17
-#: apps/notifications/admin/broadcast/form.py:138
+#: apps/notifications/admin/broadcast/form.py:139
 #: apps/notifications/admin/notificationkindconfig/form.py:30
-#: templates/admin/notifications/notificationkindconfig/change_list.html:95
+#: templates/admin/notifications/notificationkindconfig/change_list.html:61
 msgid "Channels"
-msgstr ""
+msgstr "القنوات"
 
 #: apps/notifications/admin/broadcast/form.py:41
 msgid "Every registered device."
-msgstr ""
+msgstr "كل جهاز مسجّل."
 
 #: apps/notifications/admin/broadcast/form.py:42
 msgid "Billed per message."
-msgstr ""
+msgstr "تُحتسب التكلفة لكل رسالة."
 
 #: apps/notifications/admin/broadcast/form.py:43
 msgid "Sent through the approved template."
-msgstr ""
+msgstr "يُرسل عبر القالب المعتمد."
 
 #: apps/notifications/admin/broadcast/form.py:89
 msgid "All languages"
-msgstr ""
+msgstr "جميع اللغات"
 
-#: apps/notifications/admin/broadcast/form.py:102
+#: apps/notifications/admin/broadcast/form.py:103
 msgid "Must be on or after the joined-after date."
-msgstr ""
+msgstr "يجب أن يكون في تاريخ «الانضمام بعد» أو بعده."
 
-#: apps/notifications/admin/broadcast/form.py:127
+#: apps/notifications/admin/broadcast/form.py:128
 msgid "Title"
-msgstr ""
+msgstr "العنوان"
 
-#: apps/notifications/admin/broadcast/form.py:130
+#: apps/notifications/admin/broadcast/form.py:131
 msgid "The headline recipients see in the notification tray."
-msgstr ""
+msgstr "العنوان الذي يراه المستلمون في لوحة الإشعارات."
 
-#: apps/notifications/admin/broadcast/form.py:133
+#: apps/notifications/admin/broadcast/form.py:134
 msgid "Body"
-msgstr ""
+msgstr "النص"
 
-#: apps/notifications/admin/broadcast/form.py:135
+#: apps/notifications/admin/broadcast/form.py:136
 msgid "The text every recipient sees. Sent as-is, in one piece."
-msgstr ""
+msgstr "النص الذي يراه كل مستلم. يُرسل كما هو، قطعة واحدة."
 
-#: apps/notifications/admin/broadcast/form.py:142
-msgid ""
-"Leave every channel off to use this kind's configured policy. Turning any on "
-"overrides that policy for this broadcast only."
-msgstr ""
+#: apps/notifications/admin/broadcast/form.py:143
+msgid "Leave every channel off to use this kind's configured policy. Turning any on overrides that policy for this broadcast only."
+msgstr "اترك جميع القنوات معطّلة لاستخدام السياسة المضبوطة لهذا النوع. تفعيل أي قناة يتجاوز تلك السياسة لهذا البث فقط."
 
 #: apps/notifications/admin/device/list_view.py:9
 msgid "Search by user email or registration token."
-msgstr ""
+msgstr "ابحث بالبريد الإلكتروني للمستخدم أو رمز التسجيل."
 
 #: apps/notifications/admin/notification/list_view.py:13
 msgid "Search by recipient email."
-msgstr ""
+msgstr "ابحث بالبريد الإلكتروني للمستلم."
 
 #: apps/notifications/admin/notificationdelivery/list_view.py:22
 msgid "Search by provider message id or recipient email."
-msgstr ""
+msgstr "ابحث بمعرّف الرسالة لدى المزوّد أو البريد الإلكتروني للمستلم."
 
-#: apps/notifications/admin/notificationkindconfig/admin.py:126
+#: apps/notifications/admin/notificationkindconfig/admin.py:128
 msgid "Unknown action."
-msgstr ""
+msgstr "إجراء غير معروف."
 
 #: apps/notifications/admin/notificationkindconfig/form.py:45
 msgid "Title (Arabic)"
-msgstr ""
+msgstr "العنوان (بالعربية)"
 
 #: apps/notifications/admin/notificationkindconfig/form.py:46
 msgid "Title (English)"
-msgstr ""
+msgstr "العنوان (بالإنجليزية)"
 
 #: apps/notifications/admin/notificationkindconfig/form.py:47
 msgid "Body (Arabic)"
-msgstr ""
+msgstr "النص (بالعربية)"
 
 #: apps/notifications/admin/notificationkindconfig/form.py:48
 msgid "Body (English)"
-msgstr ""
+msgstr "النص (بالإنجليزية)"
 
-#: apps/notifications/admin/notificationkindconfig/form.py:90
+#: apps/notifications/admin/notificationkindconfig/form.py:84
 msgid "Not available for this action."
-msgstr ""
+msgstr "غير متاح لهذا الإجراء."
 
 #: apps/notifications/admin/notificationkindconfig/form.py:113
 #, python-format
 msgid "WhatsApp sends the Meta-approved template \"%(name)s\"."
-msgstr ""
+msgstr "يرسل واتساب القالب \"%(name)s\" المعتمد من Meta."
 
-#: apps/notifications/apis/webhooks.py:49
-#: apps/notifications/apis/webhooks.py:86
-#: apps/notifications/apis/webhooks.py:95 apps/payments/apis/webhooks.py:45
-msgid "Webhook verification failed."
-msgstr ""
-
-#: apps/notifications/apis/webhooks.py:66
+#: apps/notifications/apis/webhooks.py:80
+#: apps/notifications/apis/webhooks.py:85
 msgid "Webhook payload is not valid JSON."
-msgstr ""
+msgstr "محتوى الويب هوك ليس JSON صالحًا."
 
-#: apps/notifications/catalog.py:78 apps/users/tasks/emails.py:16
+#: apps/notifications/apis/webhooks.py:123 apps/payments/apis/webhooks.py:63
+msgid "Webhook verification failed."
+msgstr "فشل التحقق من الويب هوك."
+
+#: apps/notifications/catalog.py:89 apps/users/tasks/emails.py:16
 msgid "Welcome!"
-msgstr ""
+msgstr "مرحبًا بك!"
 
-#: apps/notifications/catalog.py:79
+#: apps/notifications/catalog.py:90
 #, python-brace-format
 msgid "Welcome aboard, {name}!"
-msgstr ""
+msgstr "مرحبًا بك معنا يا {name}!"
 
-#: apps/notifications/catalog.py:104 apps/notifications/constants.py:10
+#: apps/notifications/catalog.py:115 apps/notifications/constants.py:10
 msgid "Payment received"
-msgstr ""
+msgstr "تم استلام الدفعة"
 
-#: apps/notifications/catalog.py:105
+#: apps/notifications/catalog.py:116
 #, python-brace-format
 msgid "Your payment of {amount} {currency} was received."
-msgstr ""
+msgstr "تم استلام دفعتك بقيمة {amount} {currency}."
 
-#: apps/notifications/catalog.py:112 apps/notifications/constants.py:11
+#: apps/notifications/catalog.py:123 apps/notifications/constants.py:11
 msgid "Wallet credited"
-msgstr ""
+msgstr "تمت إضافة رصيد إلى المحفظة"
 
-#: apps/notifications/catalog.py:113
+#: apps/notifications/catalog.py:124
 #, python-brace-format
 msgid "{amount} {currency} was added to your wallet. New balance: {balance}."
-msgstr ""
+msgstr "تمت إضافة {amount} {currency} إلى محفظتك. الرصيد الجديد: {balance}."
 
 #: apps/notifications/constants.py:8
 msgid "Welcome"
-msgstr ""
+msgstr "ترحيب"
 
 #: apps/notifications/constants.py:9
 msgid "Announcement"
-msgstr ""
+msgstr "إعلان"
 
 #: apps/notifications/constants.py:21
 msgid "Transactional"
-msgstr ""
+msgstr "معاملات"
 
 #: apps/notifications/constants.py:22
 msgid "Marketing"
-msgstr ""
+msgstr "تسويق"
 
 #: apps/notifications/constants.py:28
 msgid "Push"
-msgstr ""
+msgstr "إشعار فوري"
 
 #: apps/notifications/constants.py:29
 msgid "SMS"
-msgstr ""
+msgstr "رسالة نصية"
 
 #: apps/notifications/constants.py:30
 msgid "WhatsApp"
-msgstr ""
+msgstr "واتساب"
 
-#: apps/notifications/constants.py:42 apps/payments/constants.py:20
+#: apps/notifications/constants.py:42 apps/payments/constants.py:31
 msgid "Pending"
-msgstr ""
+msgstr "قيد الانتظار"
 
 #: apps/notifications/constants.py:43
 msgid "Processing"
-msgstr ""
+msgstr "قيد المعالجة"
 
 #: apps/notifications/constants.py:44
 msgid "Sent"
-msgstr ""
+msgstr "تم الإرسال"
 
 #: apps/notifications/constants.py:45
 msgid "Delivered"
-msgstr ""
+msgstr "تم التسليم"
 
 #: apps/notifications/constants.py:46
 msgid "Read"
-msgstr ""
+msgstr "مقروء"
 
-#: apps/notifications/constants.py:47 apps/payments/constants.py:22
+#: apps/notifications/constants.py:47 apps/payments/constants.py:33
 msgid "Failed"
-msgstr ""
+msgstr "فشل"
 
 #: apps/notifications/constants.py:48
 msgid "Skipped"
-msgstr ""
+msgstr "تم التخطي"
 
 #: apps/notifications/constants.py:54
 msgid "Draft"
-msgstr ""
+msgstr "مسودة"
 
 #: apps/notifications/constants.py:55
 msgid "Dispatching"
-msgstr ""
+msgstr "جارٍ البث"
 
 #: apps/notifications/constants.py:56
 msgid "Dispatched"
-msgstr ""
+msgstr "تم البث"
 
 #: apps/notifications/constants.py:57
 msgid "Completed"
-msgstr ""
+msgstr "مكتمل"
 
 #: apps/notifications/constants.py:61
 msgid "Android"
-msgstr ""
+msgstr "أندرويد"
 
 #: apps/notifications/constants.py:62
 msgid "iOS"
-msgstr ""
+msgstr "iOS"
 
 #: apps/notifications/constants.py:63
 msgid "Web"
-msgstr ""
+msgstr "الويب"
 
 #: apps/notifications/models/broadcast.py:23
 #: apps/notifications/models/notification.py:25
 #: apps/payments/models/payment.py:32
 #: apps/payments/models/wallet_transaction.py:23
 msgid "kind"
-msgstr ""
+msgstr "النوع"
 
 #: apps/notifications/models/broadcast.py:24
 #: apps/notifications/models/notification.py:26
 msgid "context"
-msgstr ""
+msgstr "السياق"
 
 #: apps/notifications/models/broadcast.py:26
 #: apps/notifications/models/delivery.py:36 apps/payments/models/payment.py:42
 msgid "status"
-msgstr ""
+msgstr "الحالة"
 
 #: apps/notifications/models/broadcast.py:35
 msgid "language filter"
-msgstr ""
+msgstr "تصفية اللغة"
 
 #: apps/notifications/models/broadcast.py:38
 msgid "registered device required"
-msgstr ""
+msgstr "يتطلب جهازًا مسجّلًا"
 
 #: apps/notifications/models/broadcast.py:41
-msgid ""
-"Skip users with no registered device. They would receive an inbox entry but "
-"no push."
-msgstr ""
+msgid "Skip users with no registered device. They would receive an inbox entry but no push."
+msgstr "تخطّ المستخدمين الذين لا يملكون جهازًا مسجّلًا. سيصلهم إدخال في صندوق الوارد دون إشعار فوري."
 
 #: apps/notifications/models/broadcast.py:45
 msgid "joined on or after"
-msgstr ""
+msgstr "انضم في أو بعد"
 
 #: apps/notifications/models/broadcast.py:46
 msgid "joined on or before"
-msgstr ""
+msgstr "انضم في أو قبل"
 
-#: apps/notifications/models/broadcast.py:50
-#: apps/notifications/models/kind_config.py:45
+#: apps/notifications/models/broadcast.py:52
+#: apps/notifications/models/kind_config.py:43
 msgid "channels"
-msgstr ""
-
-#: apps/notifications/models/broadcast.py:55
-msgid "created by"
-msgstr ""
+msgstr "القنوات"
 
 #: apps/notifications/models/broadcast.py:57
-msgid "dispatch cursor"
-msgstr ""
-
-#: apps/notifications/models/broadcast.py:58
-msgid "total recipients"
-msgstr ""
+msgid "created by"
+msgstr "أنشأه"
 
 #: apps/notifications/models/broadcast.py:59
-msgid "total deliveries"
-msgstr ""
+msgid "dispatch cursor"
+msgstr "مؤشر البث"
 
 #: apps/notifications/models/broadcast.py:60
-msgid "sent"
-msgstr ""
+msgid "total recipients"
+msgstr "إجمالي المستلمين"
 
 #: apps/notifications/models/broadcast.py:61
-msgid "failed"
-msgstr ""
+msgid "total deliveries"
+msgstr "إجمالي عمليات التسليم"
 
 #: apps/notifications/models/broadcast.py:62
-msgid "skipped"
-msgstr ""
+msgid "sent"
+msgstr "المرسَل"
 
-#: apps/notifications/models/broadcast.py:65
+#: apps/notifications/models/broadcast.py:63
+msgid "failed"
+msgstr "الفاشل"
+
+#: apps/notifications/models/broadcast.py:64
+msgid "skipped"
+msgstr "المتخطّى"
+
+#: apps/notifications/models/broadcast.py:67
 #: apps/notifications/models/delivery.py:32
 #: apps/notifications/models/notification.py:34
 msgid "broadcast"
-msgstr ""
+msgstr "بث"
 
-#: apps/notifications/models/broadcast.py:66
+#: apps/notifications/models/broadcast.py:68
 msgid "broadcasts"
-msgstr ""
+msgstr "عمليات البث"
 
 #: apps/notifications/models/delivery.py:24
 #: apps/notifications/models/notification.py:38
 msgid "notification"
-msgstr ""
+msgstr "إشعار"
 
 #: apps/notifications/models/delivery.py:34
 msgid "channel"
-msgstr ""
+msgstr "القناة"
 
 #: apps/notifications/models/delivery.py:41
 msgid "provider"
-msgstr ""
+msgstr "المزوّد"
 
 #: apps/notifications/models/delivery.py:43
 msgid "provider message id"
-msgstr ""
+msgstr "معرّف الرسالة لدى المزوّد"
 
 #: apps/notifications/models/delivery.py:45
 msgid "detail"
-msgstr ""
+msgstr "التفاصيل"
 
 #: apps/notifications/models/delivery.py:46
 msgid "sent at"
-msgstr ""
+msgstr "وقت الإرسال"
 
 #: apps/notifications/models/delivery.py:47
 msgid "attempts"
-msgstr ""
+msgstr "المحاولات"
 
 #: apps/notifications/models/delivery.py:50
 msgid "notification delivery"
-msgstr ""
+msgstr "تسليم إشعار"
 
 #: apps/notifications/models/delivery.py:51
 msgid "notification deliveries"
-msgstr ""
+msgstr "عمليات تسليم الإشعارات"
 
 #: apps/notifications/models/device.py:21 apps/payments/models/payment.py:30
 #: apps/payments/models/saved_card.py:25 apps/payments/models/wallet.py:23
 msgid "user"
-msgstr ""
+msgstr "المستخدم"
 
 #: apps/notifications/models/device.py:23
 msgid "registration id"
-msgstr ""
+msgstr "معرّف التسجيل"
 
 #: apps/notifications/models/device.py:24
 msgid "platform"
-msgstr ""
+msgstr "المنصة"
 
 #: apps/notifications/models/device.py:27
 msgid "device"
-msgstr ""
+msgstr "جهاز"
 
 #: apps/notifications/models/device.py:28
 msgid "devices"
-msgstr ""
+msgstr "الأجهزة"
 
-#: apps/notifications/models/kind_config.py:42
+#: apps/notifications/models/kind_config.py:40
 msgid "action"
-msgstr ""
+msgstr "الإجراء"
 
-#: apps/notifications/models/kind_config.py:46
+#: apps/notifications/models/kind_config.py:44
 msgid "title"
-msgstr ""
+msgstr "العنوان"
 
-#: apps/notifications/models/kind_config.py:47
+#: apps/notifications/models/kind_config.py:45
 msgid "body"
-msgstr ""
+msgstr "النص"
 
-#: apps/notifications/models/kind_config.py:59
+#: apps/notifications/models/kind_config.py:57
 msgid "notification action"
-msgstr ""
+msgstr "إجراء إشعار"
 
-#: apps/notifications/models/kind_config.py:60
+#: apps/notifications/models/kind_config.py:58
 msgid "notification actions"
-msgstr ""
+msgstr "إجراءات الإشعارات"
 
-#: apps/notifications/models/kind_config.py:83
-msgid "Must be a list of channel names."
-msgstr ""
-
-#: apps/notifications/models/kind_config.py:89
+#: apps/notifications/models/kind_config.py:86
 #, python-format
-msgid ""
-"%(kind)s does not support: %(channels)s. Supported channels: %(supported)s."
-msgstr ""
+msgid "%(kind)s does not support: %(channels)s. Supported channels: %(supported)s."
+msgstr "%(kind)s لا يدعم: %(channels)s. القنوات المدعومة: %(supported)s."
 
-#: apps/notifications/models/kind_config.py:106
+#: apps/notifications/models/kind_config.py:103
 #, python-format
 msgid "Unknown placeholders: %(unknown)s. This action provides: %(keys)s."
-msgstr ""
+msgstr "متغيرات غير معروفة: %(unknown)s. يوفر هذا الإجراء: %(keys)s."
 
 #: apps/notifications/models/notification.py:23
 msgid "recipient"
-msgstr ""
+msgstr "المستلم"
 
 #: apps/notifications/models/notification.py:27
 msgid "read at"
-msgstr ""
+msgstr "وقت القراءة"
 
 #: apps/notifications/models/notification.py:39
 msgid "notifications"
-msgstr ""
+msgstr "الإشعارات"
 
 #: apps/notifications/selectors/notifications.py:21
 msgid "Notification not found."
-msgstr ""
+msgstr "الإشعار غير موجود."
 
-#: apps/notifications/services/broadcasts.py:67
+#: apps/notifications/services/broadcasts.py:59
 msgid "The joined-after date must not be later than joined-before."
-msgstr ""
+msgstr "يجب ألا يكون تاريخ «الانضمام بعد» لاحقًا لتاريخ «الانضمام قبل»."
 
-#: apps/notifications/services/broadcasts.py:99
+#: apps/notifications/services/broadcasts.py:85
+msgid "Pick at least one channel, or leave the kind's policy in place."
+msgstr "اختر قناة واحدة على الأقل، أو أبقِ سياسة النوع كما هي."
+
+#: apps/notifications/services/broadcasts.py:92
 #, python-format
 msgid "This notification kind cannot be sent on: %(channels)s."
-msgstr ""
+msgstr "لا يمكن إرسال هذا النوع من الإشعارات عبر: %(channels)s."
 
-#: apps/notifications/services/broadcasts.py:113
+#: apps/notifications/services/broadcasts.py:105
 msgid "Broadcast was already dispatched."
-msgstr ""
-
-#: apps/notifications/services/broadcasts.py:127
-msgid "Broadcast has not been dispatched."
-msgstr ""
-
-#: apps/notifications/services/broadcasts.py:166
-#, python-format
-msgid ""
-"Audience of %(audience)s exceeds the inline-backend limit of %(limit)s - run "
-"a real worker (TASKS_IMMEDIATE=false)."
-msgstr ""
+msgstr "تم بث هذا البث من قبل."
 
 #: apps/notifications/services/config.py:48
-msgid ""
-"This action's message is authored per broadcast - compose it from the "
-"Broadcasts page."
-msgstr ""
+msgid "This action's message is authored per broadcast - compose it from the Broadcasts page."
+msgstr "رسالة هذا الإجراء تُكتب لكل بث على حدة - أنشئها من صفحة عمليات البث."
 
-#: apps/payments/admin/payment/admin.py:60 apps/payments/constants.py:45
+#: apps/notifications/services/deliveries.py:117
+msgid "Broadcast has not been dispatched."
+msgstr "لم يُبث هذا البث بعد."
+
+#: apps/payments/admin/payment/admin.py:60 apps/payments/constants.py:62
 msgid "Refund"
-msgstr ""
+msgstr "استرداد"
 
 #: apps/payments/admin/payment/admin.py:77
 msgid "Refund started - refresh to see the final status."
-msgstr ""
+msgstr "بدأ الاسترداد - حدّث الصفحة لرؤية الحالة النهائية."
 
 #: apps/payments/admin/payment/list_view.py:16
 msgid "Search by user email or gateway charge/transaction id."
-msgstr ""
+msgstr "ابحث بالبريد الإلكتروني للمستخدم أو معرّف الشحن/المعاملة لدى بوابة الدفع."
 
 #: apps/payments/admin/savedcard/list_view.py:22
 msgid "Search by owner email or gateway token."
-msgstr ""
+msgstr "ابحث بالبريد الإلكتروني للمالك أو رمز بوابة الدفع."
 
 #: apps/payments/admin/wallet/list_view.py:9
 msgid "Search by user email."
-msgstr ""
+msgstr "ابحث بالبريد الإلكتروني للمستخدم."
 
 #: apps/payments/admin/wallettransaction/list_view.py:13
 msgid "Search by wallet owner email."
-msgstr ""
+msgstr "ابحث بالبريد الإلكتروني لمالك المحفظة."
 
-#: apps/payments/apis/webhooks.py:39
+#: apps/payments/apis/webhooks.py:54 apps/payments/gateways/__init__.py:41
 msgid "Unknown payment gateway."
-msgstr ""
+msgstr "بوابة دفع غير معروفة."
 
-#: apps/payments/constants.py:6
+#: apps/payments/apis/webhooks.py:70
+msgid "Webhook payload is malformed."
+msgstr "محتوى الويب هوك غير صالح."
+
+#: apps/payments/constants.py:10
 msgid "Saudi riyal"
-msgstr ""
+msgstr "ريال سعودي"
 
-#: apps/payments/constants.py:7
+#: apps/payments/constants.py:11
 msgid "Egyptian pound"
-msgstr ""
-
-#: apps/payments/constants.py:15
-msgid "Wallet top-up"
-msgstr ""
-
-#: apps/payments/constants.py:16
-msgid "Other"
-msgstr ""
-
-#: apps/payments/constants.py:21
-msgid "Paid"
-msgstr ""
-
-#: apps/payments/constants.py:25
-msgid "Refund pending"
-msgstr ""
+msgstr "جنيه مصري"
 
 #: apps/payments/constants.py:26
+msgid "Wallet top-up"
+msgstr "شحن المحفظة"
+
+#: apps/payments/constants.py:27
+msgid "Other"
+msgstr "أخرى"
+
+#: apps/payments/constants.py:32
+msgid "Paid"
+msgstr "مدفوع"
+
+#: apps/payments/constants.py:36
+msgid "Refund pending"
+msgstr "الاسترداد قيد الانتظار"
+
+#: apps/payments/constants.py:37
 msgid "Refunded"
-msgstr ""
+msgstr "مسترد"
 
-#: apps/payments/constants.py:40
-msgid "Fake (local)"
-msgstr ""
-
-#: apps/payments/constants.py:44
+#: apps/payments/constants.py:61
 msgid "Top-up"
-msgstr ""
+msgstr "شحن رصيد"
 
-#: apps/payments/constants.py:46
+#: apps/payments/constants.py:63
 msgid "Manual adjustment"
-msgstr ""
+msgstr "تعديل يدوي"
 
-#: apps/payments/constants.py:47
+#: apps/payments/constants.py:64
 msgid "Payment"
-msgstr ""
+msgstr "دفع"
 
-#: apps/payments/gateways/__init__.py:24
+#: apps/payments/gateways/__init__.py:47
+msgid "The payment gateway is not configured."
+msgstr "بوابة الدفع غير مضبوطة."
+
+#: apps/payments/gateways/__init__.py:56
 msgid "No payment gateway is configured for this currency."
-msgstr ""
+msgstr "لا توجد بوابة دفع مضبوطة لهذه العملة."
 
 #: apps/payments/models/payment.py:33
 msgid "description"
-msgstr ""
+msgstr "الوصف"
 
 #: apps/payments/models/payment.py:35
 #: apps/payments/models/wallet_transaction.py:24
 msgid "amount"
-msgstr ""
+msgstr "المبلغ"
 
 #: apps/payments/models/payment.py:40 apps/payments/models/wallet.py:32
 msgid "currency"
-msgstr ""
+msgstr "العملة"
 
 #: apps/payments/models/payment.py:47 apps/payments/models/saved_card.py:27
 msgid "gateway"
-msgstr ""
+msgstr "بوابة الدفع"
 
-#: apps/payments/models/payment.py:54 apps/payments/models/saved_card.py:47
+#: apps/payments/models/payment.py:54 apps/payments/models/saved_card.py:51
 msgid "saved card"
-msgstr ""
+msgstr "بطاقة محفوظة"
 
 #: apps/payments/models/payment.py:62
 msgid "save card requested"
-msgstr ""
+msgstr "طُلب حفظ البطاقة"
 
 #: apps/payments/models/payment.py:67
 msgid "idempotency key"
-msgstr ""
+msgstr "مفتاح منع التكرار"
 
 #: apps/payments/models/payment.py:71
 msgid "gateway charge id"
-msgstr ""
+msgstr "معرّف الشحن لدى البوابة"
 
 #: apps/payments/models/payment.py:76
 msgid "gateway transaction id"
-msgstr ""
+msgstr "معرّف المعاملة لدى البوابة"
 
 #: apps/payments/models/payment.py:78
 msgid "checkout URL"
-msgstr ""
+msgstr "رابط الدفع"
 
 #: apps/payments/models/payment.py:80
 msgid "gateway response"
-msgstr ""
+msgstr "استجابة البوابة"
 
 #: apps/payments/models/payment.py:83
 msgid "gateway callback"
-msgstr ""
+msgstr "رد نداء البوابة"
 
 #: apps/payments/models/payment.py:85
 msgid "paid at"
-msgstr ""
+msgstr "وقت الدفع"
 
 #: apps/payments/models/payment.py:91
 msgid "refund attempted at"
-msgstr ""
+msgstr "وقت محاولة الاسترداد"
 
 #: apps/payments/models/payment.py:95
 #: apps/payments/models/wallet_transaction.py:32
 msgid "payment"
-msgstr ""
+msgstr "دفعة"
 
 #: apps/payments/models/payment.py:96
 msgid "payments"
-msgstr ""
+msgstr "المدفوعات"
 
 #: apps/payments/models/saved_card.py:29
 msgid "token"
-msgstr ""
+msgstr "الرمز"
 
 #: apps/payments/models/saved_card.py:32
 msgid "gateway customer id"
-msgstr ""
+msgstr "معرّف العميل لدى البوابة"
 
 #: apps/payments/models/saved_card.py:37
 msgid "gateway agreement id"
-msgstr ""
-
-#: apps/payments/models/saved_card.py:39
-msgid "brand"
-msgstr ""
-
-#: apps/payments/models/saved_card.py:40
-msgid "last four digits"
-msgstr ""
+msgstr "معرّف الاتفاقية لدى البوابة"
 
 #: apps/payments/models/saved_card.py:42
-msgid "expiry month"
-msgstr ""
+msgid "fingerprint"
+msgstr "البصمة"
+
+#: apps/payments/models/saved_card.py:43
+msgid "brand"
+msgstr "العلامة التجارية"
 
 #: apps/payments/models/saved_card.py:44
-msgid "expiry year"
-msgstr ""
+msgid "last four digits"
+msgstr "آخر أربعة أرقام"
+
+#: apps/payments/models/saved_card.py:46
+msgid "expiry month"
+msgstr "شهر الانتهاء"
 
 #: apps/payments/models/saved_card.py:48
+msgid "expiry year"
+msgstr "سنة الانتهاء"
+
+#: apps/payments/models/saved_card.py:52
 msgid "saved cards"
-msgstr ""
+msgstr "البطاقات المحفوظة"
 
 #: apps/payments/models/wallet.py:26
 msgid "balance"
-msgstr ""
+msgstr "الرصيد"
 
 #: apps/payments/models/wallet.py:35
 #: apps/payments/models/wallet_transaction.py:21
 msgid "wallet"
-msgstr ""
+msgstr "محفظة"
 
 #: apps/payments/models/wallet.py:36
 msgid "wallets"
-msgstr ""
+msgstr "المحافظ"
 
 #: apps/payments/models/wallet_transaction.py:26
 msgid "balance after"
-msgstr ""
+msgstr "الرصيد بعد العملية"
 
 #: apps/payments/models/wallet_transaction.py:40
 msgid "actor"
-msgstr ""
+msgstr "المنفّذ"
 
 #: apps/payments/models/wallet_transaction.py:44
 msgid "note"
-msgstr ""
+msgstr "ملاحظة"
 
 #: apps/payments/models/wallet_transaction.py:47
 msgid "wallet transaction"
-msgstr ""
+msgstr "معاملة محفظة"
 
 #: apps/payments/models/wallet_transaction.py:48
 msgid "wallet transactions"
-msgstr ""
+msgstr "معاملات المحفظة"
 
 #: apps/payments/selectors/payments.py:21
-#: apps/payments/services/payments.py:262
+#: apps/payments/services/payments.py:303
 msgid "Payment not found."
-msgstr ""
+msgstr "الدفعة غير موجودة."
 
-#: apps/payments/selectors/saved_cards.py:21
-#: apps/payments/services/payments.py:80
-#: apps/payments/services/saved_cards.py:81
+#: apps/payments/selectors/saved_cards.py:38
+#: apps/payments/services/payments.py:118
+#: apps/payments/services/saved_cards.py:178
 msgid "Saved card not found."
-msgstr ""
+msgstr "البطاقة المحفوظة غير موجودة."
 
 #: apps/payments/selectors/wallets.py:17
 msgid "Wallet not found."
-msgstr ""
+msgstr "المحفظة غير موجودة."
 
 #: apps/payments/services/payments.py:83
+msgid "Add your full name and phone number before paying."
+msgstr "أضف اسمك الكامل ورقم هاتفك قبل الدفع."
+
+#: apps/payments/services/payments.py:121
 msgid "This card cannot be used with this currency."
-msgstr ""
+msgstr "لا يمكن استخدام هذه البطاقة مع هذه العملة."
 
-#: apps/payments/services/payments.py:93
+#: apps/payments/services/payments.py:131
 msgid "Wallet currency does not match the payment currency."
-msgstr ""
+msgstr "عملة المحفظة لا تطابق عملة الدفع."
 
-#: apps/payments/services/payments.py:166
-#: apps/payments/services/payments.py:241
-#: apps/payments/services/payments.py:348
-#: apps/payments/services/payments.py:464
-msgid "The payment provider is unavailable. Try again shortly."
-msgstr ""
-
-#: apps/payments/services/payments.py:340
-#: apps/payments/services/payments.py:381
+#: apps/payments/services/payments.py:205
+#: apps/payments/services/payments.py:275
 #: apps/payments/services/payments.py:434
-msgid "Payment gateway is not configured."
-msgstr ""
+#: apps/payments/services/payments.py:572
+msgid "The payment provider is unavailable. Try again shortly."
+msgstr "مزوّد الدفع غير متاح حاليًا. حاول مرة أخرى بعد قليل."
 
-#: apps/payments/services/payments.py:386
+#: apps/payments/services/payments.py:380
+msgid "The gateway event does not match this payment."
+msgstr "حدث البوابة لا يطابق هذه الدفعة."
+
+#: apps/payments/services/payments.py:489
 msgid "Only paid payments can be refunded."
-msgstr ""
+msgstr "لا يمكن استرداد سوى الدفعات المدفوعة."
 
-#: apps/payments/services/payments.py:468
+#: apps/payments/services/payments.py:493
+msgid "This payment has no settled transaction to refund."
+msgstr "لا توجد معاملة مسوّاة لهذه الدفعة يمكن استردادها."
+
+#: apps/payments/services/payments.py:576
 msgid "The gateway rejected the refund."
-msgstr ""
+msgstr "رفضت بوابة الدفع الاسترداد."
 
-#: apps/payments/services/wallets.py:53
+#: apps/payments/services/wallets.py:68
 msgid "Insufficient wallet balance."
-msgstr ""
+msgstr "رصيد المحفظة غير كافٍ."
 
-#: apps/users/admin/group.py:26
+#: apps/users/admin/group.py:34
 msgid "Search by group name."
-msgstr ""
+msgstr "ابحث باسم المجموعة."
 
 #: apps/users/admin/user/list_view.py:16
 msgid "Search by email, full name, or phone number."
-msgstr ""
+msgstr "ابحث بالبريد الإلكتروني أو الاسم الكامل أو رقم الهاتف."
 
 #: apps/users/admin/user/sections.py:12
 msgid "Recent sessions"
-msgstr ""
+msgstr "الجلسات الأخيرة"
 
-#: apps/users/constants.py:6 config/settings/base.py:193
+#: apps/users/constants.py:6 config/settings/base.py:204
 msgid "Arabic"
-msgstr ""
+msgstr "العربية"
 
-#: apps/users/constants.py:7 config/settings/base.py:194
+#: apps/users/constants.py:7 config/settings/base.py:205
 msgid "English"
-msgstr ""
+msgstr "الإنجليزية"
 
-#: apps/users/models/user.py:73
+#: apps/users/models/user.py:76
 msgid "email address"
-msgstr ""
+msgstr "البريد الإلكتروني"
 
-#: apps/users/models/user.py:74
+#: apps/users/models/user.py:77
 msgid "name"
-msgstr ""
+msgstr "الاسم"
 
-#: apps/users/models/user.py:78
+#: apps/users/models/user.py:81
 msgid "phone number"
-msgstr ""
+msgstr "رقم الهاتف"
 
-#: apps/users/models/user.py:80
+#: apps/users/models/user.py:84
 msgid "language"
-msgstr ""
+msgstr "اللغة"
 
 #: apps/users/selectors/users.py:15
 msgid "User not found."
-msgstr ""
+msgstr "المستخدم غير موجود."
 
-#: config/settings/base.py:284 config/settings/base.py:287
+#: config/settings/base.py:298 config/settings/base.py:301
 msgid "Users"
-msgstr ""
+msgstr "المستخدمون"
 
-#: config/settings/base.py:295
+#: config/settings/base.py:309
 msgid "Email addresses"
-msgstr ""
+msgstr "عناوين البريد الإلكتروني"
 
-#: config/settings/base.py:303
+#: config/settings/base.py:317
 msgid "Sessions"
-msgstr ""
+msgstr "الجلسات"
 
-#: config/settings/base.py:313
+#: config/settings/base.py:327
 msgid "Groups"
-msgstr ""
+msgstr "المجموعات"
 
-#: config/settings/base.py:323 config/settings/base.py:326
+#: config/settings/base.py:337 config/settings/base.py:340
 msgid "Notifications"
-msgstr ""
+msgstr "الإشعارات"
 
-#: config/settings/base.py:336
+#: config/settings/base.py:350
 msgid "Deliveries"
-msgstr ""
+msgstr "عمليات التسليم"
 
-#: config/settings/base.py:346
+#: config/settings/base.py:360
 msgid "Broadcasts"
-msgstr ""
+msgstr "عمليات البث"
 
-#: config/settings/base.py:356
+#: config/settings/base.py:370
 msgid "Devices"
-msgstr ""
+msgstr "الأجهزة"
 
-#: config/settings/base.py:364
+#: config/settings/base.py:378
 #: templates/admin/notifications/notificationkindconfig/change_list.html:31
 msgid "Notification actions"
-msgstr ""
+msgstr "إجراءات الإشعارات"
 
-#: config/settings/base.py:376 config/settings/base.py:379
+#: config/settings/base.py:390 config/settings/base.py:393
 msgid "Payments"
-msgstr ""
+msgstr "المدفوعات"
 
-#: config/settings/base.py:387
+#: config/settings/base.py:401
 msgid "Wallets"
-msgstr ""
+msgstr "المحافظ"
 
-#: config/settings/base.py:395
+#: config/settings/base.py:409
 msgid "Wallet transactions"
-msgstr ""
+msgstr "معاملات المحافظ"
 
-#: config/settings/base.py:407
+#: config/settings/base.py:421
 msgid "Operations"
-msgstr ""
+msgstr "العمليات"
 
-#: config/settings/base.py:410
+#: config/settings/base.py:424
 msgid "Task results"
-msgstr ""
+msgstr "نتائج المهام"
 
-#: config/settings/base.py:420
+#: config/settings/base.py:434
 msgid "Login attempts"
-msgstr ""
+msgstr "محاولات تسجيل الدخول"
 
 #: templates/account/email/email_confirmation_message.html:4
 #: templates/account/email/email_confirmation_message.html:7
 msgid "Confirm your email address"
-msgstr ""
+msgstr "أكّد بريدك الإلكتروني"
 
-#: templates/account/email/email_confirmation_message.html:9
+#: templates/account/email/email_confirmation_message.html:8
 msgid "Enter this code to verify your email address:"
-msgstr ""
+msgstr "أدخل هذا الرمز للتحقق من بريدك الإلكتروني:"
 
-#: templates/account/email/email_confirmation_message.html:12
-msgid "Use the button below to confirm your email address."
-msgstr ""
-
-#: templates/account/email/email_confirmation_message.html:14
-msgid "Confirm email"
-msgstr ""
-
-#: templates/account/email/email_confirmation_message.html:17
-#: templates/account/email/login_code_message.html:13
+#: templates/account/email/email_confirmation_message.html:10
+#: templates/account/email/login_code_message.html:11
 msgid "This mail can be safely ignored if you did not initiate this action."
-msgstr ""
+msgstr "يمكنك تجاهل هذه الرسالة بأمان إن لم تكن أنت من بدأ هذا الإجراء."
 
 #: templates/account/email/login_code_message.html:4
 #: templates/account/email/login_code_message.html:7
 msgid "Your sign-in code"
-msgstr ""
+msgstr "رمز تسجيل الدخول"
 
 #: templates/account/email/login_code_message.html:8
 msgid "Enter this code to continue signing in:"
-msgstr ""
+msgstr "أدخل هذا الرمز لمتابعة تسجيل الدخول:"
 
-#: templates/account/email/login_code_message.html:11
+#: templates/account/email/login_code_message.html:10
 #, python-format
 msgid "This code expires in %(minutes)s minutes."
-msgstr ""
+msgstr "تنتهي صلاحية هذا الرمز خلال %(minutes)s دقائق."
 
 #: templates/admin/notifications/broadcast/compose.html:25
 #: templates/admin/notifications/broadcast/compose.html:120
 msgid "Your title"
-msgstr ""
+msgstr "عنوانك"
 
 #: templates/admin/notifications/broadcast/compose.html:26
 #: templates/admin/notifications/broadcast/compose.html:121
 msgid "Your message body appears here."
-msgstr ""
+msgstr "يظهر نص رسالتك هنا."
 
 #: templates/admin/notifications/broadcast/compose.html:27
 msgid ":n recipients"
-msgstr ""
+msgstr ":n مستلمًا"
 
 #: templates/admin/notifications/broadcast/compose.html:28
 msgid ":n devices reachable"
-msgstr ""
+msgstr ":n جهازًا يمكن الوصول إليه"
 
 #: templates/admin/notifications/broadcast/compose.html:29
 #: templates/admin/notifications/broadcast/compose.html:132
 msgid "Calculating reach…"
-msgstr ""
+msgstr "جارٍ حساب مدى الوصول…"
 
 #: templates/admin/notifications/broadcast/compose.html:30
 msgid "Could not estimate reach."
-msgstr ""
+msgstr "تعذّر تقدير مدى الوصول."
 
 #: templates/admin/notifications/broadcast/compose.html:31
 msgid "This audience is empty — nothing would be sent."
-msgstr ""
+msgstr "هذا الجمهور فارغ — لن يُرسل شيء."
 
 #: templates/admin/notifications/broadcast/compose.html:32
 msgid "Reaching :recipients recipients across :devices devices."
-msgstr ""
+msgstr "الوصول إلى :recipients مستلمًا عبر :devices جهازًا."
 
 #: templates/admin/notifications/broadcast/compose.html:35
 msgid "New broadcast"
-msgstr ""
+msgstr "بث جديد"
 
 #: templates/admin/notifications/broadcast/compose.html:37
-msgid ""
-"Compose once, deliver to every targeted recipient. Nothing sends until you "
-"dispatch the draft from the broadcast page."
-msgstr ""
+msgid "Compose once, deliver to every targeted recipient. Nothing sends until you dispatch the draft from the broadcast page."
+msgstr "اكتب مرة واحدة، ويصل إلى كل مستلم مستهدف. لا يُرسل شيء حتى تبث المسودة من صفحة البث."
 
 #: templates/admin/notifications/broadcast/compose.html:57
+#: templates/admin/notifications/notificationkindconfig/change_list.html:81
 msgid "Message"
-msgstr ""
+msgstr "الرسالة"
 
 #: templates/admin/notifications/broadcast/compose.html:103
 msgid "Signed up between"
-msgstr ""
+msgstr "سجّل بين"
 
 #: templates/admin/notifications/broadcast/compose.html:106
 msgid "and"
-msgstr ""
+msgstr "و"
 
 #: templates/admin/notifications/broadcast/compose.html:115
-#: templates/admin/notifications/notificationkindconfig/change_list.html:127
 msgid "Preview"
-msgstr ""
+msgstr "معاينة"
 
 #: templates/admin/notifications/broadcast/compose.html:118
-#: templates/admin/notifications/notificationkindconfig/change_list.html:134
+#: templates/admin/notifications/notificationkindconfig/change_list.html:107
 msgid "APP"
-msgstr ""
+msgstr "التطبيق"
 
 #: templates/admin/notifications/broadcast/compose.html:124
 msgid "Approximate — each platform truncates differently."
-msgstr ""
+msgstr "تقريبي — كل منصة تقتطع النص بطريقة مختلفة."
 
 #: templates/admin/notifications/broadcast/compose.html:129
 msgid "Send to"
-msgstr ""
+msgstr "إرسال إلى"
 
 #: templates/admin/notifications/broadcast/compose.html:147
-msgid ""
-"SMS is billed per message. Check the reach above before creating this draft."
-msgstr ""
+msgid "SMS is billed per message. Check the reach above before creating this draft."
+msgstr "تُحتسب تكلفة الرسائل النصية لكل رسالة. راجع مدى الوصول أعلاه قبل إنشاء هذه المسودة."
 
 #: templates/admin/notifications/broadcast/compose.html:154
 #: templates/admin/notifications/broadcast/compose.html:177
 msgid "Create draft"
-msgstr ""
+msgstr "إنشاء مسودة"
 
 #: templates/admin/notifications/broadcast/compose.html:159
 msgid "Back to broadcasts"
-msgstr ""
+msgstr "العودة إلى عمليات البث"
 
 #: templates/admin/notifications/broadcast/compose.html:169
 msgid "Create this broadcast?"
-msgstr ""
+msgstr "إنشاء هذا البث؟"
 
 #: templates/admin/notifications/broadcast/compose.html:172
 msgid "Creates a draft only. You dispatch it from the broadcast page."
-msgstr ""
+msgstr "يُنشئ مسودة فقط. تبثها من صفحة البث."
 
 #: templates/admin/notifications/broadcast/compose.html:175
 msgid "Cancel"
-msgstr ""
+msgstr "إلغاء"
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:24
 msgid "Saving…"
-msgstr ""
+msgstr "جارٍ الحفظ…"
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:25
-msgid "Saved — live for the next send."
-msgstr ""
+msgid "Saved"
+msgstr "تم الحفظ"
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:26
-msgid "Could not save."
-msgstr ""
+msgid "Could not save"
+msgstr "تعذّر الحفظ"
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:27
-msgid "Fix the highlighted fields."
-msgstr ""
+msgid "Fix the highlighted fields"
+msgstr "صحّح الحقول المميزة"
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:28
-msgid "Unsaved changes."
-msgstr ""
+msgid "Unsaved changes"
+msgstr "تغييرات غير محفوظة"
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:33
-msgid ""
-"Each action declares the channels it sends on and the message it sends. "
-"Changes apply to the very next send — nothing is cached."
-msgstr ""
+msgid "What each action sends, and where. Changes apply to the very next send; the in-app inbox entry is always written — all channels off means inbox only."
+msgstr "ما يرسله كل إجراء، وإلى أين. تسري التغييرات على الإرسال التالي مباشرة؛ ويُكتب إدخال صندوق الوارد داخل التطبيق دائمًا — تعطيل جميع القنوات يعني صندوق الوارد فقط."
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:49
-msgid "Message authored per broadcast"
-msgstr ""
+#: templates/admin/notifications/notificationkindconfig/change_list.html:48
+msgid "The variables this action provides — the only placeholders its message may use."
+msgstr "المتغيرات التي يوفرها هذا الإجراء — وهي المتغيرات الوحيدة التي يمكن لرسالته استخدامها."
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:53
-msgid "Provides:"
-msgstr ""
+#: templates/admin/notifications/notificationkindconfig/change_list.html:54
+msgid "Full form"
+msgstr "النموذج الكامل"
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:57
-msgid "no variables"
-msgstr ""
-
-#: templates/admin/notifications/notificationkindconfig/change_list.html:67
-msgid ""
-"The operator writes this message when composing each broadcast — title and "
-"body pass through exactly as typed."
-msgstr ""
-
-#: templates/admin/notifications/notificationkindconfig/change_list.html:70
-msgid "Go to broadcasts"
-msgstr ""
-
-#: templates/admin/notifications/notificationkindconfig/change_list.html:89
-msgid ""
-"Placeholders in braces are replaced per recipient. Only the variables listed "
-"above are available."
-msgstr ""
-
-#: templates/admin/notifications/notificationkindconfig/change_list.html:121
-msgid "Everything off = inbox only. The in-app entry is always written."
-msgstr ""
-
-#: templates/admin/notifications/notificationkindconfig/change_list.html:146
+#: templates/admin/notifications/notificationkindconfig/change_list.html:56
 msgid "Save"
-msgstr ""
+msgstr "حفظ"
 
-#: templates/admin/notifications/notificationkindconfig/change_list.html:152
-msgid "Open full form"
-msgstr ""
+#: templates/admin/notifications/notificationkindconfig/change_list.html:83
+msgid "Written per broadcast — title and body pass through exactly as the operator types them."
+msgstr "تُكتب لكل بث على حدة — يمرّ العنوان والنص تمامًا كما يكتبهما المشغّل."
+
+#: templates/admin/notifications/notificationkindconfig/change_list.html:86
+msgid "Go to broadcasts"
+msgstr "الانتقال إلى عمليات البث"
 
 #: templates/emails/welcome.html:4
 msgid "Welcome aboard!"
-msgstr ""
+msgstr "مرحبًا بك معنا!"
 
 #: templates/emails/welcome.html:7
 #, python-format
 msgid "Welcome aboard, %(name)s!"
-msgstr ""
+msgstr "مرحبًا بك معنا يا %(name)s!"
 
 #: templates/emails/welcome.html:8
 msgid "Your account is ready. We're glad to have you with us."
-msgstr ""
+msgstr "حسابك جاهز. يسعدنا انضمامك إلينا."

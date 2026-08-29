@@ -76,9 +76,30 @@ def test_handshake_rejects_wrong_token(client: Client) -> None:
 
 
 def test_handshake_fails_closed_when_unconfigured(client: Client) -> None:
-    response = client.get(WEBHOOK, {"hub.verify_token": ""})
+    response = client.get(WEBHOOK, {"hub.verify_token": "", "hub.challenge": "12345"})
 
     assert response.status_code == 400
+
+
+@pytest.mark.usefixtures("_whatsapp_webhook_creds")
+@pytest.mark.parametrize(
+    "params",
+    [
+        {},
+        {"hub.verify_token": "verify-me"},  # no challenge to echo
+        {"hub.challenge": "12345"},  # nothing to verify
+    ],
+)
+def test_handshake_without_both_params_is_a_400(
+    client: Client, params: dict[str, str]
+) -> None:
+    with capture_logs() as logs:
+        response = client.get(WEBHOOK, params)
+
+    assert response.status_code == 400
+    assert [
+        log["reason"] for log in logs if log["event"] == "notification_webhook_rejected"
+    ] == ["handshake parameters missing"]
 
 
 # --- POST statuses ------------------------------------------------------------
@@ -100,6 +121,47 @@ def test_status_report_updates_the_delivery(client: Client) -> None:
     assert response.json() == {"ok": True}
     delivery.refresh_from_db()
     assert delivery.status == DeliveryStatus.DELIVERED
+
+
+@pytest.mark.usefixtures("_whatsapp_webhook_creds")
+def test_unknown_status_is_skipped_with_a_warning(client: Client) -> None:
+    delivery = _delivery()
+    body, signature = _signed(_meta_payload("wamid.hook.1", "warning"))
+
+    with capture_logs() as logs:
+        response = _post(client, body, signature)
+
+    assert response.status_code == 200
+    unknown = [
+        log for log in logs if log["event"] == "notification_webhook_status_unknown"
+    ]
+    assert len(unknown) == 1
+    assert unknown[0]["log_level"] == "warning"
+    assert unknown[0]["status"] == "warning"
+    delivery.refresh_from_db()
+    assert delivery.status == DeliveryStatus.SENT
+
+
+@pytest.mark.usefixtures("_whatsapp_webhook_creds")
+def test_failed_status_with_a_mistyped_title_still_fails_the_row(
+    client: Client,
+) -> None:
+    """``errors[0].title`` is the one detail field; anything else is dropped,
+    the status transition is not."""
+    delivery = _delivery()
+    body, signature = _signed(
+        _meta_payload(
+            "wamid.hook.1",
+            "failed",
+            errors=[{"code": 131050, "title": 7, "message": "legacy text"}],
+        )
+    )
+
+    _post(client, body, signature)
+
+    delivery.refresh_from_db()
+    assert delivery.status == DeliveryStatus.FAILED
+    assert delivery.detail == ""
 
 
 @pytest.mark.usefixtures("_whatsapp_webhook_creds")

@@ -1,1 +1,1 @@
-"""generate_dashboard (G06) and seed_db (G07) management commands."""
+"""Project-wide commands: createsu, generate_dashboard, merge_auth_openapi, seed_db."""

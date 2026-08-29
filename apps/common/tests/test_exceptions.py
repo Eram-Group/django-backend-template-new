@@ -1,4 +1,4 @@
-"""ApplicationError machine-readable codes (WP4)."""
+"""ApplicationError machine-readable codes."""
 
 from apps.common.exceptions import ApplicationError
 
@@ -7,24 +7,29 @@ class SampleNotFoundError(ApplicationError):
     status_code = 404
 
 
-class ExplicitCodeError(ApplicationError):
-    code = "custom_code"
+class RenamedError(ApplicationError):
+    code = "custom_code"  # ignored: the class name is the code
 
 
 def test_code_is_derived_from_the_class_name() -> None:
     assert SampleNotFoundError.code == "sample_not_found"
 
 
-def test_explicit_code_wins_over_derivation() -> None:
-    assert ExplicitCodeError.code == "custom_code"
-
-
 def test_base_class_code() -> None:
-    assert ApplicationError.code == "application_error"
+    assert ApplicationError.code == "application"
 
 
-def test_derivation_survives_subclassing_an_explicit_code() -> None:
-    class ChildOfExplicitError(ExplicitCodeError):
+def test_the_class_name_is_the_only_road_to_a_code() -> None:
+    assert RenamedError.code == "renamed"
+
+    class ChildOfRenamedError(RenamedError):
         pass
 
-    assert ChildOfExplicitError.code == "child_of_explicit"
+    assert ChildOfRenamedError.code == "child_of_renamed"
+
+
+def test_extra_is_carried_verbatim() -> None:
+    error = SampleNotFoundError("gone", extra={"fields": {"pk": ["unknown"]}})
+    assert error.message == "gone"
+    assert error.extra == {"fields": {"pk": ["unknown"]}}
+    assert SampleNotFoundError("gone").extra == {}

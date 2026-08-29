@@ -11,6 +11,10 @@ from ninja.pagination import PaginationBase
 
 from apps.common.exceptions import ApplicationError
 
+# Page size when the client sends no ``limit``, and the ceiling it can ask for.
+DEFAULT_PAGE_SIZE = 20
+MAX_PAGE_SIZE = 100
+
 
 class CursorPagination(PaginationBase):
     """Cursor pagination over the UUIDv7 pk (time-ordered): newest first.
@@ -22,7 +26,7 @@ class CursorPagination(PaginationBase):
 
     class Input(Schema):
         cursor: str | None = None
-        limit: int = Field(default=20, ge=1, le=100)
+        limit: int = Field(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
 
     class Output(Schema):
         items: list[Any]

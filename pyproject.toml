@@ -228,7 +228,7 @@ layers = [
   "selectors",
   "models",
 ]
-containers = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
+containers = [ "apps.users", "apps.notifications", "apps.payments" ] # append each new app
 ignore_imports = [
   # Recorded exception (2026-07-18): the refund executor task trampolines
   # into its own app's services (function-level import) - the provider call
@@ -242,7 +242,7 @@ ignore_imports = [
 # re-exports only after an explicit decision - never silently.
 name = "Domain apps independent"
 type = "independence"
-modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
+modules = [ "apps.users", "apps.notifications", "apps.payments" ] # append each new app
 ignore_imports = [
   # Explicit decision (2026-07-12, restored 2026-07-27): notifications
   # addresses users - Notification/Device/Preference rows belong to a User,
@@ -273,7 +273,7 @@ ignore_imports = [
 # The notifications edges above are declared with the app shell and become
 # matched as the domain/service/producer slices land - same option the
 # forbidden contract below already uses.
-unmatched_ignore_imports_alerting = "none"
+unmatched_ignore_imports_alerting = "error"
 
 [[tool.importlinter.contracts]]
 # apps.common is primitives only. Exemptions: apps/common/tests hosts the
@@ -282,17 +282,15 @@ unmatched_ignore_imports_alerting = "none"
 name = "Common imports no domain app"
 type = "forbidden"
 source_modules = [ "apps.common" ]
-forbidden_modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.example" ] # append each new app
+forbidden_modules = [ "apps.users", "apps.notifications", "apps.payments" ] # append each new app
 ignore_imports = [
   "apps.common.tests.** -> apps.users.**",
   "apps.common.tests.** -> apps.notifications.**",
   "apps.common.tests.** -> apps.payments.**",
-  "apps.common.tests.** -> apps.example.**",
   "apps.common.management.commands.seed_db -> apps.users.**",
   "apps.common.management.commands.seed_db -> apps.notifications.**",
   "apps.common.management.commands.seed_db -> apps.payments.**",
-  "apps.common.management.commands.seed_db -> apps.example.**",
   # createsu bootstraps the concrete User by design (portable ECS one-off).
   "apps.common.management.commands.createsu -> apps.users.**",
 ]
-unmatched_ignore_imports_alerting = "none"
+unmatched_ignore_imports_alerting = "error"

@@ -1,20 +1,22 @@
-"""Outbound WhatsApp - resolves ``settings.WHATSAPP_BACKEND`` per call.
+"""Outbound WhatsApp - one transport: MetaWhatsAppBackend (Cloud API).
 
-Console in base/local, MetaWhatsAppBackend (connector placeholder) when
-deployed, Locmem in tests (``backends.outbox``). Same settings-string switch
-as SMS_BACKEND / PUSH_BACKEND; per-call resolution keeps
-``override_settings`` authoritative in tests.
+``_backend`` is the single seam: the notifications test conftest swaps it for
+an in-memory outbox (``apps.notifications.tests.locmem``). No settings switch,
+no console fallback - until the connector lands, a real send raises
+WhatsAppNotConfiguredError.
 """
 
 from collections.abc import Sequence
 
-from django.conf import settings
-from django.utils.module_loading import import_string
-
 from apps.notifications.clients.whatsapp.base import WhatsAppBackend
 from apps.notifications.clients.whatsapp.base import WhatsAppResult
+from apps.notifications.clients.whatsapp.meta import MetaWhatsAppBackend
 
 __all__ = ["WhatsAppResult", "whatsapp_send_template"]
+
+
+def _backend() -> WhatsAppBackend:
+    return MetaWhatsAppBackend()
 
 
 def whatsapp_send_template(
@@ -25,7 +27,6 @@ def whatsapp_send_template(
     variables: Sequence[str],
 ) -> WhatsAppResult:
     """Send one approved template; raises WhatsAppError subclasses on failure."""
-    backend: WhatsAppBackend = import_string(settings.WHATSAPP_BACKEND)()
-    return backend.send_template(
+    return _backend().send_template(
         to=to, template_name=template_name, language=language, variables=variables
     )

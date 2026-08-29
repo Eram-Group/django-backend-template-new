@@ -1,4 +1,4 @@
-"""SMS providers: success predicates, bulk groups, routing, backend switch."""
+"""SMS providers: success predicates, bulk groups, routing, the swapped seam."""
 
 import json
 from typing import Any
@@ -11,12 +11,13 @@ from pydantic import SecretStr
 from apps.common.http import OutboundTransportError
 from apps.notifications.clients.sms import sms_send
 from apps.notifications.clients.sms import sms_send_many
-from apps.notifications.clients.sms.backends import outbox
 from apps.notifications.clients.sms.base import SmsNotConfiguredError
 from apps.notifications.clients.sms.base import SmsProviderError
 from apps.notifications.clients.sms.oursms import OurSmsBackend
 from apps.notifications.clients.sms.routing import RoutingSmsBackend
+from apps.notifications.clients.sms.routing import provider_for
 from apps.notifications.clients.sms.smsmisr import SmsMisrBackend
+from apps.notifications.tests.locmem import sms_outbox
 
 OURSMS_URL = "https://api.oursms.com/msgs/sms"
 SMSMISR_URL = "https://smsmisr.com/api/SMS/"
@@ -166,7 +167,7 @@ def test_smsmisr_without_creds_is_loud() -> None:
 def test_routing_groups_numbers_per_provider() -> None:
     """One provider call per country group: SA numbers share one bulk POST."""
     oursms = respx.post(OURSMS_URL).mock(
-        return_value=httpx.Response(200, json={"accepted": 3, "rejected": 0})
+        return_value=httpx.Response(200, json={"accepted": 2, "rejected": 0})
     )
     smsmisr = respx.post(SMSMISR_URL).mock(
         return_value=httpx.Response(200, json={"code": "1901"})
@@ -177,7 +178,6 @@ def test_routing_groups_numbers_per_provider() -> None:
             "+966501234567",  # SA
             "+201001234567",  # EG
             "+966501234568",  # SA
-            "+14155550123",  # other -> default (OurSMS)
         ],
         body="hi",
     )
@@ -185,28 +185,47 @@ def test_routing_groups_numbers_per_provider() -> None:
     assert oursms.call_count == 1
     assert smsmisr.call_count == 1
     oursms_payload = json.loads(oursms.calls.last.request.content)
-    assert oursms_payload["dests"] == [
-        "+966501234567",
-        "+966501234568",
-        "+14155550123",
-    ]
+    assert oursms_payload["dests"] == ["+966501234567", "+966501234568"]
 
 
-# --- The settings switch --------------------------------------------------------
+@pytest.mark.usefixtures("_oursms_creds", "_smsmisr_creds")
+@respx.mock
+def test_routing_refuses_an_unmapped_region_before_any_send() -> None:
+    """No default provider: a number outside the registry fails the group
+    up front - nothing is silently handed to an international-capable
+    provider nobody chose for it."""
+    oursms = respx.post(OURSMS_URL).mock(
+        return_value=httpx.Response(200, json={"accepted": 1, "rejected": 0})
+    )
+
+    with pytest.raises(SmsProviderError, match="'US'") as excinfo:
+        RoutingSmsBackend().send_many(to=["+966501234567", "+14155550123"], body="hi")
+
+    assert excinfo.value.provider == "routing"
+    assert excinfo.value.sent == ()
+    assert oursms.call_count == 0
 
 
-def test_sms_send_many_uses_locmem_backend_in_tests() -> None:
+def test_provider_for_rejects_an_unparseable_number() -> None:
+    with pytest.raises(SmsProviderError, match="unparseable"):
+        provider_for("not-a-number")
+
+
+# --- The swapped seam -------------------------------------------------------------
+
+
+def test_sms_send_many_goes_through_the_swapped_seam() -> None:
     sms_send_many(to=["+966501234567", "+201001234567"], body="hello")
 
-    assert [entry.to for entry in outbox] == ["+966501234567", "+201001234567"]
-    assert all(entry.body == "hello" for entry in outbox)
+    assert [entry.to for entry in sms_outbox] == ["+966501234567", "+201001234567"]
+    assert all(entry.body == "hello" for entry in sms_outbox)
 
 
 def test_sms_send_single_wraps_send_many() -> None:
     sms_send(to="+966501234567", body="hello")
 
-    assert len(outbox) == 1
-    assert outbox[0].to == "+966501234567"
+    assert len(sms_outbox) == 1
+    assert sms_outbox[0].to == "+966501234567"
 
 
 # --- partial progress is reported, never lost -----------------------------------

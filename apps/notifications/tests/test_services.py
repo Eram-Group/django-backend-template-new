@@ -5,7 +5,6 @@ from typing import Any
 import pytest
 
 from apps.notifications import services
-from apps.notifications.clients.push import backends as push_backends
 from apps.notifications.constants import Channel
 from apps.notifications.constants import DeliveryStatus
 from apps.notifications.constants import DevicePlatform
@@ -16,6 +15,7 @@ from apps.notifications.models import NotificationKindConfig
 from apps.notifications.tests.factories import DeviceFactory
 from apps.notifications.tests.factories import NotificationDeliveryFactory
 from apps.notifications.tests.factories import NotificationFactory
+from apps.notifications.tests.locmem import push_outbox
 from apps.users.tests.factories import UserFactory
 
 pytestmark = pytest.mark.django_db
@@ -40,7 +40,7 @@ def test_send_creates_inbox_row_and_pending_deliveries(
     delivery = notification.deliveries.get()
     assert delivery.channel == Channel.PUSH
     assert delivery.status == DeliveryStatus.SENT  # executed inline on commit
-    assert len(push_backends.outbox) == 1
+    assert len(push_outbox) == 1
 
 
 def test_send_validates_context_keys() -> None:

@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from unfold.decorators import action
 
-from apps.common.admin import ExportableModelAdmin
+from apps.common.admin import BaseModelAdmin
 from apps.common.exceptions import ApplicationError
 from apps.notifications import selectors
 from apps.notifications import services
@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 
 
 @admin.register(Broadcast)
-class BroadcastAdmin(ExportableModelAdmin):
+class BroadcastAdmin(BaseModelAdmin):
     can_add = permissions.CAN_ADD
     can_change = permissions.CAN_CHANGE
     can_delete = permissions.CAN_DELETE
@@ -222,7 +222,9 @@ class BroadcastAdmin(ExportableModelAdmin):
     def resume_broadcast(self, request: HttpRequest, object_id: str) -> HttpResponse:
         broadcast = Broadcast.objects.get(pk=object_id)
         try:
-            summary = services.broadcast_resume(broadcast=broadcast)
+            summary = services.deliveries_resume(
+                broadcast=broadcast, include_failed=False
+            )
         except ApplicationError as exc:
             messages.error(request, exc.message)
         else:

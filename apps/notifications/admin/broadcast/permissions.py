@@ -7,7 +7,6 @@ once the row exists (a dispatched broadcast must show what was sent).
 """
 
 from apps.common.admin import FieldPermissions
-from apps.common.admin import always
 from apps.common.admin import on_change
 
 CAN_ADD = True
@@ -25,13 +24,5 @@ FIELD_PERMISSIONS = FieldPermissions(
         "joined_after": on_change,
         "joined_before": on_change,
         "channels": on_change,
-        "created_by": always,  # stamped from request.user, never typed
-        "status": always,
-        "dispatch_cursor": always,
-        "total_recipients": always,
-        "total_deliveries": always,
-        "sent_count": always,
-        "failed_count": always,
-        "skipped_count": always,
     },
 )

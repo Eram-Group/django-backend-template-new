@@ -63,9 +63,11 @@ def _first(model: type[Model]) -> Model | None:
 def _obj_or_skip(model: type[Model]) -> Model:
     obj = _first(model)
     if obj is None:
-        # Local models without rows fail test_data_coverage; third-party
-        # models (task results, login attempts...) legitimately start empty.
-        pytest.skip(f"no rows for {model._meta.label}")
+        # Third-party models (task results, login attempts...) legitimately
+        # start empty; a local model without rows is a gate failure
+        # (test_data_coverage), never a skip.
+        assert not is_local(model), f"{model._meta.label} has no seeded rows"
+        pytest.skip(f"no rows for third-party {model._meta.label}")
     return obj
 
 
@@ -88,30 +90,31 @@ def test_changelist(su_client: Client, model: type[Model]) -> None:
     assert response.status_code == 200
 
 
-@parametrize_all
-def test_search(su_client: Client, model: type[Model]) -> None:
-    if not admin_for(model).search_fields:
-        pytest.skip("no search_fields")
-    response = su_client.get(page_url(model, "changelist"), {"q": "gate probe"})
-    assert response.status_code == 200
+def test_search(su_client: Client) -> None:
+    targets = [model for model in ALL_MODELS if admin_for(model).search_fields]
+    assert targets, "no admin declares search_fields"
+    for model in targets:
+        response = su_client.get(page_url(model, "changelist"), {"q": "gate probe"})
+        assert response.status_code == 200, model
 
 
-@parametrize_all
-def test_every_filter_applied(su_client: Client, model: type[Model]) -> None:
+def test_every_filter_applied(su_client: Client) -> None:
     """Follow each filter choice link - the filtered queryset must execute."""
-    response = su_client.get(page_url(model, "changelist"))
-    changelist = response.context["cl"]
-    if not changelist.filter_specs:
-        pytest.skip("no list_filter")
-    for spec in changelist.filter_specs:
-        for choice in list(spec.choices(changelist))[:5]:
-            # unfold's form-based filters (e.g. RangeDateFilter) yield
-            # choices without query_string - they apply on submit instead.
-            query = choice.get("query_string")
-            if not query or query in ("?", ""):
-                continue  # form filter or the "All" reset link
-            filtered = su_client.get(page_url(model, "changelist") + query)
-            assert filtered.status_code == 200, (spec, query)
+    applied = 0
+    for model in ALL_MODELS:
+        response = su_client.get(page_url(model, "changelist"))
+        changelist = response.context["cl"]
+        for spec in changelist.filter_specs:
+            for choice in list(spec.choices(changelist))[:5]:
+                # unfold's form-based filters (e.g. RangeDateFilter) yield
+                # choices without query_string - they apply on submit instead.
+                query = choice.get("query_string")
+                if not query or query in ("?", ""):
+                    continue  # form filter or the "All" reset link
+                filtered = su_client.get(page_url(model, "changelist") + query)
+                assert filtered.status_code == 200, (model, spec, query)
+                applied += 1
+    assert applied, "no admin declares an applicable list_filter"
 
 
 @parametrize_all
@@ -208,8 +211,7 @@ def test_detail_actions_resolve(su_client: Client, superuser: Any) -> None:
         for model in ALL_MODELS
         if getattr(model_admin := admin_for(model), "actions_detail", None)
     ]
-    if not targets:
-        pytest.skip("no admin declares actions_detail yet")
+    assert targets, "no admin declares actions_detail"
     for model, model_admin in targets:
         obj = _obj_or_skip(model)
         actions = cast("Any", model_admin).get_actions_detail(
@@ -219,31 +221,6 @@ def test_detail_actions_resolve(su_client: Client, superuser: Any) -> None:
             url = reverse(f"admin:{action.action_name}", args=[quote(obj.pk)])
             response = su_client.get(url)
             assert response.status_code in (200, 302), (model, action.action_name)
-
-
-# --- autocomplete -----------------------------------------------------------
-
-
-def test_autocomplete_endpoints(su_client: Client) -> None:
-    targets = [
-        (model, field)
-        for model in ALL_MODELS
-        for field in admin_for(model).autocomplete_fields
-    ]
-    if not targets:
-        pytest.skip("no autocomplete_fields in any admin")
-    for model, field in targets:
-        opts = model._meta
-        response = su_client.get(
-            "/admin/autocomplete/",
-            {
-                "app_label": opts.app_label,
-                "model_name": str(opts.model_name),
-                "field_name": field,
-                "term": "",
-            },
-        )
-        assert response.status_code == 200, (model, field)
 
 
 # --- cross-cutting invariants ------------------------------------------------
@@ -265,14 +242,14 @@ def test_local_admins_use_the_framework(model: type[Model]) -> None:
     )
 
 
-@parametrize_local
-def test_inlines_use_the_framework(model: type[Model]) -> None:
+def test_inlines_use_the_framework() -> None:
     """Inline capability + field-permission discipline only holds if every
     inline subclasses the framework bases (can_* enforced at import)."""
-    inlines = getattr(admin_for(model), "inlines", ())
-    if not inlines:
-        pytest.skip("no inlines declared")
-    for inline in inlines:
+    targets = [
+        (model, inline) for model in LOCAL_MODELS for inline in admin_for(model).inlines
+    ]
+    assert targets, "no local admin declares inlines"
+    for model, inline in targets:
         assert issubclass(inline, BaseTabularInline | BaseStackedInline), (
             f"{model._meta.label}: {inline.__name__} must subclass "
             "BaseTabularInline/BaseStackedInline (apps.common.admin)."
@@ -284,19 +261,15 @@ def test_list_editable_cannot_bypass_field_rules(model: type[Model]) -> None:
     """Changelist bulk-editing ignores per-request field rules, so a ruled
     field (or its translation shadow) must never be list_editable."""
     model_admin = admin_for(model)
-    if not isinstance(model_admin, BaseModelAdmin):
-        pytest.skip("not a framework admin")
-    ruled = tuple(
-        set(model_admin.field_permissions.readonly_when)
-        | set(model_admin.field_permissions.hidden_when)
-    )
+    assert isinstance(model_admin, BaseModelAdmin)
+    ruled = tuple(model_admin.field_permissions.ruled_fields())
     expanded = set(
         expand_translation_shadows(
             fields=ruled,
             model_field_names={field.name for field in model._meta.get_fields()},
         )
     )
-    overlap = expanded & set(model_admin.list_editable or ())
+    overlap = expanded & set(model_admin.list_editable)
     assert not overlap, (
         f"{model._meta.label}: {sorted(overlap)} in list_editable would bypass "
         "field_permissions on the changelist."
@@ -349,8 +322,7 @@ def test_hidden_fields_cannot_be_posted(
         if isinstance(model_admin := admin_for(model), BaseModelAdmin)
         and model_admin.field_permissions.hidden_when
     ]
-    if not targets:
-        pytest.skip("no admin declares hidden_when rules yet")
+    assert targets, "no admin declares hidden_when rules"
     tampered = 0
     for model, model_admin in targets:
         for client, user in ((su_client, superuser), (priv_staff_client, priv_staff)):

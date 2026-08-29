@@ -1,43 +1,43 @@
-# Daily-driver recipes. Dev flow: Django runs on the host (local settings,
-# debug toolbar); postgres+mailpit run in compose. `just up` brings the full
-# prod-parity stack (web+worker containers on production settings).
+# Daily-driver recipes. One dev road: Django runs on the host with the local
+# settings module (`just run` + `just worker`); postgres + mailpit run in
+# compose; the production image is built and smoke-tested in CI.
 
-# Recipes see .env values (createsuperuser reads DJANGO_SUPERUSER_* from env).
+# Recipes see .env values (createsu reads DJANGO_SUPERUSER_* from env).
 set dotenv-load := true
+
+export DJANGO_SETTINGS_MODULE := "config.settings.local"
+
+app_name := `grep -o 'name="[^"]*"' infra/backend_infra/config.py | head -1 | cut -d'"' -f2`
 
 # Default: list all recipes.
 default:
     @just --list
 
-alias install := bootstrap
-alias setup := bootstrap
-
-# One-time setup: deps, .env, git hooks, infra, release step.
+# One-time setup: deps, .env, git hooks, services, release step.
 bootstrap:
     uv sync
-    cp -n .env.example .env || true
+    cp .env.example .env
     uv run pre-commit install --hook-type pre-commit --hook-type pre-push
     docker compose up -d --wait postgres mailpit
-    uv run manage.py migrate
-    uv run manage.py createcachetable
+    just migrate
 
-# Host dev server (local settings, debug toolbar, inline tasks).
+# Host dev server (local settings, debug toolbar). Run `just worker` alongside.
 run *args:
     uv run manage.py runserver {{ args }}
 
-# Full prod-parity stack: web + worker + postgres + mailpit.
-up:
-    docker compose up --build -d --wait
+# Drain the DB task queue on the host (`just worker --batch` = drain & exit).
+worker *args:
+    uv run manage.py db_worker --queue-name default,bulk {{ args }}
 
-# Stop containers (keep volumes).
+# Stop the compose services (keep volumes).
 stop:
     docker compose stop
 
-# Container logs, e.g. `just logs web` / `just logs -f worker`.
+# Service logs, e.g. `just logs postgres` / `just logs -f mailpit`.
 logs *args:
     docker compose logs {{ args }}
 
-# manage.py passthrough, e.g. `just manage createsuperuser`.
+# manage.py passthrough, e.g. `just manage createsu`.
 manage +args:
     uv run manage.py {{ args }}
 
@@ -45,11 +45,9 @@ manage +args:
 test *args:
     uv run pytest -n auto {{ args }}
 
-# Static checks: ruff + architecture contracts.
+# Every static check, exactly as CI runs them (pre-commit is the one lint source).
 lint:
-    uv run ruff check .
-    uv run ruff format --check .
-    uv run lint-imports
+    uv run pre-commit run --all-files
 
 # Auto-fix + format.
 fmt:
@@ -73,39 +71,24 @@ makemigrations *args:
 shell *args:
     uv run manage.py shell {{ args }}
 
-# Drain the DB task queue on the host (`just worker --batch` = drain & exit).
-worker *args:
-    TASKS_IMMEDIATE=false uv run manage.py db_worker {{ args }}
-
-# Drain the broadcast fan-out queue (scale by running several of these).
-worker-bulk *args:
-    TASKS_IMMEDIATE=false uv run manage.py db_worker --queue-name bulk {{ args }}
-
 # Idempotent superuser from DJANGO_SUPERUSER_* (.env locally, Secrets in AWS).
 superuser:
     uv run manage.py createsu
 
-# Seed fake data: scale 0..1 is logarithmic (0 = 10 users, 1 = 1,000,000).
-seed scale="0.3":
-    uv run manage.py seed_db --scale {{scale}}
+# Seed fake data: scale 0..1 is logarithmic (0 = 10 users, 1 = 1,000,000); seed = RNG seed.
+seed scale seed:
+    uv run manage.py seed_db --scale {{ scale }} --seed {{ seed }}
 
 # Destroy the database volume and rebuild from zero.
 [confirm("Drop ALL local containers + volumes and re-migrate? (y/N)")]
 db-reset:
     docker compose down -v
     docker compose up -d --wait postgres mailpit
-    uv run manage.py migrate
-    uv run manage.py createcachetable
+    just migrate
 
-# Shell inside the production image, e.g. `just bash` or `just bash -c 'id'`.
-bash *args:
-    docker compose run --rm web bash {{ args }}
-
-# Images compile at build once .po files exist; compiling here is local
-# verification only.
-# Extract + compile the ar/en translation catalogs.
+# Extract + compile the Arabic translation catalog.
 messages:
-    uv run manage.py makemessages -l ar -l en --ignore .venv --ignore staticfiles
+    uv run manage.py makemessages -l ar --ignore .venv --ignore staticfiles
     uv run manage.py compilemessages --ignore .venv
 
 # Start a fresh branch off up-to-date main.
@@ -114,15 +97,6 @@ branch name:
     git pull
     git checkout -b {{ name }}
 
-# Dependabot is the scheduled path; this is the local escape hatch.
-# Bump the lockfile to the latest compatible versions. Run `just test` after.
-update:
-    uv lock --upgrade
-
-# List dependencies with newer versions available.
-outdated:
-    uv tree --outdated --depth 1
-
 # Remove caches and local build artifacts.
 clean:
     rm -rf .pytest_cache .mypy_cache .ruff_cache .coverage htmlcov staticfiles
@@ -130,15 +104,13 @@ clean:
 
 # --- AWS infrastructure (infra/ = CDK, see docs/DEPLOYMENT.md) --------------
 
-app_name := "template"
-
 # Install the CDK project: Python deps (uv) + the pinned CDK CLI (npm).
 infra-install:
     cd infra && uv sync && npm ci
 
 # Synthesize every stack without AWS credentials (image_tag=synth placeholder).
 infra-synth:
-    cd infra && npx cdk synth --all -c image_tag=synth -q
+    cd infra && npx cdk synth -c image_tag=synth -q
 
 # Template assertions for the CDK stacks.
 infra-test:
@@ -156,26 +128,20 @@ infra-diff env:
 infra-deploy-shared:
     cd infra && npx cdk deploy Shared --require-approval broadening
 
-# Deploy one environment (+ its Shared/Db-<env> dependencies); first deploy: `just infra-deploy dev -- -c image_tag=<sha>`.
-infra-deploy env *args:
+# Deploy an environment that is already running, keeping its live image tag.
+infra-deploy env:
     cd infra && npx cdk deploy App-{{ env }} --require-approval broadening \
-        $(./scripts/live_context.sh {{ app_name }} {{ env }} || true) {{ args }}
+        $(./scripts/live_context.sh {{ app_name }} {{ env }})
+
+# First deploy of an environment: the image tag (git sha in ECR) is explicit.
+infra-deploy-first env tag:
+    cd infra && npx cdk deploy App-{{ env }} --require-approval broadening \
+        -c image_tag={{ tag }}
 
 # JSON skeleton of the <env>/<app> Secrets Manager secret (every key present).
-infra-secret-skeleton env="dev":
+infra-secret-skeleton env:
     cd infra && uv run python scripts/secret_skeleton.py {{ env }}
 
 # One-off task on the worker family, e.g. `just infra-run-task dev python manage.py createsu`.
 infra-run-task env +cmd:
     ./infra/scripts/run_task.sh {{ app_name }} {{ env }} {{ cmd }}
-
-# Django deploy checklist against deployed-mode settings (dummy prod values).
-check-deploy:
-    DJANGO_SETTINGS_MODULE=config.settings.production \
-    ENVIRONMENT=production \
-    SECRET_KEY=check-deploy-only-nZfK3vQ8wLxT1pYbR6mJc9GhD4sE7uAiO2 \
-    DJANGO_SUPERUSER_PASSWORD=check-deploy-only \
-    DATABASE_URL=postgres://user:pass@db.invalid:5432/app \
-    AWS_STORAGE_BUCKET_NAME=bucket AWS_S3_REGION_NAME=me-south-1 \
-    AWS_SES_REGION=me-south-1 SENTRY_DSN=https://key@sentry.invalid/1 \
-    uv run manage.py check --deploy --fail-level WARNING

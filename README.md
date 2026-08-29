@@ -44,10 +44,9 @@ just run         # dev server on http://localhost:8000
 | http://localhost:8025 | Mailpit — every local email lands here |
 | http://localhost:8000/healthz, /readyz | Liveness / readiness |
 
-The full production-shaped stack (gunicorn web + task worker, production
-settings module) runs with `just up` — on a fresh database apply the release
-step first:
-`docker compose run --rm web sh -c "python manage.py migrate && python manage.py createcachetable"`.
+Tasks always go through the Postgres queue: run `just worker` next to
+`just run`. The production image is built and booted (release step + probes)
+by the CI `image` job — there is no local container stack for the app.
 
 ## Commands
 
@@ -60,11 +59,10 @@ Run `just` for the full list. The ones you'll use daily:
 | `just lint` / `just fmt` / `just typecheck` | ruff check / ruff format / mypy --strict |
 | `just manage <cmd>` | any manage.py command |
 | `just migrate` / `just makemigrations` | migrations (+ cache table) |
-| `just seed [scale]` | fake data; scale 0..1 is logarithmic (0 = 10 users, 1 = 1,000,000) |
+| `just seed <scale> <seed>` | fake data; scale 0..1 is logarithmic (0 = 10 users, 1 = 1,000,000), seed = RNG seed |
 | `just worker` | drain the task queue (`manage.py db_worker`) |
 | `just shell` | shell_plus |
 | `just db-reset` | destroy volumes + re-migrate (asks first) |
-| `just check-deploy` | `manage.py check --deploy` against production settings |
 
 ## Testing & quality gates
 
@@ -98,8 +96,8 @@ unless `ENVIRONMENT=local`. Conventions: `CLAUDE.md` ("Factories & seed data").
 
 Django 6 native `django.tasks` with the Postgres-backed queue — no broker.
 
-- Locally `TASKS_IMMEDIATE=true` runs tasks inline; flip it to exercise the
-  real queue and drain with `just worker`.
+- Locally the queue is the same Postgres table as deployed; drain it with
+  `just worker`.
 - Deployed, the **worker service** runs `manage.py db_worker` from the same
   image. SIGTERM is graceful: the worker finishes its current task before
   exiting — set the ECS `stopTimeout` (worker task definition) to at least
@@ -116,10 +114,8 @@ deployed, observable fakes locally, in-memory in tests** (details:
 - **Payments** route by currency to the same gateways in every environment
   (Tap SAR / Paymob EGP) — put the providers' TEST-mode keys in `.env` and
   tunnel webhooks (`ngrok http 8000`, `BACKEND_BASE_URL` = the tunnel URL).
-  `manage.py simulate_payment_webhook <payment-pk> [--fail]` still delivers
-  a gateway event by hand — the payment flips to paid and the wallet is
-  credited, exactly like production. The test suite always runs against
-  `FakeGateway` (pinned in `test.py`).
+  The test suite always runs against the test `FakeGateway`
+  (`apps/payments/tests/fake_gateway.py`, pinned in `test.py`).
 - All provider credentials are optional `X | None` env fields (see
   `.env.example`): absent = that provider is simply not configured.
 
@@ -197,8 +193,8 @@ Migrations are append-only, enforced by `guard-migrations.yml`
   logins: `manage.py axes_reset` clears lockouts.
 - Secret rotation: put the new `SECRET_KEY`, move the old one into
   `SECRET_KEY_FALLBACKS`, drop it after sessions expire.
-- The admin lives at `ADMIN_URL` — randomize it outside local, and consider
-  `SECURE_ADMIN_LOGIN=true` (email-code admin login).
+- The admin lives at `ADMIN_URL` — randomize it outside local. Admin login is
+  password + django-axes; API users are passwordless.
 - Provider provisioning: **FCM** — create a Firebase service account, then
   `base64 -i service-account.json` into `FIREBASE_CREDENTIALS_B64`.
   **Tap** — dashboard secret key into `TAP_SECRET_KEY`; register the webhook

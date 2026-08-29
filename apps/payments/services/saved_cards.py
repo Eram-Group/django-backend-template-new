@@ -4,7 +4,9 @@ Cards are vaulted at the gateway; these services only manage our reference
 rows. Storing is idempotent on (gateway, token) - so webhook replays and the
 verify fallback can never duplicate a row - and on the provider's card
 fingerprint, so the same physical card re-vaulted under a new token is one
-row too.
+row too. Whether a gateway HAS a fingerprint or a detach call is decided by
+its capability (``CardVaultGateway``: Tap yes, Paymob no) - never by the
+shape of a payload.
 """
 
 import structlog
@@ -14,14 +16,23 @@ from django.utils.translation import gettext_lazy as _
 from apps.common.http import OutboundError
 from apps.payments.exceptions import SavedCardNotFoundError
 from apps.payments.gateways import gateway_by_name
-from apps.payments.gateways.base import GatewayResponseError
+from apps.payments.gateways.base import CardTokenEvent
+from apps.payments.gateways.base import CardVaultGateway
+from apps.payments.gateways.base import GatewayError
 from apps.payments.gateways.base import SavedCardData
 from apps.payments.gateways.base import SavedCardRef
-from apps.payments.gateways.base import WebhookEvent
 from apps.payments.models import SavedCard
 from apps.users.models import User
 
 logger = structlog.get_logger(__name__)
+
+
+def _card_ref(card: SavedCard) -> SavedCardRef:
+    return SavedCardRef(
+        token=card.token,
+        customer_id=card.gateway_customer_id,
+        agreement_id=card.gateway_agreement_id,
+    )
 
 
 def saved_card_store(*, user: User, gateway: str, data: SavedCardData) -> SavedCard:
@@ -40,7 +51,7 @@ def saved_card_store(*, user: User, gateway: str, data: SavedCardData) -> SavedC
       gateway once this commits, so the provider vault does not fill with
       copies either.
     """
-    fingerprint = data.fingerprint or _fetch_fingerprint(gateway=gateway, data=data)
+    fingerprint = _fingerprint(gateway=gateway, data=data)
     fields = {
         "user": user,
         "token": data.token,
@@ -68,11 +79,7 @@ def saved_card_store(*, user: User, gateway: str, data: SavedCardData) -> SavedC
         if card is None:
             card = SavedCard(gateway=gateway)
         elif card.token != data.token:
-            superseded = SavedCardRef(
-                token=card.token,
-                customer_id=card.gateway_customer_id,
-                agreement_id=card.gateway_agreement_id,
-            )
+            superseded = _card_ref(card)
         for name, value in fields.items():
             setattr(card, name, value)
         card.full_clean()
@@ -90,12 +97,14 @@ def saved_card_store(*, user: User, gateway: str, data: SavedCardData) -> SavedC
     return card
 
 
-def _fetch_fingerprint(*, gateway: str, data: SavedCardData) -> str:
-    """The webhook/charge payload does not always carry the fingerprint; the
-    provider's card API does. "" on failure - the row is still stored, just
-    without fingerprint dedup for this card."""
+def _fingerprint(*, gateway: str, data: SavedCardData) -> str:
+    """The provider's fingerprint for the card, read from its vault. A
+    gateway without a vault API (Paymob) has no fingerprint concept: its
+    tokens dedupe on their own, and the row's fingerprint stays blank (the
+    model documents that). A vault lookup that fails raises - the settlement
+    that carries the card is retried by the gateway/sweep."""
     provider = gateway_by_name(gateway)
-    if provider is None:
+    if not isinstance(provider, CardVaultGateway):
         return ""
     return provider.saved_card_fingerprint(
         saved_card=SavedCardRef(
@@ -107,23 +116,30 @@ def _fetch_fingerprint(*, gateway: str, data: SavedCardData) -> str:
 
 
 def _detach_at_gateway(*, gateway_name: str, saved_card: SavedCardRef) -> None:
-    """Best-effort delete of a card we no longer reference. A dangling
-    provider-side card is inert; it is logged for follow-up."""
+    """Best-effort delete of a card we no longer reference: the local row is
+    what makes a token chargeable BY US, so a dangling provider-side card is
+    inert. A gateway without a detach API (Paymob) keeps it; a failed call
+    is logged for follow-up."""
     provider = gateway_by_name(gateway_name)
-    if provider is None:
+    if not isinstance(provider, CardVaultGateway):
+        logger.info(
+            "saved_card_detach_unsupported",
+            gateway=gateway_name,
+            token=saved_card.token,
+        )
         return
     try:
         provider.delete_saved_card(saved_card=saved_card)
-    except OutboundError, GatewayResponseError:
+    except OutboundError, GatewayError:
         logger.warning(
-            "saved_card_superseded_delete_failed",
+            "saved_card_gateway_delete_failed",
             gateway=gateway_name,
             token=saved_card.token,
         )
 
 
 def saved_card_store_from_event(
-    *, gateway_name: str, event: WebhookEvent
+    *, gateway_name: str, event: CardTokenEvent
 ) -> SavedCard | None:
     """Standalone card-token callbacks (Paymob TOKEN): link by billing email.
 
@@ -133,8 +149,6 @@ def saved_card_store_from_event(
     customer simply saves the card again on their next checkout.
     """
     data = event.saved_card
-    if data is None or not data.token:
-        return None
     user = User.objects.filter(email__iexact=data.email).first()
     if user is None:
         logger.warning(
@@ -155,28 +169,14 @@ def _mask_email(email: str) -> str:
 
 
 def saved_card_delete(*, user: User, saved_card: SavedCard) -> None:
-    """Delete the row; best-effort detach at the gateway first (Tap only).
+    """Delete the row; detach at the gateway first where it has a vault API.
 
-    A gateway failure is non-fatal on purpose: the local row is what makes
-    the token chargeable BY US, so the user's intent wins immediately; a
-    dangling provider-side card is inert and logged for follow-up.
+    A gateway failure is non-fatal on purpose (see ``_detach_at_gateway``):
+    the user's intent wins immediately.
     """
     if saved_card.user_id != user.pk:
         raise SavedCardNotFoundError(str(_("Saved card not found.")))
-    gateway = gateway_by_name(saved_card.gateway)
-    if gateway is not None:
-        try:
-            gateway.delete_saved_card(
-                saved_card=SavedCardRef(
-                    token=saved_card.token,
-                    customer_id=saved_card.gateway_customer_id,
-                    agreement_id=saved_card.gateway_agreement_id,
-                )
-            )
-        except OutboundError, GatewayResponseError:
-            logger.warning(
-                "saved_card_gateway_delete_failed",
-                saved_card_id=str(saved_card.pk),
-                gateway=saved_card.gateway,
-            )
+    _detach_at_gateway(
+        gateway_name=saved_card.gateway, saved_card=_card_ref(saved_card)
+    )
     saved_card.delete()

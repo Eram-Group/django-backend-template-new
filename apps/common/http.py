@@ -1,7 +1,9 @@
 """Outbound HTTP kernel - every external-service call goes through here.
 
-``request_json`` wraps one httpx request with explicit timeouts, a typed
-retry policy (stamina), structured logging, and a small error taxonomy:
+``request_json`` wraps one httpx request with an explicit timeout, a typed
+retry policy (stamina), structured logging, and a small error taxonomy.
+Both the timeout and the retry policy are stated by every caller - the
+policy IS the caller's idempotency posture:
 
 - ``"transient"`` retries transport errors and 429/5xx responses - for calls
   where a duplicate beats a drop (status polls).
@@ -20,8 +22,8 @@ Request bodies are never logged (OTP codes, PII); response bodies travel only
 inside raised errors, truncated.
 """
 
-import threading
 import time
+from collections.abc import Callable
 from collections.abc import Mapping
 from typing import Any
 from typing import Literal
@@ -32,23 +34,14 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-DEFAULT_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
+#: The timeout every provider call states unless it has a reason of its own.
+PROVIDER_TIMEOUT = httpx.Timeout(10.0, connect=5.0)
 
-# One pooled client per process, created lazily on first use (post-fork under
-# gunicorn) so TLS handshakes and connections are reused across provider
-# calls. httpx.Client is thread-safe; timeouts are applied per request.
-_client: httpx.Client | None = None
-_client_lock = threading.Lock()
-
-
-def _get_client() -> httpx.Client:
-    global _client  # noqa: PLW0603 - process-wide pool, guarded by _client_lock
-    if _client is None:
-        with _client_lock:
-            if _client is None:
-                _client = httpx.Client(timeout=DEFAULT_TIMEOUT)
-    return _client
-
+# One pooled client per process so TLS handshakes and connections are reused
+# across provider calls. httpx.Client is thread-safe and lazy about
+# connecting (nothing happens at import; gunicorn forks before the first
+# request); the timeout is passed per request.
+_client = httpx.Client()
 
 type RetryPolicy = Literal["transient", "connect-only", "none"]
 
@@ -62,17 +55,12 @@ class OutboundError(Exception):
     """Base for outbound-HTTP failures (after retries were exhausted)."""
 
     def __init__(
-        self,
-        *,
-        service: str,
-        detail: str,
-        status_code: int | None = None,
-        body: str | None = None,
+        self, *, service: str, detail: str, status_code: int | None, body: str
     ) -> None:
         self.service = service
         self.detail = detail
         self.status_code = status_code
-        self.body = body[:_BODY_TRUNCATE_CHARS] if body is not None else None
+        self.body = body[:_BODY_TRUNCATE_CHARS]
         super().__init__(f"{service}: {detail}")
 
 
@@ -86,22 +74,22 @@ class OutboundTransportError(OutboundError):
     not auto-revert on it.
     """
 
-    def __init__(
-        self,
-        *,
-        service: str,
-        detail: str,
-        request_sent: bool,
-    ) -> None:
+    def __init__(self, *, service: str, detail: str, request_sent: bool) -> None:
         self.request_sent = request_sent
-        super().__init__(service=service, detail=detail)
+        super().__init__(service=service, detail=detail, status_code=None, body="")
 
 
 class OutboundStatusError(OutboundError):
     """The service answered with a non-2xx status."""
 
 
-def _retry_transient(exc: Exception) -> bool:
+def _before_the_wire(exc: Exception) -> bool:
+    """Connect-phase failures are the only ones where the request provably
+    never went out."""
+    return isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout)
+
+
+def _transient(exc: Exception) -> bool:
     if isinstance(exc, httpx.TransportError):
         return True
     return (
@@ -110,27 +98,15 @@ def _retry_transient(exc: Exception) -> bool:
     )
 
 
-def _retry_connect_only(exc: Exception) -> bool:
-    return isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout)
+def _never(exc: Exception) -> bool:
+    return False
 
 
-def _send_once(
-    *,
-    method: str,
-    url: str,
-    json: Mapping[str, Any] | None,
-    headers: Mapping[str, str] | None,
-    timeout: httpx.Timeout,
-) -> httpx.Response:
-    response = _get_client().request(
-        method,
-        url,
-        json=json,
-        headers=dict(headers) if headers else None,
-        timeout=timeout,
-    )
-    response.raise_for_status()
-    return response
+_RETRY_ON: dict[RetryPolicy, Callable[[Exception], bool]] = {
+    "transient": _transient,
+    "connect-only": _before_the_wire,
+    "none": _never,
+}
 
 
 def request_json(
@@ -140,8 +116,8 @@ def request_json(
     url: str,
     json: Mapping[str, Any] | None = None,
     headers: Mapping[str, str] | None = None,
-    timeout: httpx.Timeout = DEFAULT_TIMEOUT,
-    retry: RetryPolicy = "transient",
+    timeout: httpx.Timeout,
+    retry: RetryPolicy,
 ) -> httpx.Response:
     """Send one JSON request and return the 2xx response.
 
@@ -152,23 +128,24 @@ def request_json(
     started = time.monotonic()
     attempts = 0
 
-    def send() -> httpx.Response:
+    def send_once() -> httpx.Response:
         nonlocal attempts
-        if retry == "none":
-            attempts = 1
-            return _send_once(
-                method=method, url=url, json=json, headers=headers, timeout=timeout
-            )
-        predicate = _retry_transient if retry == "transient" else _retry_connect_only
-        for attempt in stamina.retry_context(
-            on=predicate, attempts=_ATTEMPTS, timeout=_RETRY_WINDOW_SECONDS
-        ):
-            with attempt:
-                attempts = attempt.num
-                return _send_once(
-                    method=method, url=url, json=json, headers=headers, timeout=timeout
-                )
-        raise AssertionError("unreachable: stamina always yields at least once")
+        attempts += 1
+        response = _client.request(
+            method,
+            url,
+            json=json,
+            headers=dict(headers) if headers else None,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response
+
+    # One retry loop for all three policies - "none" is the predicate that
+    # never retries.
+    send = stamina.retry(
+        on=_RETRY_ON[retry], attempts=_ATTEMPTS, timeout=_RETRY_WINDOW_SECONDS
+    )(send_once)
 
     def elapsed_ms() -> int:
         return int((time.monotonic() - started) * 1000)
@@ -204,9 +181,7 @@ def request_json(
         raise OutboundTransportError(
             service=service,
             detail=f"{method} {url} -> {type(exc).__name__}: {exc}",
-            # Same predicate as _retry_connect_only: connect-phase failures
-            # are the only ones where the request provably never went out.
-            request_sent=not isinstance(exc, httpx.ConnectError | httpx.ConnectTimeout),
+            request_sent=not _before_the_wire(exc),
         ) from exc
 
     logger.info(

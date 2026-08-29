@@ -11,8 +11,15 @@ from django.contrib.auth.models import Group
 from django.utils.translation import gettext_lazy as _
 
 from apps.common.admin import BaseModelAdmin
+from apps.common.admin import BaseModelResource
 
 admin.site.unregister(Group)
+
+
+class GroupResource(BaseModelResource):
+    class Meta:
+        model = Group
+        fields = ("id", "name")
 
 
 @admin.register(Group)
@@ -20,9 +27,9 @@ class ProjectGroupAdmin(BaseModelAdmin):
     can_add = True
     can_change = True
     can_delete = True
+    resource_classes = [GroupResource]
 
     list_display = ("name",)
     search_fields = ("name",)
     search_help_text = _("Search by group name.")
     ordering = ("name",)
-    filter_horizontal = ("permissions",)

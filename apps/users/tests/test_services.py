@@ -8,7 +8,7 @@ from django.core.mail import EmailMessage
 
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import Notification
-from apps.payments.constants import DEFAULT_CURRENCY
+from apps.payments.services import wallet_currency_for
 from apps.users import services
 from apps.users.constants import Language
 from apps.users.models import User
@@ -45,17 +45,29 @@ def test_user_update_runs_model_validation() -> None:
     assert "language" in excinfo.value.message_dict
 
 
-def test_user_post_signup_provisions_wallet_and_enqueues_welcome_email(
+def test_user_update_rejects_an_empty_name() -> None:
+    user = UserFactory.create()
+    with pytest.raises(ValidationError) as excinfo:
+        services.user_update(user=user, data={"name": ""})
+    assert "name" in excinfo.value.message_dict
+
+
+def test_user_create_provisions_wallet_and_enqueues_welcome_email(
     django_capture_on_commit_callbacks: Any,
     mailoutbox: list[EmailMessage],
 ) -> None:
-    # Bare create_user, like real signup: no factory-provisioned wallet yet.
-    user = User.objects.create_user("signup@example.com", name="New User")
-
     with django_capture_on_commit_callbacks(execute=True) as callbacks:
-        services.user_post_signup(user=user)
+        user = services.user_create(
+            user=User(),
+            email="Signup@Example.com",
+            name="New User",
+            language=Language.ENGLISH,
+        )
 
-    assert user.wallet.currency == DEFAULT_CURRENCY
+    assert user.email == "Signup@example.com"  # domain normalized
+    assert user.language == Language.ENGLISH
+    assert not user.has_usable_password()
+    assert user.wallet.currency == wallet_currency_for(language=Language.ENGLISH)
     assert user.wallet.balance == 0
     # ImmediateBackend (test settings) ran the enqueued task synchronously.
     assert len(callbacks) == 1
@@ -67,12 +79,26 @@ def test_user_post_signup_provisions_wallet_and_enqueues_welcome_email(
     assert not welcome.deliveries.exists()
 
 
-def test_user_post_signup_sends_nothing_before_commit(
+def test_user_create_sends_nothing_before_commit(
     mailoutbox: list[EmailMessage],
 ) -> None:
-    user = User.objects.create_user("signup@example.com", name="New User")
-    services.user_post_signup(user=user)  # transaction never commits in tests
+    services.user_create(
+        user=User(),
+        email="signup@example.com",
+        name="New User",
+        language=Language.ARABIC,
+    )  # transaction never commits in tests
     assert not mailoutbox
+
+
+def test_user_create_requires_a_name_and_a_unique_email() -> None:
+    UserFactory.create(email="taken@example.com")
+    with pytest.raises(ValidationError) as excinfo:
+        services.user_create(
+            user=User(), email="taken@example.com", name="", language=Language.ARABIC
+        )
+    assert {"email", "name"} <= set(excinfo.value.message_dict)
+    assert User.objects.filter(email="taken@example.com").count() == 1
 
 
 def test_updatable_fields_are_a_safe_allowlist() -> None:
@@ -86,6 +112,19 @@ def test_factory_users_are_passwordless_and_verified() -> None:
     assert not user.has_usable_password()
     assert EmailAddress.objects.filter(user=user, verified=True, primary=True).exists()
     assert User.objects.filter(pk=user.pk).exists()
+
+
+def test_manager_sets_the_privilege_flags_explicitly() -> None:
+    regular = User.objects.create_user(
+        "regular@example.com", name="Regular", language=Language.ARABIC
+    )
+    boss = User.objects.create_superuser(
+        "boss@example.com", "pw", name="Boss", language=Language.ENGLISH
+    )
+    assert (regular.is_staff, regular.is_superuser) == (False, False)
+    assert (boss.is_staff, boss.is_superuser) == (True, True)
+    assert boss.check_password("pw")
+    assert not regular.has_usable_password()
 
 
 def test_user_deactivate_flips_is_active_and_ends_sessions() -> None:

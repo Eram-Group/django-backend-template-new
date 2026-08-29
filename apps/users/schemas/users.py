@@ -4,6 +4,7 @@ from datetime import datetime
 from ninja import Schema
 
 from apps.users.constants import Language
+from apps.users.models import User
 
 
 class UserSummary(Schema):
@@ -18,9 +19,9 @@ class UserDetail(UserSummary):
     created_at: datetime
 
     @staticmethod
-    def resolve_phone(obj: object) -> str:
+    def resolve_phone(obj: User) -> str:
         # PhoneNumberField yields a PhoneNumber object, not a str.
-        return str(getattr(obj, "phone", "") or "")
+        return str(obj.phone)
 
 
 class UserUpdateIn(Schema):

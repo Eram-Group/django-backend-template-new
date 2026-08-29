@@ -12,19 +12,28 @@ from apps.users.constants import Language
 
 
 class UserManager(DjangoUserManager["User"]):
-    """Email-based manager; regular users are passwordless (unusable password)."""
+    """Email-based manager for the accounts services do not create: staff
+    with passwords (``createsu``) and test fixtures. Signups go through
+    ``services.user_create``."""
 
     def _create_user(
         self,
         email: str,
         password: str | None,
+        *,
+        is_staff: bool,
+        is_superuser: bool,
         **extra_fields: Any,
     ) -> User:
         if not email:
             msg = "The email address must be set."
             raise ValueError(msg)
-        email = self.normalize_email(email)
-        user = self.model(email=email, **extra_fields)
+        user = self.model(
+            email=self.normalize_email(email),
+            is_staff=is_staff,
+            is_superuser=is_superuser,
+            **extra_fields,
+        )
         if password:
             user.set_password(password)
         else:
@@ -38,9 +47,9 @@ class UserManager(DjangoUserManager["User"]):
         password: str | None = None,
         **extra_fields: Any,
     ) -> User:
-        extra_fields.setdefault("is_staff", False)
-        extra_fields.setdefault("is_superuser", False)
-        return self._create_user(email, password, **extra_fields)
+        return self._create_user(
+            email, password, is_staff=False, is_superuser=False, **extra_fields
+        )
 
     def create_superuser(  # type: ignore[override]
         self,
@@ -48,15 +57,9 @@ class UserManager(DjangoUserManager["User"]):
         password: str | None = None,
         **extra_fields: Any,
     ) -> User:
-        extra_fields.setdefault("is_staff", True)
-        extra_fields.setdefault("is_superuser", True)
-        if extra_fields["is_staff"] is not True:
-            msg = "Superuser must have is_staff=True."
-            raise ValueError(msg)
-        if extra_fields["is_superuser"] is not True:
-            msg = "Superuser must have is_superuser=True."
-            raise ValueError(msg)
-        return self._create_user(email, password, **extra_fields)
+        return self._create_user(
+            email, password, is_staff=True, is_superuser=True, **extra_fields
+        )
 
 
 class User(BaseModel, AbstractUser):
@@ -71,17 +74,14 @@ class User(BaseModel, AbstractUser):
     last_name = None  # type: ignore[assignment]
 
     email = models.EmailField(_("email address"), unique=True)
-    name = models.CharField(_("name"), max_length=255, blank=True)
+    name = models.CharField(_("name"), max_length=255)
     # Optional and NOT unique - email is the login identity. Stored E164 with
     # no default region: clients submit the country code (+966... / +20...).
     # Optional; payments pass it to the gateway as customer_phone when present.
     phone = PhoneNumberField(_("phone number"), blank=True)
-    language = models.CharField(
-        _("language"),
-        max_length=2,
-        choices=Language,
-        default=Language.ARABIC,
-    )
+    # Set explicitly at creation (signup captures Accept-Language); drives
+    # every user-facing email and notification.
+    language = models.CharField(_("language"), max_length=2, choices=Language)
 
     objects: ClassVar[UserManager] = UserManager()
 

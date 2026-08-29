@@ -10,6 +10,7 @@ from collections.abc import Sequence
 
 from django.conf import settings
 
+from apps.common.http import PROVIDER_TIMEOUT
 from apps.common.http import request_json
 from apps.notifications.clients.sms.base import SmsNotConfiguredError
 from apps.notifications.clients.sms.base import SmsProviderError
@@ -52,6 +53,7 @@ class SmsMisrBackend:
                     "sender": sender,
                     "message": body,
                 },
+                timeout=PROVIDER_TIMEOUT,
                 retry="transient",
             )
             payload = response.json()

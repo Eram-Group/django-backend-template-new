@@ -15,9 +15,6 @@ def user_get(*, pk: uuid.UUID) -> User:
         raise UserNotFoundError(str(_("User not found."))) from exc
 
 
-def user_list(*, is_active: bool | None = None) -> QuerySet[User]:
+def user_list() -> QuerySet[User]:
     """Base queryset for paginated user lists (CursorPagination orders by pk)."""
-    users = User.objects.all()
-    if is_active is not None:
-        users = users.filter(is_active=is_active)
-    return users
+    return User.objects.all()

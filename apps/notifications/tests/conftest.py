@@ -2,17 +2,27 @@
 
 import pytest
 
-from apps.notifications.clients.push import backends as push_backends
-from apps.notifications.clients.sms import backends as sms_backends
-from apps.notifications.clients.whatsapp import backends as whatsapp_backends
+from apps.notifications.clients import push as push_client
+from apps.notifications.clients import sms as sms_client
+from apps.notifications.clients import whatsapp as whatsapp_client
+from apps.notifications.tests import locmem
 
 
 @pytest.fixture(autouse=True)
-def _clear_client_outboxes() -> None:
-    """Locmem SMS/push/WhatsApp outboxes start empty in every test."""
-    sms_backends.outbox.clear()
-    push_backends.outbox.clear()
-    whatsapp_backends.outbox.clear()
+def outboxes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test sends SMS/push/WhatsApp into empty in-memory outboxes.
+
+    The three client ``_backend`` seams are the ONLY switch - there is no
+    settings-string backend. A test that wants a different transport
+    monkeypatches the same seam (e.g. MetaWhatsAppBackend for the
+    not-configured path).
+    """
+    monkeypatch.setattr(sms_client, "_backend", locmem.LocmemSmsBackend)
+    monkeypatch.setattr(push_client, "_backend", locmem.LocmemPushBackend)
+    monkeypatch.setattr(whatsapp_client, "_backend", locmem.LocmemWhatsAppBackend)
+    locmem.sms_outbox.clear()
+    locmem.push_outbox.clear()
+    locmem.whatsapp_outbox.clear()
 
 
 @pytest.fixture(autouse=True)

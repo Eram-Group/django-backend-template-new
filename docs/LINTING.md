@@ -121,7 +121,6 @@ findings at the time of the audit.
 | `SLF` | 25 | `Model._meta` is Django's de-facto public API despite the underscore. |
 | `PLR` | 101 | Magic values (seed weights, status codes) and complexity counters the flat-service style rejects. |
 | `D` | 628 | Mandatory docstrings — a real policy decision, still open. |
-| `ERA` | 118 | Flags `apps/example`, an app that *is* commented-out template code. |
 | `CPY` | 260 | No per-file copyright headers; `LICENSE` sits at the repo root. |
 | `ANN` | 100 | Redundant: mypy strict already fails on missing annotations. |
 | `EM`, `FBT` | 4, 4 | Inline exception messages and the admin's boolean capability API. |

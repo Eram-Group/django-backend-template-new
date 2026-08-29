@@ -51,14 +51,13 @@ docs/ARCHITECTURE.md explains the conventions in depth.
 
 ## Daily commands
 
-- `just bootstrap` (one-time) · `just run` (dev server) · `just up`
-  (prod-parity compose stack)
-- `just test` · `just lint` · `just fmt` · `just typecheck` ·
-  `uv run lint-imports`
+- `just bootstrap` (one-time) · `just run` (dev server) + `just worker`
+  (the one dev road; compose runs only postgres + mailpit)
+- `just test` · `just lint` (pre-commit, the single lint source) · `just fmt` ·
+  `just typecheck` · `uv run lint-imports`
 - `just manage <cmd>` · `just migrate` · `just makemigrations` ·
-  `just seed [scale]` · `just worker` · `just superuser` ·
-  `just check-deploy` · `just messages` (i18n catalogs) ·
-  `just pr` / `just branch <name>` (PR flow) · `just update` / `just outdated`
+  `just seed <scale> <seed>` · `just superuser` · `just messages` (Arabic
+  catalog) · `just branch <name>`
 - AWS (CDK in `infra/`, design `docs/AWS_ARCHITECTURE.md`, runbook
   `docs/DEPLOYMENT.md`): `just infra-synth` ·
   `just infra-test` · `just infra-lint` · `just infra-diff <env>` ·
@@ -98,7 +97,7 @@ transitive dependency of factory_boy — never import it.
   `post_generation` hook** (the official recipes recommendation for
   reverse FK/O2O invariants — verified against docs + 3.3.3 source,
   2026-07-18). Exemplar: `UserFactory.wallet`, mirroring the signup
-  invariant (`user_post_signup` → `wallet_create`):
+  invariant (`user_create` → `wallet_create`):
   - Pass the factory as a **dotted-path string**
     (`RelatedFactory("apps.payments.tests.factories.WalletFactory",
     factory_related_name="user")`) when a class import would be circular —

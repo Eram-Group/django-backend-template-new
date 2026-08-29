@@ -1,29 +1,34 @@
 """Populate the LOCAL database with realistic fake data at a chosen scale.
 
-    manage.py seed_db --scale 0.5           # ~3.2k users
-    manage.py seed_db --scale 1             # 1,000,000 users
-    manage.py seed_db --scale 0.3 --seed 42 # deterministic run
-    manage.py seed_db --wipe --scale 0      # wipe old seed data, tiny reseed
+    manage.py seed_db --scale 0.5 --seed 42   # ~3.2k users
+    manage.py seed_db --scale 1 --seed 42     # 1,000,000 users
+
+Every run is deterministic (--seed is required) and starts from an empty
+@seed.example.com domain: previously seeded rows are wiped first, so the
+result of a given (scale, seed) pair is always the same database.
 
 Scale is logarithmic: rows = 10 * 100_000**scale (0 -> 10, 0.5 -> ~3.2k,
 0.75 -> ~56k, 1.0 -> 1M) - that is the USER count; the seeder populates the
 whole domain graph per user (email address, wallet, payments with a
 realistic status mix, a replayable wallet ledger, saved cards, devices,
-notifications with per-channel delivery rows), so total
-rows are ~8-10x, plus two sample broadcasts (one completed, one mid-dispatch
-so resume tooling has something to chew on). Seeded rows carry the
-@seed.example.com email domain so --wipe can remove exactly them.
+notifications with per-channel delivery rows) plus broadcasts, whose count
+follows the same curve and which alternate between COMPLETED and
+mid-dispatch so resume tooling has something to chew on. The realism knobs
+live in one place: MIX.
 
-Seeders build instances through the factory registry WITHOUT saving
-(factory build + chunked bulk_create) - per-row save/post_generation would
-take hours at scale 1. Related rows fan out per parent with variance via
+Seeders build instances through the factories WITHOUT saving (factory
+build + chunked bulk_create) - per-row save/post_generation would take
+hours at scale 1. Related rows fan out per parent with variance via
 fan_out(); a future AddressSeeder just declares per_parent=(0, 10).
 """
 
 import math
 import random
 import time
+import uuid
+from collections import Counter
 from collections.abc import Callable
+from decimal import Decimal
 from typing import Any
 
 from django.core.management.base import BaseCommand
@@ -34,16 +39,69 @@ from django.db.models import F
 from django.db.models import Model
 from django.db.models.expressions import RawSQL
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
+from apps.notifications.constants import BroadcastStatus
+from apps.notifications.constants import Channel
+from apps.notifications.constants import DeliveryStatus
+from apps.notifications.constants import DevicePlatform
+from apps.notifications.constants import NotificationKind
+from apps.payments.constants import GatewayName
+from apps.payments.constants import PaymentKind
+from apps.payments.constants import PaymentStatus
+from apps.payments.constants import WalletTransactionKind
 from config.env import env
 
 SEED_DOMAIN = "seed.example.com"
 CHUNK = 10_000
 BATCH = 1_000
 
+# The executor's skip reasons (apps/notifications/tasks/delivery.py writes
+# these literals into NotificationDelivery.detail); the bulk path replicates
+# its rows, so the strings must match what an operator sees for real skips.
+SKIP_NO_DEVICES = "no devices"
+SKIP_NO_PHONE = "no phone"
+
+# Every realism knob of the generated graph. Shares are probabilities per
+# row; (lo, hi) pairs are uniform per-parent fan-out ranges.
+MIX: dict[str, Any] = {
+    "payments_per_user": (0, 4),
+    "payment_amount": (10, 500),
+    "topup_share": 0.7,  # payments that are wallet top-ups (vs. PaymentKind.OTHER)
+    "payment_status": (  # cumulative weights, in order
+        (PaymentStatus.PAID, 0.65),
+        (PaymentStatus.PENDING, 0.15),
+        (PaymentStatus.FAILED, 0.12),
+        (PaymentStatus.REFUNDED, 0.08),
+    ),
+    "spend_share": 0.4,  # users with credit who spent part of it
+    "announcement_share": 0.1,  # users holding a one-off announcement
+    "read_share": 0.6,  # notifications already read
+    "push_delivered_share": 0.9,  # push deliveries that succeeded (rest FAILED)
+    "saved_cards_per_user": (0, 2),
+    "devices_per_user": (0, 2),
+    "card_brands": ("VISA", "MASTERCARD", "MADA"),
+    "broadcast_audience_cap": 1_000,  # recipients per broadcast, at most
+}
+
 
 def target_count(scale: float) -> int:
     return round(10 * math.pow(100_000, scale))
+
+
+def broadcast_count(scale: float) -> int:
+    """One broadcast per order of magnitude of users, plus one (0 -> 2)."""
+    return round(math.log10(target_count(scale))) + 1
+
+
+def weighted_choice[T](weights: tuple[tuple[T, float], ...], rng: random.Random) -> T:
+    roll = rng.random()
+    cumulative = 0.0
+    for value, weight in weights:
+        cumulative += weight
+        if roll < cumulative:
+            return value
+    return weights[-1][0]
 
 
 def fan_out[P, C: Model](
@@ -72,12 +130,10 @@ class Command(BaseCommand):
             help="0..1 log curve: 0 -> 10 users, 0.5 -> ~3.2k, 1.0 -> 1,000,000.",
         )
         parser.add_argument(
-            "--seed", type=int, default=None, help="Deterministic values."
-        )
-        parser.add_argument(
-            "--wipe",
-            action="store_true",
-            help=f"First delete all previously seeded rows (@{SEED_DOMAIN}).",
+            "--seed",
+            type=int,
+            required=True,
+            help="RNG seed: the same (scale, seed) always yields the same data.",
         )
 
     def handle(self, *args: Any, **options: Any) -> None:
@@ -88,74 +144,72 @@ class Command(BaseCommand):
         if not 0 <= scale <= 1:
             msg = f"--scale must be within 0..1, got {scale}."
             raise CommandError(msg)
+        seed: int = options["seed"]
 
         # Dev-only deps (factory_boy, mimesis): import at run time so the
         # module stays importable in production images.
         from factory.random import reseed_random
 
         from apps.common.tests import fake
-        from apps.users.models import User
 
-        rng = random.Random(options["seed"])  # noqa: S311 - fake data, not crypto
-        if options["seed"] is not None:
-            random.seed(options["seed"])
-            fake.reseed(options["seed"])
-            # factory_boy's own RNG (FuzzyChoice); untyped upstream
-            reseed_random(options["seed"])  # type: ignore[no-untyped-call]
+        rng = random.Random(seed)  # noqa: S311 - fake data, not crypto
+        random.seed(seed)
+        fake.reseed(seed)
+        # factory_boy's own RNG (FuzzyChoice); untyped upstream
+        reseed_random(seed)  # type: ignore[no-untyped-call]
 
-        if options["wipe"]:
-            from apps.notifications.models import Broadcast
-            from apps.payments.models import Payment
-            from apps.payments.models import SavedCard
-            from apps.payments.models import Wallet
-            from apps.payments.models import WalletTransaction
-
-            seeded_users = User.objects.filter(email__endswith=f"@{SEED_DOMAIN}")
-            # PROTECT chain dictates the order: ledger rows first (they
-            # protect wallets AND payments), then payments, then saved cards
-            # (after payments so SET_NULL never rewrites doomed rows), then
-            # wallets, then broadcasts (created_by is PROTECT and their
-            # notifications/deliveries cascade with them); deleting users
-            # last cascades the rest (EmailAddress, Device, Notification,
-            # NotificationDelivery).
-            wiped = 0
-            for qs in (
-                WalletTransaction.objects.filter(wallet__user__in=seeded_users),
-                Payment.objects.filter(user__in=seeded_users),
-                SavedCard.objects.filter(user__in=seeded_users),
-                Wallet.objects.filter(user__in=seeded_users),
-                Broadcast.objects.filter(created_by__in=seeded_users),
-                seeded_users,
-            ):
-                deleted, _ = qs.delete()
-                wiped += deleted
-            self.stdout.write(f"wiped {wiped} previously seeded rows")
-
+        self.stdout.write(f"wiped {self._wipe():,} previously seeded rows")
         count = target_count(scale)
         self.stdout.write(f"scale={scale} -> {count:,} users")
         started = time.monotonic()
         totals = self._seed_users(count, rng)
-        for label, rows in self._seed_broadcasts(rng).items():
-            totals[label] = totals.get(label, 0) + rows
+        totals.update(self._seed_broadcasts(broadcast_count(scale), rng))
         elapsed = time.monotonic() - started
 
         for label, rows in totals.items():
             self.stdout.write(f"  {label}: {rows:,} rows")
-        rate = sum(totals.values()) / max(elapsed, 0.001)
+        rows = sum(totals.values())
         self.stdout.write(
-            self.style.SUCCESS(f"seeded in {elapsed:.1f}s ({rate:,.0f} rows/s)")
+            self.style.SUCCESS(
+                f"seeded {rows:,} rows in {elapsed:.1f}s ({rows / elapsed:,.0f} rows/s)"
+            )
         )
 
-    def _seed_users(self, count: int, rng: random.Random) -> dict[str, int]:
+    def _wipe(self) -> int:
+        from apps.notifications.models import Broadcast
+        from apps.payments.models import Payment
+        from apps.payments.models import SavedCard
+        from apps.payments.models import Wallet
+        from apps.payments.models import WalletTransaction
+        from apps.users.models import User
+
+        seeded_users = User.objects.filter(email__endswith=f"@{SEED_DOMAIN}")
+        # PROTECT chain dictates the order: ledger rows first (they protect
+        # wallets AND payments), then payments, then saved cards (after
+        # payments so SET_NULL never rewrites doomed rows), then wallets,
+        # then broadcasts (created_by is PROTECT and their notifications /
+        # deliveries cascade with them); deleting users last cascades the
+        # rest (EmailAddress, Device, Notification, NotificationDelivery).
+        wiped = 0
+        for qs in (
+            WalletTransaction.objects.filter(wallet__user__in=seeded_users),
+            Payment.objects.filter(user__in=seeded_users),
+            SavedCard.objects.filter(user__in=seeded_users),
+            Wallet.objects.filter(user__in=seeded_users),
+            Broadcast.objects.filter(created_by__in=seeded_users),
+            seeded_users,
+        ):
+            deleted, _ = qs.delete()
+            wiped += deleted
+        return wiped
+
+    def _seed_users(self, count: int, rng: random.Random) -> Counter[str]:
         from allauth.account.models import EmailAddress
 
-        from apps.common.tests import fake
         from apps.users.models import User
-        from apps.users.tests.factories import LANGUAGE_WEIGHTS
+        from apps.users.tests.factories import UserFactory
 
-        offset = User.objects.filter(email__endswith=f"@{SEED_DOMAIN}").count()
-        totals: dict[str, int] = {"users": 0, "email addresses": 0}
-        started = time.monotonic()
+        totals: Counter[str] = Counter()
         for chunk_start in range(0, count, CHUNK):
             size = min(CHUNK, count - chunk_start)
             # Query counts make bulk-only violations visible instantly: a
@@ -164,22 +218,12 @@ class Command(BaseCommand):
             # (CaptureQueriesContext forces the cursor to record regardless
             # of DEBUG.)
             with CaptureQueriesContext(connection) as queries:
-                # Plain constructors, not UserFactory.build: factory
-                # declaration resolution measured ~9x slower per instance,
-                # and this loop dominates seeding CPU. Field parity with
-                # UserFactory (weighted language, locale-matched name,
-                # unusable password) is deliberate - keep them in sync.
-                users = []
-                for i in range(size):
-                    language = rng.choice(LANGUAGE_WEIGHTS)
-                    users.append(
-                        User(
-                            email=f"user{offset + chunk_start + i}@{SEED_DOMAIN}",
-                            language=language,
-                            name=fake.full_name(language),
-                            password="!",  # noqa: S106 - unusable marker
-                        )
-                    )
+                users = UserFactory.build_bulk(
+                    emails=[
+                        f"user{chunk_start + i}@{SEED_DOMAIN}" for i in range(size)
+                    ],
+                    rng=rng,
+                )
                 created = User.objects.bulk_create(users, batch_size=BATCH)
                 addresses = fan_out(
                     created,
@@ -193,12 +237,9 @@ class Command(BaseCommand):
                 graph_counts = self._seed_domain_graph(created, rng)
             totals["users"] += len(created)
             totals["email addresses"] += len(addresses)
-            for label, rows in graph_counts.items():
-                totals[label] = totals.get(label, 0) + rows
-            rate = totals["users"] / max(time.monotonic() - started, 0.001)
+            totals.update(graph_counts)
             self.stdout.write(
-                f"  users {totals['users']:,}/{count:,} "
-                f"({rate:,.0f}/s, {len(queries)} queries)"
+                f"  users {totals['users']:,}/{count:,} ({len(queries)} queries)"
             )
 
         # Spread signup timestamps over the past year (all-identical
@@ -217,62 +258,42 @@ class Command(BaseCommand):
         notifications for one chunk of freshly created users - all bulk, all
         invariants: wallet.balance equals the last ledger balance_after (and
         never goes negative), notifications mirror what the producers
-        (_on_paid, user_post_signup) would have sent with catalog-complete
+        (_on_paid, user_create) would have sent with catalog-complete
         contexts, and delivery rows replicate what the pipeline would have
         recorded (the bulk path bypasses services, so it must copy their
         output shape).
         """
-        import uuid
-        from decimal import Decimal
-
-        from django.utils import timezone
-
         from apps.notifications.catalog import CATALOG
-        from apps.notifications.constants import Channel
-        from apps.notifications.constants import DeliveryStatus
-        from apps.notifications.constants import DevicePlatform
-        from apps.notifications.constants import NotificationKind
         from apps.notifications.models import Device
         from apps.notifications.models import Notification
         from apps.notifications.models import NotificationDelivery
-        from apps.payments.constants import DEFAULT_CURRENCY
-        from apps.payments.constants import GatewayName
-        from apps.payments.constants import PaymentKind
-        from apps.payments.constants import PaymentStatus
-        from apps.payments.constants import WalletTransactionKind
         from apps.payments.models import Payment
         from apps.payments.models import SavedCard
         from apps.payments.models import Wallet
         from apps.payments.models import WalletTransaction
+        from apps.payments.services import wallet_currency_for
 
         now = timezone.now()
-        currency = str(DEFAULT_CURRENCY)
         # (payment-or-None, kind, signed amount, balance_after)
         type TxSpec = tuple[Any, WalletTransactionKind, Decimal, Decimal]
         # (kind, catalog-complete context)
         type NotifSpec = tuple[NotificationKind, dict[str, str]]
         payments: list[Any] = []
-        plans: list[tuple[Any, Decimal, list[TxSpec], list[NotifSpec]]] = []
+        plans: list[tuple[Any, str, Decimal, list[TxSpec], list[NotifSpec]]] = []
         for user in users:
+            # Signup provisions the wallet in the language's currency; every
+            # payment of a seeded user is in that currency.
+            currency = str(wallet_currency_for(language=user.language))
             balance = Decimal(0)
             tx_specs: list[TxSpec] = []
-            # Signup writes the WELCOME inbox row (user_post_signup).
+            # Signup writes the WELCOME inbox row (user_create).
             notif_specs: list[NotifSpec] = [
-                (NotificationKind.WELCOME, {"name": user.name or user.email})
+                (NotificationKind.WELCOME, {"name": user.name})
             ]
-            for _ in range(rng.randint(0, 4)):
-                amount = Decimal(rng.randint(10, 500))
-                is_topup = rng.random() < 0.7
-                # PAID .65 / PENDING .15 / FAILED .12 / rest REFUNDED
-                roll = rng.random()
-                if roll < 0.65:
-                    status = PaymentStatus.PAID
-                elif roll < 0.80:
-                    status = PaymentStatus.PENDING
-                elif roll < 0.92:
-                    status = PaymentStatus.FAILED
-                else:
-                    status = PaymentStatus.REFUNDED
+            for _ in range(rng.randint(*MIX["payments_per_user"])):
+                amount = Decimal(rng.randint(*MIX["payment_amount"]))
+                is_topup = rng.random() < MIX["topup_share"]
+                status = weighted_choice(MIX["payment_status"], rng)
                 settled = status in (PaymentStatus.PAID, PaymentStatus.REFUNDED)
                 payment = Payment(
                     user=user,
@@ -280,7 +301,7 @@ class Command(BaseCommand):
                     currency=currency,
                     kind=PaymentKind.WALLET_TOPUP if is_topup else PaymentKind.OTHER,
                     status=status,
-                    gateway=GatewayName.FAKE,
+                    gateway=GatewayName.TAP,
                     gateway_charge_id=f"fake_charge_seed_{uuid.uuid4().hex}",
                     paid_at=now if settled else None,
                 )
@@ -313,11 +334,11 @@ class Command(BaseCommand):
                     tx_specs.append(
                         (payment, WalletTransactionKind.REFUND, -amount, balance)
                     )
-            if balance > 0 and rng.random() < 0.4:  # user spent part of the credit
+            if balance > 0 and rng.random() < MIX["spend_share"]:
                 spend = Decimal(rng.randint(1, int(balance)))
                 balance -= spend
                 tx_specs.append((None, WalletTransactionKind.PAYMENT, -spend, balance))
-            if rng.random() < 0.1:
+            if rng.random() < MIX["announcement_share"]:
                 notif_specs.append(
                     (
                         NotificationKind.ANNOUNCEMENT,
@@ -327,14 +348,14 @@ class Command(BaseCommand):
                         },
                     )
                 )
-            plans.append((user, balance, tx_specs, notif_specs))
+            plans.append((user, currency, balance, tx_specs, notif_specs))
 
         Payment.objects.bulk_create(payments, batch_size=BATCH)
         # Signup invariant (UserFactory.wallet RelatedFactory): one wallet per
         # user - carrying the ledger's final balance.
         wallets = [
             Wallet(user=user, currency=currency, balance=balance)
-            for user, balance, _, _ in plans
+            for user, currency, balance, _, _ in plans
         ]
         Wallet.objects.bulk_create(wallets, batch_size=BATCH)
         transactions = [
@@ -345,7 +366,7 @@ class Command(BaseCommand):
                 balance_after=after,
                 payment=payment,
             )
-            for wallet, (_, _, tx_specs, _) in zip(wallets, plans, strict=True)
+            for wallet, (_, _, _, tx_specs, _) in zip(wallets, plans, strict=True)
             for payment, kind, amount, after in tx_specs
         ]
         WalletTransaction.objects.bulk_create(transactions, batch_size=BATCH)
@@ -353,14 +374,14 @@ class Command(BaseCommand):
         # is the whole contract (unique (gateway, token) via uuid).
         saved_cards = fan_out(
             users,
-            per_parent=(0, 2),
+            per_parent=MIX["saved_cards_per_user"],
             build_child=lambda user: SavedCard(
                 user=user,
-                gateway=GatewayName.FAKE,
+                gateway=GatewayName.TAP,
                 token=f"fake_card_seed_{uuid.uuid4().hex}",
                 gateway_customer_id=f"fake_cus_seed_{uuid.uuid4().hex[:12]}",
                 gateway_agreement_id=f"fake_agr_seed_{uuid.uuid4().hex[:12]}",
-                brand=rng.choice(["VISA", "MASTERCARD", "MADA"]),
+                brand=rng.choice(MIX["card_brands"]),
                 last4=f"{rng.randint(0, 9999):04d}",
                 exp_month=rng.randint(1, 12),
                 exp_year=now.year + rng.randint(1, 5),
@@ -370,7 +391,7 @@ class Command(BaseCommand):
         SavedCard.objects.bulk_create(saved_cards, batch_size=BATCH)
         devices = fan_out(
             users,
-            per_parent=(0, 2),
+            per_parent=MIX["devices_per_user"],
             build_child=lambda user: Device(
                 user=user,
                 registration_id=f"seed-tok-{uuid.uuid4().hex}",
@@ -385,9 +406,9 @@ class Command(BaseCommand):
                 recipient=user,
                 kind=kind,
                 context=context,
-                read_at=now if rng.random() < 0.6 else None,
+                read_at=now if rng.random() < MIX["read_share"] else None,
             )
-            for user, _, _, notif_specs in plans
+            for user, _, _, _, notif_specs in plans
             for kind, context in notif_specs
         ]
         Notification.objects.bulk_create(notifications, batch_size=BATCH)
@@ -400,7 +421,7 @@ class Command(BaseCommand):
             entry = CATALOG[NotificationKind(notification.kind)]
             for channel in sorted(entry.default_channels):
                 if channel == Channel.PUSH and notification.recipient_id in has_device:
-                    delivered = rng.random() < 0.9
+                    delivered = rng.random() < MIX["push_delivered_share"]
                     deliveries.append(
                         NotificationDelivery(
                             notification=notification,
@@ -418,9 +439,9 @@ class Command(BaseCommand):
                             notification=notification,
                             channel=channel,
                             status=DeliveryStatus.SKIPPED,
-                            detail="no devices"
+                            detail=SKIP_NO_DEVICES
                             if channel == Channel.PUSH
-                            else "no phone",
+                            else SKIP_NO_PHONE,
                         )
                     )
         NotificationDelivery.objects.bulk_create(deliveries, batch_size=BATCH)
@@ -434,48 +455,46 @@ class Command(BaseCommand):
             "notification deliveries": len(deliveries),
         }
 
-    def _seed_broadcasts(self, rng: random.Random) -> dict[str, int]:
-        """Two sample broadcasts over a capped user sample: one COMPLETED
-        (the happy path in admin), one DISPATCHED with PENDING remainder (so
+    def _seed_broadcasts(self, count: int, rng: random.Random) -> dict[str, int]:
+        """Broadcasts over capped random audiences, alternating COMPLETED (the
+        happy path in admin) and DISPATCHED with a PENDING remainder (so
         `sweep_deliveries --broadcast` / the Resume action have real work).
         Bulk path: rows replicate exactly what dispatcher + executor write.
         """
-        import uuid
-
-        from django.utils import timezone
-
-        from apps.notifications.constants import BroadcastStatus
-        from apps.notifications.constants import Channel
-        from apps.notifications.constants import DeliveryStatus
-        from apps.notifications.constants import NotificationKind
         from apps.notifications.models import Broadcast
         from apps.notifications.models import Device
         from apps.notifications.models import Notification
         from apps.notifications.models import NotificationDelivery
         from apps.users.models import User
 
-        sample = list(
+        population = list(
             User.objects.filter(
                 email__endswith=f"@{SEED_DOMAIN}", is_active=True
-            ).order_by("pk")[:1000]
+            ).order_by("pk")[: MIX["broadcast_audience_cap"]]
         )
-        if not sample:
-            return {}
         now = timezone.now()
         has_device = set(
-            Device.objects.filter(user__in=sample).values_list("user_id", flat=True)
+            Device.objects.filter(user__in=population).values_list("user_id", flat=True)
         )
         counts = {"broadcasts": 0, "notifications": 0, "notification deliveries": 0}
-        specs = (
-            (BroadcastStatus.COMPLETED, sample, DeliveryStatus.SENT),
+        statuses = (BroadcastStatus.COMPLETED, BroadcastStatus.DISPATCHED)
+        for index in range(count):
+            status = statuses[index % len(statuses)]
+            reached = sorted(
+                rng.sample(population, rng.randint(1, len(population))),
+                key=lambda user: user.pk,
+            )
             # Mid-flight: half the audience dispatched, deliveries pending.
-            (
-                BroadcastStatus.DISPATCHED,
-                sample[: max(1, len(sample) // 2)],
-                DeliveryStatus.PENDING,
-            ),
-        )
-        for status, audience, delivery_status in specs:
+            audience = (
+                reached
+                if status == BroadcastStatus.COMPLETED
+                else reached[: len(reached) // 2 + 1]
+            )
+            delivery_status = (
+                DeliveryStatus.SENT
+                if status == BroadcastStatus.COMPLETED
+                else DeliveryStatus.PENDING
+            )
             broadcast = Broadcast(
                 kind=NotificationKind.ANNOUNCEMENT,
                 context={
@@ -483,7 +502,7 @@ class Command(BaseCommand):
                     "message": f"Seed broadcast {uuid.uuid4().hex[:6]}",
                 },
                 status=status,
-                created_by=sample[0],
+                created_by=population[0],
                 dispatch_cursor=audience[-1].pk,
             )
             broadcast.save()
@@ -511,7 +530,7 @@ class Command(BaseCommand):
             NotificationDelivery.objects.bulk_create(deliveries, batch_size=BATCH)
             sent = len(deliveries) if delivery_status == DeliveryStatus.SENT else 0
             Broadcast.objects.filter(pk=broadcast.pk).update(
-                total_recipients=len(audience),
+                total_recipients=len(reached),
                 total_deliveries=len(deliveries),
                 sent_count=sent,
                 updated_at=now,

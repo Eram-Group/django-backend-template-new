@@ -13,6 +13,11 @@ class PaymentGatewayUnavailableError(PaymentError):
     status_code = 503
 
 
+class CustomerDetailsRequiredError(PaymentError):
+    """Checkout needs the customer's full name and phone: the gateways bill
+    them and we never send placeholders in their place."""
+
+
 class PaymentNotRefundableError(PaymentError):
     pass
 

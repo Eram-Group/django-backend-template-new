@@ -14,6 +14,15 @@ from pydantic import SecretStr
 from config.env import Env
 
 ENV_EXAMPLE = Path(__file__).resolve().parents[3] / ".env.example"
+#: What every deployed environment must add on top of the example file.
+DEPLOYED: dict[str, Any] = {
+    "AWS_STORAGE_BUCKET_NAME": "bucket",
+    "AWS_S3_REGION_NAME": "eu-central-1",
+    "AWS_S3_CUSTOM_DOMAIN": "d123.cloudfront.net",
+    "AWS_SES_REGION": "eu-central-1",
+    "SENTRY_DSN": "https://key@sentry.invalid/1",
+    "SENTRY_RELEASE": "abc123",
+}
 
 
 def _example_keys() -> list[str]:
@@ -75,36 +84,18 @@ def test_env_example_parses_with_no_comment_values() -> None:
     )
 
 
-@pytest.mark.parametrize("blank", ["", "   ", "\t", "\n"])
-def test_blank_optional_secret_normalises_to_none(blank: str) -> None:
-    """A blank optional secret must read as unset, not as a blank SecretStr.
-
-    env_ignore_empty only catches an exactly-empty value, so whitespace would
-    otherwise parse as SecretStr('   ') and slip past every `is None`
-    not-configured guard - deferring the failure to send time, or letting
-    paymob sign a webhook with a blank key instead of refusing it.
-    """
-    env = Env(_env_file=str(ENV_EXAMPLE), TAP_SECRET_KEY=blank)
-    assert env.TAP_SECRET_KEY is None
-
-    env = Env(_env_file=str(ENV_EXAMPLE), PAYMOB_HMAC_SECRET=blank)
-    assert env.PAYMOB_HMAC_SECRET is None
-
-    env = Env(_env_file=str(ENV_EXAMPLE), PAYMOB_API_KEY=blank)
-    assert env.PAYMOB_API_KEY is None
+def test_deployed_environment_requires_infra_fields() -> None:
+    """S3, SES and Sentry are not optional once deployed - fail at import."""
+    with pytest.raises(ValueError, match="required when ENVIRONMENT=dev") as excinfo:
+        Env(_env_file=str(ENV_EXAMPLE), ENVIRONMENT="dev")
+    assert "SENTRY_DSN" in str(excinfo.value)
+    assert "AWS_STORAGE_BUCKET_NAME" in str(excinfo.value)
 
 
-def test_blank_normalisation_leaves_lists_and_required_fields_alone() -> None:
-    """Only optional fields normalise - lists still collapse, required stay strict."""
-    env = Env(_env_file=str(ENV_EXAMPLE), PAYMOB_INTEGRATION_IDS="   ")
-    assert env.PAYMOB_INTEGRATION_IDS == []  # an empty list, never None
-
-    env = Env(_env_file=str(ENV_EXAMPLE), PAYMOB_INTEGRATION_IDS="1, 2 ,3")
-    assert env.PAYMOB_INTEGRATION_IDS == [1, 2, 3]
-
-    # A required field is left untouched by the normaliser (blank-vs-missing
-    # for required fields is a separate, pre-existing question).
-    assert Env(_env_file=str(ENV_EXAMPLE), ADMIN_URL="admin/").ADMIN_URL == "admin/"
+def test_local_environment_leaves_infra_fields_unset() -> None:
+    env = Env(_env_file=str(ENV_EXAMPLE))
+    assert env.SENTRY_DSN is None
+    assert env.PAYMOB_INTEGRATION_IDS == []  # empty list, never None
 
 
 @pytest.mark.parametrize(
@@ -123,7 +114,7 @@ def test_payment_key_matching_environment_is_accepted(
     environment: str, field: str, value: str
 ) -> None:
     overrides: dict[str, Any] = {"ENVIRONMENT": environment, field: value}
-    env = Env(_env_file=str(ENV_EXAMPLE), **overrides)
+    env = Env(_env_file=str(ENV_EXAMPLE), **DEPLOYED, **overrides)
     assert getattr(env, field) is not None
 
 
@@ -149,5 +140,5 @@ def test_payment_key_mismatching_environment_is_refused(
     """Fails at import, names the field, and never echoes the key."""
     overrides: dict[str, Any] = {"ENVIRONMENT": environment, field: value}
     with pytest.raises(ValueError, match=f"{field} is not a {mode} key") as excinfo:
-        Env(_env_file=str(ENV_EXAMPLE), **overrides)
+        Env(_env_file=str(ENV_EXAMPLE), **DEPLOYED, **overrides)
     assert value not in str(excinfo.value)

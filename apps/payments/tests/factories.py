@@ -3,11 +3,11 @@
 import uuid
 from decimal import Decimal
 
+from factory.declarations import LazyAttribute
 from factory.declarations import Sequence
 from factory.declarations import SubFactory
 from factory.django import DjangoModelFactory
 
-from apps.payments.constants import DEFAULT_CURRENCY
 from apps.payments.constants import Currency
 from apps.payments.constants import GatewayName
 from apps.payments.constants import PaymentKind
@@ -16,6 +16,7 @@ from apps.payments.models import Payment
 from apps.payments.models import SavedCard
 from apps.payments.models import Wallet
 from apps.payments.models import WalletTransaction
+from apps.payments.services import wallet_currency_for
 from apps.users.tests.factories import UserFactory
 
 
@@ -28,7 +29,9 @@ class PaymentFactory(DjangoModelFactory[Payment]):
     kind = PaymentKind.WALLET_TOPUP
     amount = Decimal("50.00")
     currency = Currency.SAR
-    gateway = GatewayName.FAKE
+    # The test FakeGateway answers to Tap's name (test.py maps every
+    # currency to it), so factory rows resolve to the fake at runtime.
+    gateway = GatewayName.TAP
 
 
 # Sequences restart at 0 per process, but --reuse-db keeps rows committed by
@@ -43,7 +46,7 @@ class SavedCardFactory(DjangoModelFactory[SavedCard]):
         skip_postgeneration_save = True
 
     user = SubFactory(UserFactory)
-    gateway = GatewayName.FAKE
+    gateway = GatewayName.TAP
     # Opaque provider ids are not human values, so no mimesis here
     # (PaymentFactory precedent).
     token = Sequence(lambda n: f"fake_card_{_RUN_TAG}_{n}")
@@ -63,7 +66,10 @@ class WalletFactory(DjangoModelFactory[Wallet]):
         skip_postgeneration_save = True
 
     user = SubFactory(UserFactory)
-    currency = DEFAULT_CURRENCY  # same default the signup provisioning uses
+    # The same decision signup makes (user_create -> wallet_currency_for).
+    currency = LazyAttribute(
+        lambda wallet: wallet_currency_for(language=wallet.user.language)
+    )
 
 
 class WalletTransactionFactory(DjangoModelFactory[WalletTransaction]):

@@ -30,7 +30,7 @@ class Broadcast(BaseModel):
     )
     # Audience filters; every one unset = every active user. The queryset that
     # reads them lives in selectors/broadcasts.py - both the dispatcher's
-    # paging and the inline-backend guard's counting go through it.
+    # paging and the composer's reach estimate go through it.
     language = models.CharField(
         _("language filter"), max_length=2, choices=Language, blank=True
     )
@@ -44,9 +44,11 @@ class Broadcast(BaseModel):
     )
     joined_after = models.DateField(_("joined on or after"), null=True, blank=True)
     joined_before = models.DateField(_("joined on or before"), null=True, blank=True)
-    # Empty = fall back to the kind's channel policy (its NotificationKindConfig
-    # row). A non-empty list overrides it for this send only, so one
+    # Empty = the kind's channel policy (its NotificationKindConfig row) at
+    # dispatch time. A non-empty list overrides it for this send only, so one
     # announcement can add SMS without changing policy for every announcement.
+    # ``services.notification_broadcast`` takes ``None`` for the former and
+    # rejects an empty override - the column is the storage form, not the API.
     channels = models.JSONField(_("channels"), default=list, blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

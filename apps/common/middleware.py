@@ -12,6 +12,7 @@ from collections.abc import Callable
 
 from django.http import HttpRequest
 from django.http import HttpResponse
+from django.http import HttpResponseNotAllowed
 
 from apps.common.health import healthz
 from apps.common.health import readyz
@@ -29,7 +30,8 @@ class HealthProbeMiddleware:
         self.get_response = get_response
 
     def __call__(self, request: HttpRequest) -> HttpResponse:
-        probe = _PROBES.get(request.path)
-        if probe is not None and request.method in {"GET", "HEAD"}:
-            return probe(request)
-        return self.get_response(request)
+        if request.path not in _PROBES:
+            return self.get_response(request)
+        if request.method not in {"GET", "HEAD"}:
+            return HttpResponseNotAllowed(["GET", "HEAD"])
+        return _PROBES[request.path](request)

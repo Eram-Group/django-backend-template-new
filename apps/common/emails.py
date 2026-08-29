@@ -9,6 +9,7 @@ Outside a request (task workers) wrap calls in
 import re
 from typing import Any
 
+from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils.html import strip_tags
@@ -22,9 +23,12 @@ def email_send(
     subject: str,
     recipient_list: list[str],
     template_name: str,
-    context: dict[str, Any] | None = None,
+    context: dict[str, Any],
 ) -> None:
-    html_body = render_to_string(template_name, context or {})
+    # emails/base.html brands every message with the site name.
+    html_body = render_to_string(
+        template_name, {**context, "site_name": settings.SITE_NAME}
+    )
     text_body = _EXCESS_BLANK_LINES.sub(
         "\n\n", strip_tags(_STYLE_BLOCK.sub("", html_body))
     ).strip()

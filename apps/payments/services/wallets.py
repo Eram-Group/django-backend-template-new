@@ -14,18 +14,27 @@ from decimal import Decimal
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 
-from apps.payments.constants import DEFAULT_CURRENCY
+from apps.payments.constants import CURRENCY_BY_LANGUAGE
 from apps.payments.constants import Currency
 from apps.payments.constants import WalletTransactionKind
 from apps.payments.exceptions import InsufficientBalanceError
 from apps.payments.models import Payment
 from apps.payments.models import Wallet
 from apps.payments.models import WalletTransaction
+from apps.users.constants import Language
 from apps.users.models import User
 
 
-def wallet_create(*, user: User, currency: Currency | str = DEFAULT_CURRENCY) -> Wallet:
-    """Provision the user's wallet - called once, from user_post_signup.
+def wallet_currency_for(*, language: str) -> Currency:
+    """The currency of the wallet a user in ``language`` gets at signup -
+    the one place that decision lives (constants.CURRENCY_BY_LANGUAGE). An
+    unknown language code raises ``ValueError``."""
+    return CURRENCY_BY_LANGUAGE[Language(language)]
+
+
+def wallet_create(*, user: User, currency: Currency) -> Wallet:
+    """Provision the user's wallet - called once, from user_create,
+    with ``currency=wallet_currency_for(language=user.language)``.
 
     Payment flows never create wallets; they resolve the existing one via
     selectors.wallet_get and reject currency mismatches.
@@ -41,11 +50,17 @@ def wallet_apply(
     wallet_id: uuid.UUID,
     amount: Decimal,
     kind: WalletTransactionKind,
-    payment: Payment | None = None,
-    actor: User | None = None,
-    note: str = "",
+    payment: Payment | None,
+    actor: User | None,
+    note: str,
 ) -> WalletTransaction:
-    """Move the balance by signed ``amount`` and append the ledger row."""
+    """Move the balance by signed ``amount`` and append the ledger row.
+
+    ``payment`` is the Payment behind a top-up/refund (None for a spend or a
+    manual adjustment); ``actor`` the staff member behind a manual movement
+    (None when a gateway event or the sweep drove it); ``note`` the human
+    reason ("" when the kind and payment say it all).
+    """
     with transaction.atomic():
         wallet = Wallet.objects.select_for_update().get(pk=wallet_id)  # row lock
         wallet.balance += amount

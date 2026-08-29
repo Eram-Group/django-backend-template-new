@@ -13,10 +13,6 @@ class BroadcastStateError(NotificationError):
     """The broadcast is not in a status that allows the requested move."""
 
 
-class BroadcastTooLargeForInlineError(NotificationError):
-    """Refuse to fan out a big audience on the inline (immediate) backend."""
-
-
 class BroadcastAudienceError(NotificationError):
     """The requested audience or channel selection is not coherent."""
 

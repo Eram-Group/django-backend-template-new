@@ -25,6 +25,7 @@ worker) - never at creation time.
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable
+from typing import Protocol
 
 import structlog
 from django.db import transaction
@@ -34,7 +35,6 @@ from django.utils import timezone
 from django.utils import translation
 
 from apps.notifications import selectors
-from apps.notifications.catalog import WHATSAPP_LANGUAGE_CODES
 from apps.notifications.catalog import catalog_entry
 from apps.notifications.clients.push import PushMessage
 from apps.notifications.clients.push import push_send_many
@@ -65,10 +65,12 @@ def execute_deliveries(*, delivery_ids: list[str]) -> None:
     claimed_ids = _claim(delivery_ids=delivery_ids)
     if not claimed_ids:
         return
+    # Channel order is deterministic (push, sms, whatsapp): which channel a
+    # systemic failure interrupts must not depend on row order in the DB.
     rows = list(
-        NotificationDelivery.objects.filter(pk__in=claimed_ids).select_related(
-            "notification__recipient"
-        )
+        NotificationDelivery.objects.filter(pk__in=claimed_ids)
+        .select_related("notification__recipient")
+        .order_by("channel", "pk")
     )
     by_channel: dict[str, list[NotificationDelivery]] = defaultdict(list)
     for row in rows:
@@ -85,19 +87,10 @@ def execute_deliveries(*, delivery_ids: list[str]) -> None:
 def _deliver_channel(
     channel: str, rows: list[NotificationDelivery], *, configs: selectors.ConfigMap
 ) -> None:
-    if channel == Channel.PUSH:
-        _deliver_push(rows, configs=configs)
-    elif channel == Channel.SMS:
-        _deliver_sms(rows, configs=configs)
-    elif channel == Channel.WHATSAPP:
-        _deliver_whatsapp(rows)
-    else:
-        # A channel with no deliverer must not be claimed forever: left
-        # PROCESSING it would be reset and re-claimed by every sweep while
-        # its broadcast never completes. FAILED is visible and terminal.
-        for row in rows:
-            row.status = DeliveryStatus.FAILED
-            row.detail = f"no deliverer for channel {channel!r}"
+    """Exhaustive over ``Channel``: a value outside the enum (ValueError) or
+    a member without a deliverer (KeyError) fails the task loudly - rows are
+    only ever created for enum channels, so either is a code bug."""
+    _DELIVERERS[Channel(channel)](rows, configs=configs)
 
 
 def _claim(*, delivery_ids: list[str]) -> list[uuid.UUID]:
@@ -129,11 +122,11 @@ def _deliver_push(
     owners: list[NotificationDelivery] = []
     for row in rows:
         recipient = row.notification.recipient
-        tokens = tokens_by_user.get(recipient.pk, [])
-        if not tokens:
+        if recipient.pk not in tokens_by_user:
             row.status = DeliveryStatus.SKIPPED
             row.detail = "no devices"
             continue
+        tokens = tokens_by_user[recipient.pk]
         with translation.override(recipient.language):
             message = selectors.notification_render(
                 kind=NotificationKind(row.notification.kind),
@@ -173,9 +166,9 @@ def _deliver_push(
         if row.pk in delivered:  # at least one device got it
             row.status = DeliveryStatus.SENT
             row.sent_at = now
-        else:
+        else:  # every token failed - the first failure names why
             row.status = DeliveryStatus.FAILED
-            row.detail = failure_detail.get(row.pk, "all tokens failed")
+            row.detail = failure_detail[row.pk]
     if invalid_tokens:  # FCM says these tokens are dead - prune
         Device.objects.filter(registration_id__in=invalid_tokens).delete()
 
@@ -233,7 +226,13 @@ def _deliver_sms(
                 row.sent_at = now
 
 
-def _deliver_whatsapp(rows: list[NotificationDelivery]) -> None:
+def _deliver_whatsapp(
+    rows: list[NotificationDelivery], *, configs: selectors.ConfigMap
+) -> None:
+    """Meta hosts the per-language bodies: the send carries the template
+    NAME, the recipient's language code and the ordered variables - the
+    config-row copy (``configs``) is not rendered for this channel."""
+    del configs
     now = timezone.now()
     for row in rows:
         recipient = row.notification.recipient
@@ -242,17 +241,13 @@ def _deliver_whatsapp(rows: list[NotificationDelivery]) -> None:
             row.detail = "no phone"
             continue
         entry = catalog_entry(NotificationKind(row.notification.kind))
-        template = entry.whatsapp
-        if template is None:  # unreachable while kind-config clean holds
-            row.status = DeliveryStatus.FAILED
-            row.detail = "kind has no whatsapp template"
-            continue
+        template = entry.whatsapp_template
         variables = [str(row.notification.context[key]) for key in template.variables]
         try:
             result = whatsapp_send_template(
                 to=str(recipient.phone),
                 template_name=template.name,
-                language=WHATSAPP_LANGUAGE_CODES.get(recipient.language, "en"),
+                language=recipient.language,
                 variables=variables,
             )
         except WhatsAppProviderError as exc:
@@ -263,6 +258,19 @@ def _deliver_whatsapp(rows: list[NotificationDelivery]) -> None:
             row.sent_at = now
             row.provider = WHATSAPP_PROVIDER
             row.provider_message_id = result.message_id
+
+
+class _Deliverer(Protocol):
+    def __call__(
+        self, rows: list[NotificationDelivery], *, configs: selectors.ConfigMap
+    ) -> None: ...
+
+
+_DELIVERERS: dict[Channel, _Deliverer] = {
+    Channel.PUSH: _deliver_push,
+    Channel.SMS: _deliver_sms,
+    Channel.WHATSAPP: _deliver_whatsapp,
+}
 
 
 def _record_outcomes(rows: list[NotificationDelivery]) -> None:

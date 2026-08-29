@@ -10,7 +10,7 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from unfold.decorators import action
 
-from apps.common.admin import ExportableModelAdmin
+from apps.common.admin import BaseModelAdmin
 from apps.common.exceptions import ApplicationError
 from apps.payments import services
 from apps.payments.admin.payment import change_view
@@ -23,7 +23,7 @@ from apps.users.models import User
 
 
 @admin.register(Payment)
-class PaymentAdmin(ExportableModelAdmin):
+class PaymentAdmin(BaseModelAdmin):
     can_add = permissions.CAN_ADD
     can_change = permissions.CAN_CHANGE
     can_delete = permissions.CAN_DELETE

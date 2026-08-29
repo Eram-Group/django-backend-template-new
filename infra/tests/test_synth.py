@@ -138,11 +138,8 @@ def test_schedules_cover_every_job(
     t = templates[f"App-{env_name}"]
     schedules = t.find_resources("AWS::Scheduler::Schedule")
     assert len(schedules) == len(SCHEDULES)
-    states = {
-        r["Properties"]["Name"]: r["Properties"]["State"] for r in schedules.values()
-    }
-    assert states[f"{APP.name}-{env_name}-sample-scheduled-job"] == "DISABLED"
     for r in schedules.values():
+        assert r["Properties"]["State"] == "ENABLED"
         assert r["Properties"]["FlexibleTimeWindow"] == {"Mode": "OFF"}
         assert '"name":"Main"' in r["Properties"]["Target"]["Input"]
 

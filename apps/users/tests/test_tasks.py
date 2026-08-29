@@ -21,16 +21,6 @@ def test_send_welcome_email_addresses_the_user_by_name(
     assert "Omar" in message.body
 
 
-def test_send_welcome_email_falls_back_to_email_without_name(
-    mailoutbox: list[EmailMessage],
-) -> None:
-    user = UserFactory.create(name="")
-
-    send_welcome_email.enqueue(str(user.pk))
-
-    assert user.email in mailoutbox[0].body
-
-
 def test_send_welcome_email_is_branded_multipart_html(
     mailoutbox: list[EmailMessage],
 ) -> None:

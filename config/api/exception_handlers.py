@@ -38,12 +38,10 @@ def register_exception_handlers(api: NinjaAPI) -> None:
         *,
         message: str,
         status: int,
-        extra: dict[str, Any] | None = None,
+        extra: dict[str, Any],
     ) -> HttpResponse:
         return api.create_response(
-            request,
-            {"message": message, "extra": extra or {}},
-            status=status,
+            request, {"message": message, "extra": extra}, status=status
         )
 
     @api.exception_handler(ApplicationError)
@@ -79,10 +77,8 @@ def register_exception_handlers(api: NinjaAPI) -> None:
     ) -> HttpResponse:
         fields: dict[str, list[str]] = {}
         for error in exc.errors:
-            field = (
-                ".".join(str(part) for part in error.get("loc", ())) or NON_FIELD_KEY
-            )
-            fields.setdefault(field, []).append(error.get("msg", "Invalid value."))
+            field = ".".join(str(part) for part in error["loc"]) or NON_FIELD_KEY
+            fields.setdefault(field, []).append(error["msg"])
         return respond(
             request, message="Validation error.", status=422, extra={"fields": fields}
         )
@@ -91,14 +87,14 @@ def register_exception_handlers(api: NinjaAPI) -> None:
     def http_error(request: HttpRequest, exc: HttpError) -> HttpResponse:
         # Also covers AuthenticationError (401), AuthorizationError (403),
         # and Throttled (429) - they subclass HttpError.
-        return respond(request, message=str(exc), status=exc.status_code)
+        return respond(request, message=str(exc), status=exc.status_code, extra={})
 
     @api.exception_handler(Http404)
     def not_found(request: HttpRequest, exc: Http404) -> HttpResponse:
-        return respond(request, message="Not found.", status=404)
+        return respond(request, message="Not found.", status=404, extra={})
 
     @api.exception_handler(Ratelimited)
     def ratelimited(request: HttpRequest, exc: Ratelimited) -> HttpResponse:
         # django-ratelimit raises a PermissionDenied subclass; without this
         # handler a burst would surface as a 403/500 instead of 429.
-        return respond(request, message="Too many requests.", status=429)
+        return respond(request, message="Too many requests.", status=429, extra={})

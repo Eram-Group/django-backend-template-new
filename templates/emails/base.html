@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="x-apple-disable-message-reformatting" />
-  <title>{% block brand %}Backend{% endblock %}</title>
+  <title>{{ site_name }}</title>
   <style>
     @media screen and (max-width:600px){
       .w-100{width:100%!important}
@@ -25,7 +25,7 @@
 
           <tr>
             <td style="background:linear-gradient(135deg,#16a34a,#4ade80); padding:24px 40px;" class="px-24">
-              <div style="font-size:22px; font-weight:700; color:#ffffff; letter-spacing:1px;">{% block header_brand %}Backend{% endblock %}</div>
+              <div style="font-size:22px; font-weight:700; color:#ffffff; letter-spacing:1px;">{{ site_name }}</div>
               <div style="font-size:11px; color:#dcfce7;">{% block tagline %}{% endblock %}</div>
             </td>
           </tr>
@@ -39,7 +39,7 @@
           <tr>
             <td style="background:#f8fafc; border-top:1px solid #e2e8f0; padding:20px 40px;" class="px-24">
               <div style="font-size:12px; color:#94a3b8; line-height:1.5;">
-                &copy; {% now "Y" %} {% block footer_brand %}Backend{% endblock %}
+                &copy; {% now "Y" %} {{ site_name }}
               </div>
             </td>
           </tr>

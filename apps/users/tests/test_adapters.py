@@ -4,10 +4,10 @@ import pytest
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMultiAlternatives
 from django.test import Client
+from django.utils.translation import gettext
 
 from apps.users.adapters import AccountAdapter
 from apps.users.models import User
-from config.env import env
 
 pytestmark = pytest.mark.django_db
 
@@ -21,19 +21,6 @@ def test_login_and_verification_codes_are_six_digits() -> None:
         assert len(adapter.generate_email_verification_code()) == 6
 
 
-def test_signup_kill_switch(client: Client, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(env, "ACCOUNT_ALLOW_REGISTRATION", False)
-
-    response = client.post(
-        "/_allauth/app/v1/auth/signup",
-        {"email": "blocked@example.com"},
-        content_type="application/json",
-    )
-
-    assert response.status_code == 403
-    assert not User.objects.filter(email="blocked@example.com").exists()
-
-
 def test_login_code_email_is_branded_html_with_real_expiry(
     client: Client, mailoutbox: list[EmailMessage]
 ) -> None:
@@ -44,7 +31,7 @@ def test_login_code_email_is_branded_html_with_real_expiry(
 
     client.post(
         "/_allauth/app/v1/auth/signup",
-        {"email": "html.code@example.com"},
+        {"email": "html.code@example.com", "name": "Probe"},
         content_type="application/json",
     )
 
@@ -56,9 +43,11 @@ def test_login_code_email_is_branded_html_with_real_expiry(
     assert message.alternatives, "code email must carry an HTML alternative"
     html_body = str(message.alternatives[0][0])
     assert code_match.group(1) in html_body
-    # 180s default -> "3 minutes"; the number comes from the setting.
-    assert "3" in html_body
-    assert "minute" in html_body
+    # 180s default -> 3 minutes, rendered in the user's language.
+    assert (
+        gettext("This code expires in %(minutes)s minutes.") % {"minutes": 3}
+        in html_body
+    )
 
 
 def test_signup_captures_language_and_welcome_email_uses_it(
@@ -71,7 +60,7 @@ def test_signup_captures_language_and_welcome_email_uses_it(
     with django_capture_on_commit_callbacks(execute=True):
         response = client.post(
             "/_allauth/app/v1/auth/signup",
-            {"email": "locale.probe@example.com"},
+            {"email": "locale.probe@example.com", "name": "Probe"},
             content_type="application/json",
             headers={"Accept-Language": "en"},
         )
@@ -89,12 +78,24 @@ def test_signup_defaults_to_arabic_without_accept_language(
     with django_capture_on_commit_callbacks(execute=True):
         client.post(
             "/_allauth/app/v1/auth/signup",
-            {"email": "locale.default@example.com"},
+            {"email": "locale.default@example.com", "name": "Probe"},
             content_type="application/json",
         )
 
     user = User.objects.get(email="locale.default@example.com")
     assert user.language == "ar"
+
+
+def test_signup_without_a_name_is_rejected(client: Client) -> None:
+    response = client.post(
+        "/_allauth/app/v1/auth/signup",
+        {"email": "nameless@example.com"},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 400
+    assert [error["param"] for error in response.json()["errors"]] == ["name"]
+    assert not User.objects.filter(email="nameless@example.com").exists()
 
 
 def test_signup_triggers_welcome_email_after_commit(
@@ -106,7 +107,7 @@ def test_signup_triggers_welcome_email_after_commit(
     with django_capture_on_commit_callbacks(execute=True):
         response = client.post(
             "/_allauth/app/v1/auth/signup",
-            {"email": "chain.probe@example.com"},
+            {"email": "chain.probe@example.com", "name": "Probe"},
             content_type="application/json",
         )
 
@@ -115,5 +116,5 @@ def test_signup_triggers_welcome_email_after_commit(
     subjects = [message.subject for message in mailoutbox]
     assert [["chain.probe@example.com"]] * len(mailoutbox) == recipients
     # Both the verification-code email and the welcome task's email went out.
-    assert any("Welcome" in subject for subject in subjects), subjects
+    assert gettext("Welcome!") in subjects, subjects
     assert len(mailoutbox) >= 2

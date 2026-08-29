@@ -5,15 +5,15 @@ from import_export.resources import ModelResource
 
 
 class BaseModelResource(ModelResource):
-    """Import-export base: Meta.fields must be explicit and non-empty.
+    """Import-export base: Meta.fields must be an explicit, non-empty tuple.
 
-    A resource without explicit fields silently exports nothing useful -
-    fail at import time instead.
+    Exports go to non-engineers and can carry secrets: the column list is a
+    decision, never "whatever the model has" - fail at import time instead.
     """
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        meta = getattr(cls, "Meta", None)
-        if not getattr(meta, "fields", None):
+        fields = cls.Meta.fields
+        if not fields or fields == "__all__":
             msg = f"{cls.__name__}.Meta.fields must be an explicit non-empty tuple."
             raise ImproperlyConfigured(msg)

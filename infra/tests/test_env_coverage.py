@@ -32,4 +32,3 @@ def test_each_environment_sets_every_plain_key() -> None:
     for cfg in ENVIRONMENTS.values():
         assert set(cfg.plain_env) == ENV_PLAIN, cfg.name
         assert cfg.plain_env["ENVIRONMENT"] == cfg.name
-        assert cfg.plain_env["TASKS_IMMEDIATE"] == "false"

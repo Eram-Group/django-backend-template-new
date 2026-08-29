@@ -11,6 +11,7 @@ from typing import Any
 
 from django.conf import settings
 
+from apps.common.http import PROVIDER_TIMEOUT
 from apps.common.http import request_json
 from apps.notifications.clients.sms.base import SmsNotConfiguredError
 from apps.notifications.clients.sms.base import SmsProviderError
@@ -41,6 +42,7 @@ class OurSmsBackend:
                 "priority": 1,
                 "msgClass": "transactional",
             },
+            timeout=PROVIDER_TIMEOUT,
             retry="transient",
         )
         _assert_accepted(response.json(), expected=len(to))

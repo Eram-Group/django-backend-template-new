@@ -3,10 +3,7 @@ from typing import Any
 
 
 def _derive_code(class_name: str) -> str:
-    return (
-        re.sub(r"(?<!^)(?=[A-Z])", "_", class_name.removesuffix("Error")).lower()
-        or "error"
-    )
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", class_name.removesuffix("Error")).lower()
 
 
 class ApplicationError(Exception):
@@ -17,21 +14,23 @@ class ApplicationError(Exception):
     status_code. Domain apps subclass this per app (e.g. UserError) and may
     override status_code (e.g. 404 for a not-found error).
 
-    Every subclass carries a stable machine-readable ``code`` (default: the
-    snake_case class name, ``UserNotFoundError`` -> ``user_not_found``),
-    emitted as extra["code"]. Messages are localized (Arabic-first), so
-    clients branch on the code - never on the text.
+    Every subclass carries a stable machine-readable ``code`` - the
+    snake_case class name (``UserNotFoundError`` -> ``user_not_found``),
+    emitted as extra["code"]. The name IS the code: there is no override.
+    Messages are localized (Arabic-first), so clients branch on the code -
+    never on the text.
     """
 
     status_code: int = 400
-    code: str = "application_error"
+    code: str = "application"
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        if "code" not in cls.__dict__:
-            cls.code = _derive_code(cls.__name__)
+        cls.code = _derive_code(cls.__name__)
 
+    # TODO(cleanup): make ``extra`` required once every raise site in
+    # apps/payments and apps/notifications states it (~30 call sites).
     def __init__(self, message: str, *, extra: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.message = message
-        self.extra = extra or {}
+        self.extra = {} if extra is None else extra

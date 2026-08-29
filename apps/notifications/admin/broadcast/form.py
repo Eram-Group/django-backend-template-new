@@ -91,7 +91,8 @@ class BroadcastAudienceForm(forms.ModelForm[Broadcast]):
         ]
 
     def clean(self) -> dict[str, Any]:
-        cleaned: dict[str, Any] = super().clean() or {}
+        super().clean()
+        cleaned = self.cleaned_data
         joined_after = cleaned.get("joined_after")
         joined_before = cleaned.get("joined_before")
         if joined_after and joined_before and joined_after > joined_before:
@@ -113,10 +114,10 @@ class BroadcastAudienceForm(forms.ModelForm[Broadcast]):
         cleaned = self.cleaned_data
         return Broadcast(
             kind=COMPOSABLE_KIND,
-            language=cleaned.get("language") or "",
-            require_device=bool(cleaned.get("require_device")),
-            joined_after=cleaned.get("joined_after"),
-            joined_before=cleaned.get("joined_before"),
+            language=cleaned["language"],
+            require_device=cleaned["require_device"],
+            joined_after=cleaned["joined_after"],
+            joined_before=cleaned["joined_before"],
         )
 
 
@@ -141,7 +142,7 @@ class BroadcastComposeForm(BroadcastAudienceForm):
         help_text=_(
             "Leave every channel off to use this kind's configured policy. "
             "Turning any on overrides that policy for this broadcast only."
-        ),
+        ),  # [] from the widget -> channels=None for the service
     )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -168,14 +169,19 @@ class BroadcastComposeForm(BroadcastAudienceForm):
         ]
 
     def service_kwargs(self) -> dict[str, Any]:
-        """The add path's payload for ``services.notification_broadcast``."""
+        """The add path's payload for ``services.notification_broadcast``.
+
+        Only valid after ``is_valid()``: every field is then present in
+        ``cleaned_data`` (blank optional fields as ""/None/False/[]).
+        """
         cleaned = self.cleaned_data
+        selected: list[str] = cleaned["channels"]
         return {
             "kind": COMPOSABLE_KIND,
             "context": {"title": cleaned["title"], "message": cleaned["message"]},
-            "language": cleaned.get("language") or "",
-            "require_device": bool(cleaned.get("require_device")),
-            "joined_after": cleaned.get("joined_after"),
-            "joined_before": cleaned.get("joined_before"),
-            "channels": cleaned.get("channels") or [],
+            "language": cleaned["language"],
+            "require_device": cleaned["require_device"],
+            "joined_after": cleaned["joined_after"],
+            "joined_before": cleaned["joined_before"],
+            "channels": selected or None,
         }

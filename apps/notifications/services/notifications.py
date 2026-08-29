@@ -41,20 +41,18 @@ def notification_send(
     *,
     recipient: User,
     kind: NotificationKind,
-    context: dict[str, Any] | None = None,
+    context: dict[str, Any],
 ) -> Notification:
     """Create the inbox row + one PENDING delivery row per resolved channel.
 
-    The inbox row ALWAYS exists; channels come from the catalog + override
-    resolution.
+    The inbox row ALWAYS exists; channels come from the kind's config row.
+    ``context`` must carry exactly the kind's ``context_keys`` - a kind with
+    none takes ``{}``, explicitly.
     """
     entry = catalog_entry(kind)
-    resolved_context = dict(context or {})
-    _validate_context(kind=kind, entry=entry, context=resolved_context)
+    _validate_context(kind=kind, entry=entry, context=context)
     channels = selectors.effective_channels(kind=kind)
-    notification = Notification(
-        recipient=recipient, kind=kind, context=resolved_context
-    )
+    notification = Notification(recipient=recipient, kind=kind, context=context)
     notification.full_clean()
     notification.save()
     deliveries = []

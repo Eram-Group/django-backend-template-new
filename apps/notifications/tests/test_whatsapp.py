@@ -1,16 +1,15 @@
-"""WhatsApp client: template capture, backend switch, placeholder guard."""
+"""WhatsApp client: the swapped seam captures templates; Meta stays loud."""
 
 import pytest
 
-from apps.notifications.clients.whatsapp import backends as whatsapp_backends
 from apps.notifications.clients.whatsapp import whatsapp_send_template
-from apps.notifications.clients.whatsapp.backends import ConsoleWhatsAppBackend
-from apps.notifications.clients.whatsapp.backends import SentWhatsApp
 from apps.notifications.clients.whatsapp.base import WhatsAppNotConfiguredError
 from apps.notifications.clients.whatsapp.meta import MetaWhatsAppBackend
+from apps.notifications.tests.locmem import SentWhatsApp
+from apps.notifications.tests.locmem import whatsapp_outbox
 
 
-def test_whatsapp_send_template_uses_locmem_backend_in_tests() -> None:
+def test_whatsapp_send_template_goes_through_the_swapped_seam() -> None:
     result = whatsapp_send_template(
         to="+966501234567",
         template_name="announcement",
@@ -19,7 +18,7 @@ def test_whatsapp_send_template_uses_locmem_backend_in_tests() -> None:
     )
 
     assert result.message_id == "locmem-1"
-    assert whatsapp_backends.outbox == [
+    assert whatsapp_outbox == [
         SentWhatsApp(
             to="+966501234567",
             template_name="announcement",
@@ -38,14 +37,6 @@ def test_locmem_message_ids_are_deterministic() -> None:
     )
 
     assert (first.message_id, second.message_id) == ("locmem-1", "locmem-2")
-
-
-def test_console_backend_returns_a_message_id() -> None:
-    result = ConsoleWhatsAppBackend().send_template(
-        to="+966501234567", template_name="a", language="en", variables=[]
-    )
-
-    assert result.message_id.startswith("console-")
 
 
 def test_meta_placeholder_is_loud() -> None:

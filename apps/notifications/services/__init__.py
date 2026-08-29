@@ -1,8 +1,7 @@
 from apps.notifications.services.broadcasts import broadcast_dispatch
-from apps.notifications.services.broadcasts import broadcast_resume
 from apps.notifications.services.broadcasts import notification_broadcast
 from apps.notifications.services.config import notification_config_update
-from apps.notifications.services.deliveries import deliveries_sweep_transactional
+from apps.notifications.services.deliveries import deliveries_resume
 from apps.notifications.services.deliveries import delivery_update_status
 from apps.notifications.services.devices import device_register
 from apps.notifications.services.devices import device_unregister
@@ -14,8 +13,7 @@ from apps.notifications.services.notifications import notification_send
 
 __all__ = [
     "broadcast_dispatch",
-    "broadcast_resume",
-    "deliveries_sweep_transactional",
+    "deliveries_resume",
     "delivery_update_status",
     "device_register",
     "device_unregister",

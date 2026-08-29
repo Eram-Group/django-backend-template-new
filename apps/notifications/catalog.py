@@ -32,9 +32,6 @@ from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationCategory
 from apps.notifications.constants import NotificationKind
 
-#: user.language -> the language code sent to Meta with the template name.
-WHATSAPP_LANGUAGE_CODES: Mapping[str, str] = {"ar": "ar", "en": "en"}
-
 
 @dataclass(frozen=True, slots=True)
 class WhatsAppTemplate:
@@ -71,6 +68,20 @@ class MessageTemplate:
         ):
             msg = "whatsapp variables must be a subset of context_keys"
             raise ValueError(msg)
+
+    @property
+    def whatsapp_template(self) -> WhatsAppTemplate:
+        """The Meta template of a WHATSAPP-capable kind.
+
+        ``__post_init__`` pairs the template with WHATSAPP support, so a
+        WhatsApp delivery row (only ever created for a supported channel)
+        always finds one; asking for a kind that cannot send on WhatsApp is
+        a programming error.
+        """
+        if self.whatsapp is None:
+            msg = "kind does not support WHATSAPP - no template to send"
+            raise LookupError(msg)
+        return self.whatsapp
 
 
 CATALOG: Mapping[NotificationKind, MessageTemplate] = {

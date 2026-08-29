@@ -10,6 +10,7 @@ from apps.payments.services.saved_cards import saved_card_store
 from apps.payments.services.saved_cards import saved_card_store_from_event
 from apps.payments.services.wallets import wallet_apply
 from apps.payments.services.wallets import wallet_create
+from apps.payments.services.wallets import wallet_currency_for
 
 __all__ = [
     "payment_apply_gateway_event",
@@ -24,4 +25,5 @@ __all__ = [
     "saved_card_store_from_event",
     "wallet_apply",
     "wallet_create",
+    "wallet_currency_for",
 ]

@@ -160,7 +160,7 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    `AWS_OIDC_ROLE_ARN` (Shared output `GithubDeployRoleArn`), `AWS_REGION`.
    Push to `main` → the `build` job pushes `:<sha>` to ECR (the deploy job
    still skips).
-8. `just infra-deploy dev -- -c image_tag=<sha>` — first environment deploy
+8. `just infra-deploy-first dev <sha>` — first environment deploy
    (≈ 10 min; the Express service provisions the ALB). The stack's release
    trigger runs `check --deploy`, `migrate`, `createcachetable` and
    `collectstatic` on the worker task definition *before* the services are

@@ -1,5 +1,6 @@
 """User factories - factory_boy structure, mimesis values (apps.common.tests.fake)."""
 
+import random
 import uuid
 
 from allauth.account.models import EmailAddress
@@ -15,9 +16,7 @@ from apps.common.tests import fake
 from apps.users.constants import Language
 from apps.users.models import User
 
-# Arabic-first site: most generated users default to Arabic. Shared with
-# seed_db's bulk path, which replicates factory invariants without factory
-# overhead.
+# Arabic-first site: most generated users are Arabic.
 LANGUAGE_WEIGHTS = (
     Language.ARABIC,
     Language.ARABIC,
@@ -44,6 +43,27 @@ class UserFactory(DjangoModelFactory[User]):
     name = LazyAttribute(lambda user: fake.full_name(user.language))
     password = "!"
 
+    @classmethod
+    def build_bulk(cls, *, emails: list[str], rng: random.Random) -> list[User]:
+        """Unsaved users for seed_db's bulk path - the same user as the
+        declarations above (weighted language, locale-matched name, unusable
+        password), built with plain constructors: declaration resolution
+        measured ~9x slower per instance and the user loop dominates seeding
+        CPU. The verified EmailAddress and the wallet (RelatedFactory here)
+        are bulk-created by the seeder."""
+        users = []
+        for email in emails:
+            language = rng.choice(LANGUAGE_WEIGHTS)
+            users.append(
+                User(
+                    email=email,
+                    language=language,
+                    name=fake.full_name(language),
+                    password="!",
+                )
+            )
+        return users
+
     class Params:
         staff = Trait(is_staff=True)
 
@@ -55,7 +75,7 @@ class UserFactory(DjangoModelFactory[User]):
         factory_related_name="user",
     )
 
-    # Signup provisions a wallet (user_post_signup) - factory-made users
+    # Signup provisions a wallet (user_create) - factory-made users
     # satisfy the same invariant. Dotted path: payments factories import
     # this module, so importing WalletFactory back would be circular;
     # WalletFactory's django_get_or_create=["user"] keeps this idempotent.

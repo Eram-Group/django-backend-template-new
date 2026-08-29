@@ -53,10 +53,14 @@ def whatsapp_webhook_verify(request: HttpRequest) -> HttpResponse:
     verify_token = settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN
     if verify_token is None:
         raise _rejected(reason="verify token not configured")
-    received = request.GET.get("hub.verify_token", "")
+    try:
+        received = request.GET["hub.verify_token"]
+        challenge = request.GET["hub.challenge"]
+    except KeyError:
+        raise _rejected(reason="handshake parameters missing") from None
     if not hmac.compare_digest(received.encode(), verify_token.encode()):
         raise _rejected(reason="verify token mismatch")
-    return HttpResponse(request.GET.get("hub.challenge", ""))
+    return HttpResponse(challenge)
 
 
 @router.post(
@@ -83,8 +87,17 @@ def whatsapp_webhook(request: HttpRequest) -> dict[str, bool]:
     for status_item in _iter_statuses(payload):
         status = status_item.get("status")
         message_id = status_item.get("id")
+        if not isinstance(message_id, str) or not message_id:
+            continue
         mapped = _META_STATUS_MAP.get(status) if isinstance(status, str) else None
-        if mapped is None or not isinstance(message_id, str) or not message_id:
+        if mapped is None:
+            # Meta may add statuses (e.g. "warning"); not a rejection - they
+            # would retry - but a real signal that the map is out of date.
+            logger.warning(
+                "notification_webhook_status_unknown",
+                provider="whatsapp",
+                status=str(status)[:50],
+            )
             continue
         services.delivery_update_status(
             provider="whatsapp",
@@ -156,8 +169,11 @@ def _as_list(value: Any) -> list[Any]:
 
 
 def _error_detail(status_item: dict[str, Any]) -> str:
+    """``errors[0].title`` - Meta's human-readable error field (``code`` is
+    the numeric id, ``message`` its legacy duplicate). Empty when absent or
+    mistyped: the row still moves to FAILED, only the detail is lost."""
     errors = _as_list(status_item.get("errors"))
     if not errors or not isinstance(errors[0], dict):
         return ""
-    first = errors[0]
-    return str(first.get("title") or first.get("message") or first.get("code") or "")
+    title = errors[0].get("title")
+    return title if isinstance(title, str) else ""

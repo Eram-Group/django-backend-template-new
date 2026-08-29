@@ -23,6 +23,7 @@ from apps.notifications.constants import BroadcastStatus
 from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import Broadcast
+from apps.notifications.selectors import notification_config_map
 from apps.notifications.selectors import notification_render
 from apps.notifications.tests.factories import BroadcastFactory
 from apps.users.tests.factories import UserFactory
@@ -95,7 +96,9 @@ def test_the_authored_title_is_what_renders(client: Client) -> None:
     _superuser_client(client).post(reverse(ADD_URL), _payload())
 
     rendered = notification_render(
-        kind=NotificationKind.ANNOUNCEMENT, context=_composed().context
+        kind=NotificationKind.ANNOUNCEMENT,
+        context=_composed().context,
+        configs=notification_config_map(),
     )
     assert rendered.title == TITLE
     assert rendered.body == MESSAGE

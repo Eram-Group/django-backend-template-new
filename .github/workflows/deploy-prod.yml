@@ -1,7 +1,6 @@
-# Manual promotion: retag the main-built image (no rebuild), release-task +
-# roll the production web (ECS Express Mode) and worker services, then cut the git tag + GitHub Release
-# for the exact deployed sha. No graceful skip here - a deliberate dispatch
-# against missing infra must fail loudly, not no-op.
+# Manual promotion: retag the main-built image (no rebuild), roll it out to
+# production (release task -> web -> worker, see ecs-deploy.yml), then cut the
+# git tag + GitHub Release for the exact deployed sha.
 
 name: Deploy production
 
@@ -12,10 +11,10 @@ on:
         description: Version bump
         type: choice
         options: [patch, minor, major]
-        default: patch
+        required: true
       sha:
-        description: Full commit sha to promote (default = dispatched HEAD of main)
-        required: false
+        description: Full commit sha to promote (a main commit that deploy-dev built)
+        required: true
 
 permissions:
   id-token: write
@@ -26,8 +25,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Contract: outputs {version, sha}. Swap the body (release-please, ...)
-  # without touching promote/deploy/release.
   version:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -49,7 +46,7 @@ jobs:
       - name: Resolve sha
         id: sha
         run: |
-          SHA="${{ inputs.sha || github.sha }}"
+          SHA="${{ inputs.sha }}"
           git cat-file -e "${SHA}^{commit}" \
             || { echo "::error::unknown commit $SHA"; exit 1; }
           git merge-base --is-ancestor "$SHA" origin/main \
@@ -60,7 +57,8 @@ jobs:
         id: next
         run: |
           LATEST=$(git tag --list 'v*' --sort=-v:refname | head -1)
-          IFS=. read -r MA MI PA <<< "${LATEST:-v0.0.0}"
+          [ -n "$LATEST" ] || { echo "::error::no v* tag exists - tag the first release by hand (git tag v0.1.0)"; exit 1; }
+          IFS=. read -r MA MI PA <<< "$LATEST"
           MA=${MA#v}
           case "${{ inputs.bump }}" in
             major) MA=$((MA + 1)); MI=0; PA=0 ;;
@@ -103,14 +101,15 @@ jobs:
         run: |
           DIGEST=$(aws ecr describe-images --repository-name "$REPO" \
             --image-ids imageTag="$SHA" \
-            --query 'imageDetails[0].imageDigest' --output text 2>/dev/null) \
+            --query 'imageDetails[0].imageDigest' --output text) \
             || { echo "::error::no image for $SHA in ECR - did deploy-dev build it?"; exit 1; }
           # Idempotent re-runs: same digest already tagged -> done;
-          # different digest -> version collision, hard fail.
-          EXISTING=$(aws ecr describe-images --repository-name "$REPO" \
+          # different digest -> version collision, hard fail. Only "not
+          # found" means "not promoted yet"; any other error is an error.
+          EXISTING=$(aws ecr batch-get-image --repository-name "$REPO" \
             --image-ids imageTag="$VERSION" \
-            --query 'imageDetails[0].imageDigest' --output text 2>/dev/null || true)
-          if [ -n "$EXISTING" ]; then
+            --query 'images[0].imageId.imageDigest' --output text)
+          if [ "$EXISTING" != "None" ]; then
             if [ "$EXISTING" = "$DIGEST" ]; then
               echo "image already promoted as $VERSION"
               exit 0
@@ -122,109 +121,11 @@ jobs:
 
   deploy:
     needs: [version, promote]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    environment: production  # optional required-reviewer approval gates here
-    steps:
-      - name: Assume deploy role via OIDC
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: ${{ vars.AWS_OIDC_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      # Task definitions are created by CDK (infra/); CD only registers a new
-      # revision with the new image. Container name "Main" is an ECS Express
-      # Mode requirement (never rename). SENTRY_RELEASE = sha, not version:
-      # one Sentry release per commit, shared by dev and production.
-      - name: Render worker task definition
-        id: render-worker
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition-family: ${{ vars.ECS_FAMILY_WORKER }}
-          container-name: Main
-          image: ${{ needs.promote.outputs.image }}
-          environment-variables: SENTRY_RELEASE=${{ needs.version.outputs.sha }}
-
-      # Release task (deploy checklist + migrate + createcachetable +
-      # collectstatic) runs on the worker family from this exact new revision
-      # - same image AND env as what goes live - and the rollout only starts
-      # after it exits 0. The check runs against the real task-definition env
-      # (Secrets Manager values included) before any DB mutation;
-      # --fail-level WARNING makes "zero warnings" binding. No `service`:
-      # the action registers the revision and runs the one-off task only.
-      # Always on-demand Fargate, even where the worker service runs on Spot.
-      - name: Release task
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-worker.outputs.task-definition }}
-          cluster: ${{ vars.ECS_CLUSTER }}
-          run-task: true
-          run-task-launch-type: FARGATE
-          run-task-container-overrides: >
-            [{"name": "Main", "command": ["sh", "-c",
-            "python manage.py check --deploy --fail-level WARNING &&
-            python manage.py migrate --noinput &&
-            python manage.py createcachetable &&
-            python manage.py collectstatic --noinput"]}]
-          run-task-subnets: ${{ vars.ECS_SUBNETS }}
-          run-task-security-groups: ${{ vars.ECS_SECURITY_GROUPS }}
-          run-task-assign-public-IP: ${{ vars.ECS_ASSIGN_PUBLIC_IP }}
-          wait-for-task-stopped: true
-          wait-for-minutes: 12
-
-      - name: Render web task definition
-        id: render-web
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition-family: ${{ vars.ECS_FAMILY_WEB }}
-          container-name: Main
-          image: ${{ needs.promote.outputs.image }}
-          environment-variables: SENTRY_RELEASE=${{ needs.version.outputs.sha }}
-
-      # Register only (no service, no run-task): Express Mode owns the
-      # service, so the rollout goes through its own API below.
-      - name: Register web task definition
-        id: register-web
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-web.outputs.task-definition }}
-
-      # Express Mode rolls out as a canary and auto-rolls back on its 5XX /
-      # unhealthy-target alarm. `services-stable` covers the ECS side; the
-      # loop then confirms the ACTIVE configuration points at our revision
-      # (a rolled-back deploy leaves the old one active -> fail loudly).
-      - name: Roll web (ECS Express Mode)
-        env:
-          CLUSTER: ${{ vars.ECS_CLUSTER }}
-          SERVICE_ARN: ${{ vars.EXPRESS_SERVICE_ARN }}
-          SERVICE_NAME: ${{ vars.EXPRESS_SERVICE_NAME }}
-          TASK_DEF_ARN: ${{ steps.register-web.outputs.task-definition-arn }}
-          LOG_GROUP: /aws/ecs/${{ vars.ECS_FAMILY_WEB }}
-        run: |
-          aws ecs update-express-gateway-service \
-            --service-arn "$SERVICE_ARN" --task-definition-arn "$TASK_DEF_ARN" > /dev/null
-          aws ecs wait services-stable --cluster "$CLUSTER" --services "$SERVICE_NAME"
-          for _ in $(seq 1 60); do
-            ACTIVE=$(aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" \
-              --query 'service.activeConfigurations[0].taskDefinitionArn' --output text)
-            [ "$ACTIVE" = "$TASK_DEF_ARN" ] && { echo "web active on $ACTIVE"; exit 0; }
-            sleep 15
-          done
-          echo "::error::Express rollout did not activate $TASK_DEF_ARN (active: $ACTIVE)"
-          aws ecs describe-express-gateway-service --service-arn "$SERVICE_ARN" || true
-          aws logs tail "$LOG_GROUP" --since 15m | tail -n 50 || true
-          exit 1
-
-      # Worker rolls only after web is live - the canary + alarm validated the
-      # image before the worker moves (expand/contract migrations rely on it).
-      - name: Roll worker
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
-        with:
-          task-definition: ${{ steps.render-worker.outputs.task-definition }}
-          cluster: ${{ vars.ECS_CLUSTER }}
-          service: ${{ vars.ECS_SERVICE_WORKER }}
-          wait-for-service-stability: true
-          wait-for-minutes: 12
+    uses: ./.github/workflows/ecs-deploy.yml
+    with:
+      environment: production  # required-reviewer approval gates here
+      image: ${{ needs.promote.outputs.image }}
+      sha: ${{ needs.version.outputs.sha }}
 
   # Runs last: a tag/release only ever exists for a fully deployed sha, and a
   # failed run re-dispatches to the same version (the tag was never consumed).

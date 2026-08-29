@@ -1,5 +1,5 @@
 """Reads for broadcasts - the audience definition lives HERE, used by both
-the dispatcher (paging) and the inline-backend guard (counting)."""
+the dispatcher (paging) and the composer's reach estimate (counting)."""
 
 from django.db.models import QuerySet
 

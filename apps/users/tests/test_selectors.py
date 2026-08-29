@@ -15,22 +15,15 @@ def test_user_get_returns_the_user() -> None:
 
 
 def test_user_get_unknown_pk_raises_404_domain_error() -> None:
-    with pytest.raises(UserNotFoundError, match="User not found") as excinfo:
+    # The message is localized (Arabic-first); clients branch on the code.
+    with pytest.raises(UserNotFoundError) as excinfo:
         selectors.user_get(pk=uuid.uuid4())
     assert excinfo.value.status_code == 404
+    assert excinfo.value.code == "user_not_found"
 
 
-def test_user_list_filters_by_is_active() -> None:
+def test_user_list_is_every_user() -> None:
     active = UserFactory.create()
     inactive = UserFactory.create(is_active=False)
 
-    everyone = selectors.user_list()
-    assert {active, inactive} <= set(everyone)
-
-    active_only = set(selectors.user_list(is_active=True))
-    assert active in active_only
-    assert inactive not in active_only
-
-    inactive_only = set(selectors.user_list(is_active=False))
-    assert inactive in inactive_only
-    assert active not in inactive_only
+    assert {active, inactive} <= set(selectors.user_list())

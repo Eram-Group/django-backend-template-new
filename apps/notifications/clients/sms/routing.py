@@ -1,8 +1,11 @@
-"""The deployed SMS_BACKEND: route numbers to providers by country.
+"""The SMS transport: route numbers to providers by country.
 
 One provider call per country group - OurSMS takes the whole group in a
 single bulk POST; SMSMisr loops internally. Adding a provider = one module
-implementing SmsBackend + one registry entry.
+implementing SmsBackend + one registry entry. There is no default provider:
+a number whose region has no entry raises ``SmsProviderError`` BEFORE any
+provider is called (the group fails, visibly, instead of silently riding an
+international-capable provider nobody chose for it).
 
 Providers run one after another, so a failure in the second group happens
 AFTER the first group is already with its provider. Every failure raised past
@@ -28,16 +31,29 @@ PROVIDER_REGISTRY: dict[str, type[SmsBackend]] = {
     "SA": OurSmsBackend,
     "EG": SmsMisrBackend,
 }
-DEFAULT_PROVIDER: type[SmsBackend] = OurSmsBackend  # international-capable
+ROUTER = "routing"  # ``SmsProviderError.provider`` for failures raised here
+
+
+def provider_for(number: str) -> type[SmsBackend]:
+    """The registry entry for the number's region; raises for anything else."""
+    try:
+        region = phonenumbers.region_code_for_number(phonenumbers.parse(number))
+    except phonenumbers.NumberParseException as exc:
+        raise SmsProviderError(
+            provider=ROUTER, detail=f"unparseable number {number!r}: {exc}"
+        ) from exc
+    if region is None or region not in PROVIDER_REGISTRY:
+        raise SmsProviderError(
+            provider=ROUTER, detail=f"no SMS provider for region {region!r} ({number})"
+        )
+    return PROVIDER_REGISTRY[region]
 
 
 class RoutingSmsBackend:
     def send_many(self, *, to: Sequence[str], body: str) -> None:
         groups: dict[type[SmsBackend], list[str]] = {}
         for number in to:
-            region = phonenumbers.region_code_for_number(phonenumbers.parse(number))
-            provider_cls = PROVIDER_REGISTRY.get(region or "", DEFAULT_PROVIDER)
-            groups.setdefault(provider_cls, []).append(number)
+            groups.setdefault(provider_for(number), []).append(number)
         sent: list[str] = []
         for provider_cls, numbers in groups.items():
             try:

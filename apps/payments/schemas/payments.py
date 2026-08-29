@@ -31,7 +31,7 @@ class PaymentDetail(PaymentSummary):
 class PaymentCreateIn(Schema):
     amount: Decimal = Field(gt=0, max_digits=12, decimal_places=2)
     currency: Currency
-    kind: PaymentKind = PaymentKind.OTHER
+    kind: PaymentKind  # what the money is for - the client always says
     description: str = ""
     #: Pay one-click with this stored card instead of entering card details.
     #: Absent = a new card is entered at checkout and is always vaulted.

@@ -1,21 +1,22 @@
 """Broadcast lifecycle: dispatch paging, eligibility, resume, guards."""
 
 import io
+from datetime import timedelta
 from typing import Any
 
 import pytest
 from django.core.management import call_command
+from django.utils import timezone
+from django.utils.translation import gettext
 
 from apps.notifications import selectors
 from apps.notifications import services
-from apps.notifications.clients.push import backends as push_backends
-from apps.notifications.clients.sms import backends as sms_backends
 from apps.notifications.constants import BroadcastStatus
 from apps.notifications.constants import Channel
 from apps.notifications.constants import DeliveryStatus
 from apps.notifications.constants import NotificationKind
+from apps.notifications.exceptions import BroadcastAudienceError
 from apps.notifications.exceptions import BroadcastStateError
-from apps.notifications.exceptions import BroadcastTooLargeForInlineError
 from apps.notifications.models import Notification
 from apps.notifications.models import NotificationDelivery
 from apps.notifications.models import NotificationKindConfig
@@ -24,6 +25,8 @@ from apps.notifications.tests.factories import BroadcastFactory
 from apps.notifications.tests.factories import DeviceFactory
 from apps.notifications.tests.factories import NotificationDeliveryFactory
 from apps.notifications.tests.factories import NotificationFactory
+from apps.notifications.tests.locmem import push_outbox
+from apps.notifications.tests.locmem import sms_outbox
 from apps.users.tests.factories import UserFactory
 
 pytestmark = pytest.mark.django_db
@@ -68,7 +71,7 @@ def test_dispatch_pages_the_audience_and_delivers(
     assert broadcast.total_deliveries == 5
     assert broadcast.sent_count == 5
     assert Notification.objects.filter(broadcast=broadcast).count() == 6
-    assert len(push_backends.outbox) == 5
+    assert len(push_outbox) == 5
 
 
 def test_dispatch_writes_inbox_rows_even_for_ineligible_users(
@@ -109,7 +112,7 @@ def test_dispatch_respects_channel_capabilities(
     assert (with_phone.pk, Channel.PUSH) in by_user
     assert (phoneless.pk, Channel.PUSH) in by_user
     assert (phoneless.pk, Channel.SMS) not in by_user  # fan-out-time decision
-    assert [entry.to for entry in sms_backends.outbox] == ["+966501234567"]
+    assert [entry.to for entry in sms_outbox] == ["+966501234567"]
 
 
 def test_dispatch_filters_audience_by_language(
@@ -140,23 +143,48 @@ def test_dispatch_twice_raises_state_error(
         services.broadcast_dispatch(broadcast=broadcast)
 
 
-def test_inline_backend_refuses_large_audience(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(services.broadcasts, "INLINE_AUDIENCE_LIMIT", 1)
-    UserFactory.create()
-    UserFactory.create()
-    broadcast = BroadcastFactory.create()
-
-    with pytest.raises(BroadcastTooLargeForInlineError):
-        services.broadcast_dispatch(broadcast=broadcast)
+def _author(**overrides: Any) -> Any:
+    kwargs: dict[str, Any] = {
+        "kind": NotificationKind.ANNOUNCEMENT,
+        "context": {"title": "t", "message": "m"},
+        "language": "",
+        "require_device": False,
+        "joined_after": None,
+        "joined_before": None,
+        "channels": None,
+        "actor": UserFactory.create(),
+    }
+    return services.notification_broadcast(**{**kwargs, **overrides})
 
 
 def test_broadcast_validates_context() -> None:
     with pytest.raises(ValueError, match="unexpected"):
-        services.notification_broadcast(
-            kind=NotificationKind.ANNOUNCEMENT,
-            context={"message": "x", "extra": "y"},
-            actor=UserFactory.create(),
+        _author(context={"message": "x", "extra": "y"})
+
+
+class TestChannelOverride:
+    """``channels=None`` = the kind's policy at dispatch time (stored as
+    ``[]``); a list is an explicit, non-empty, supported override."""
+
+    def test_none_defers_to_the_kind_policy(self) -> None:
+        assert _author(channels=None).channels == []
+
+    def test_a_selection_is_stored_sorted(self) -> None:
+        assert _author(channels=[Channel.SMS, Channel.PUSH]).channels == [
+            "push",
+            "sms",
+        ]
+
+    def test_an_empty_override_is_rejected(self) -> None:
+        with pytest.raises(BroadcastAudienceError) as excinfo:
+            _author(channels=[])
+        assert excinfo.value.message == gettext(
+            "Pick at least one channel, or leave the kind's policy in place."
         )
+
+    def test_an_unsupported_channel_is_rejected(self) -> None:
+        with pytest.raises(BroadcastAudienceError, match="carrier_pigeon"):
+            _author(channels=["carrier_pigeon"])
 
 
 # --- resume -------------------------------------------------------------------
@@ -174,13 +202,14 @@ def test_resume_resets_stale_processing_and_completes(
     delivery = NotificationDeliveryFactory.create(
         notification=notification, channel=Channel.PUSH
     )
-    # Simulate a worker that died mid-batch, 20 minutes ago.
+    # Simulate a worker that died mid-batch, an hour ago.
     NotificationDelivery.objects.filter(pk=delivery.pk).update(
-        status=DeliveryStatus.PROCESSING
+        status=DeliveryStatus.PROCESSING,
+        updated_at=timezone.now() - timedelta(hours=1),
     )
 
     with django_capture_on_commit_callbacks(execute=True):
-        summary = services.broadcast_resume(broadcast=broadcast, stale_minutes=0)
+        summary = services.deliveries_resume(broadcast=broadcast, include_failed=False)
 
     assert summary["stale_reset"] == 1
     assert summary["re_enqueued"] == 1
@@ -190,11 +219,47 @@ def test_resume_resets_stale_processing_and_completes(
     assert broadcast.status == BroadcastStatus.COMPLETED
 
 
+def test_resume_leaves_a_fresh_processing_row_to_its_worker() -> None:
+    """Below STALE_PROCESSING_MINUTES the row is still someone's batch."""
+    broadcast = BroadcastFactory.create(status=BroadcastStatus.DISPATCHED)
+    notification = NotificationFactory.create(
+        kind=NotificationKind.ANNOUNCEMENT, broadcast=broadcast
+    )
+    delivery = NotificationDeliveryFactory.create(
+        notification=notification, channel=Channel.PUSH
+    )
+    NotificationDelivery.objects.filter(pk=delivery.pk).update(
+        status=DeliveryStatus.PROCESSING
+    )
+
+    summary = services.deliveries_resume(broadcast=broadcast, include_failed=False)
+
+    assert summary["stale_reset"] == 0
+    delivery.refresh_from_db()
+    assert delivery.status == DeliveryStatus.PROCESSING
+
+
 def test_resume_of_draft_raises() -> None:
     broadcast = BroadcastFactory.create()
 
     with pytest.raises(BroadcastStateError):
-        services.broadcast_resume(broadcast=broadcast)
+        services.deliveries_resume(broadcast=broadcast, include_failed=False)
+
+
+def test_resume_reenqueues_a_dead_dispatcher(
+    django_capture_on_commit_callbacks: Any,
+) -> None:
+    """DISPATCHING with no worker alive: the cursor committed with its rows,
+    so a fresh dispatcher run finishes the fan-out."""
+    UserFactory.create()
+    broadcast = BroadcastFactory.create(status=BroadcastStatus.DISPATCHING)
+
+    with django_capture_on_commit_callbacks(execute=True):
+        summary = services.deliveries_resume(broadcast=broadcast, include_failed=False)
+
+    assert summary["dispatcher_reenqueued"] == 1
+    broadcast.refresh_from_db()
+    assert broadcast.status == BroadcastStatus.COMPLETED
 
 
 def test_resume_can_retry_failed_rows(
@@ -214,7 +279,7 @@ def test_resume_can_retry_failed_rows(
     )
 
     with django_capture_on_commit_callbacks(execute=True):
-        summary = services.broadcast_resume(broadcast=broadcast, include_failed=True)
+        summary = services.deliveries_resume(broadcast=broadcast, include_failed=True)
 
     assert summary["failed_reset"] == 1
     delivery.refresh_from_db()
@@ -230,42 +295,52 @@ def test_sweep_command_recovers_transactional_orphans(
     delivery = NotificationDeliveryFactory.create(channel=Channel.PUSH)
     DeviceFactory.create(user=delivery.notification.recipient)
     NotificationDelivery.objects.filter(pk=delivery.pk).update(
-        status=DeliveryStatus.PROCESSING
+        status=DeliveryStatus.PROCESSING,
+        updated_at=timezone.now() - timedelta(hours=1),
     )
 
     out = io.StringIO()
     with django_capture_on_commit_callbacks(execute=True):
-        call_command("sweep_deliveries", "--stale-minutes", "0", stdout=out)
+        call_command("sweep_deliveries", stdout=out)
 
     delivery.refresh_from_db()
     assert delivery.status == DeliveryStatus.SENT
     assert "stale_reset: 1" in out.getvalue()
 
 
-def test_sweep_command_scoped_to_a_broadcast(
+def test_sweep_command_leaves_broadcast_rows_alone(
     django_capture_on_commit_callbacks: Any,
 ) -> None:
+    """Broadcasts resume from their admin page; the scheduled sweep only
+    touches transactional orphans."""
     user = UserFactory.create()
     DeviceFactory.create(user=user)
     broadcast = BroadcastFactory.create(status=BroadcastStatus.DISPATCHED)
     notification = NotificationFactory.create(
         recipient=user, kind=NotificationKind.ANNOUNCEMENT, broadcast=broadcast
     )
-    NotificationDeliveryFactory.create(notification=notification, channel=Channel.PUSH)
+    delivery = NotificationDeliveryFactory.create(
+        notification=notification, channel=Channel.PUSH
+    )
+
+    transactional_pending = NotificationDelivery.objects.filter(
+        broadcast__isnull=True, status=DeliveryStatus.PENDING
+    ).count()
 
     out = io.StringIO()
     with django_capture_on_commit_callbacks(execute=True):
-        call_command("sweep_deliveries", "--broadcast", str(broadcast.pk), stdout=out)
+        call_command("sweep_deliveries", "--include-failed", stdout=out)
 
-    assert "re_enqueued: 1" in out.getvalue()
-    broadcast.refresh_from_db()
-    assert broadcast.status == BroadcastStatus.COMPLETED
+    # Only the transactional rows (whatever other fixtures left behind) move.
+    assert f"re_enqueued: {transactional_pending}" in out.getvalue()
+    delivery.refresh_from_db()
+    assert delivery.status == DeliveryStatus.PENDING
 
 
 class TestAudienceFilters:
     """`broadcast_audience` is the single audience definition - the dispatcher
-    pages it and the inline guard counts it, so a filter that duplicates rows
-    would double-send."""
+    pages it and the composer's estimate counts it, so a filter that
+    duplicates rows would double-send."""
 
     def test_require_device_excludes_users_without_one(self) -> None:
         with_device = UserFactory.create()

@@ -1,5 +1,0 @@
-# False positives pinned by fingerprint (file:rule:line).
-# .env.example keeps every value EMPTY by design - a trailing
-# `# gitleaks:allow` comment would become the parsed value
-# (env_ignore_empty footgun), so the exemption lives here instead.
-.env.example:generic-api-key:85

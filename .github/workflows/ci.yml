@@ -18,6 +18,8 @@ jobs:
   fast:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      DJANGO_SETTINGS_MODULE: config.settings.local
     services:
       postgres:
         image: postgres:18
@@ -61,17 +63,15 @@ jobs:
         run: uv run manage.py makemigrations --check --dry-run
 
       - name: Tests
-        # fail_under=80 comes from [tool.coverage.report] in pyproject.toml.
-        run: |
-          uv run manage.py createcachetable
-          uv run pytest -n auto --cov
+        # fail_under comes from [tool.coverage] report.fail_under in pyproject.toml.
+        run: uv run pytest -n auto --cov
 
       # Schema breakage (bad annotation, duplicate operation id) used to
       # surface only post-merge in the Apidog job - generate at PR time.
       - name: OpenAPI schema generates (API + merged auth spec)
         run: |
           uv run manage.py export_openapi_schema --api config.api.v1.api --output openapi.json
-          uv run manage.py merge_auth_openapi --input openapi.json
+          uv run manage.py merge_auth_openapi --input openapi.json --server-url http://localhost:8000
 
   # CDK app: synth without credentials, template assertions, cfn-lint.
   infra:
@@ -107,10 +107,39 @@ jobs:
       - name: cfn-lint
         run: uv run cfn-lint --ignore-checks W3005 -- cdk.out/*.template.json
 
-  # Prod-image build + the same smokes the local compose stack passes.
+  # Prod-image build + boot with the production settings module: the release
+  # step, then the web process answering its probes.
   image:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: backend
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d backend"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The deployed-only fields point at nothing reachable: the release step
+      # and the probes never touch S3/SES/Sentry.
+      IMAGE_ENV: >-
+        --env-file .env
+        -e ENVIRONMENT=dev
+        -e SECRET_KEY=ci-only-not-a-secret-nZfK3vQ8wLxT1pYbR6mJc9GhD4sE7uAiO2
+        -e DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/backend
+        -e ALLOWED_HOSTS=localhost
+        -e AWS_STORAGE_BUCKET_NAME=ci-unused
+        -e AWS_S3_REGION_NAME=eu-central-1
+        -e AWS_S3_CUSTOM_DOMAIN=ci-unused.cloudfront.net
+        -e AWS_SES_REGION=eu-central-1
+        -e SENTRY_DSN=https://key@sentry.invalid/1
+        -e SENTRY_RELEASE=${{ github.sha }}
     steps:
       - uses: actions/checkout@v7
 
@@ -128,22 +157,23 @@ jobs:
       - name: Bootstrap env file
         run: cp .env.example .env
 
-      - name: Boot stack (release step before web/worker)
-        run: |
-          docker compose up -d --wait postgres mailpit
-          # `compose run` has no --no-build flag (only up/create do); it
-          # reuses the loaded backend:local image and builds only if absent.
-          docker compose run --rm web python manage.py migrate
-          docker compose run --rm web python manage.py createcachetable
-          docker compose up -d --wait --no-build
+      - name: Release step (deploy checklist + migrate + cache table)
+        run: >-
+          docker run --rm --network host $IMAGE_ENV backend:local
+          sh -c "python manage.py check --deploy --fail-level WARNING
+          && python manage.py migrate --noinput
+          && python manage.py createcachetable"
 
-      - name: Smoke
+      - name: Boot web + smoke
         run: |
-          curl -fsS http://localhost:8000/healthz
+          docker run -d --name web --network host $IMAGE_ENV backend:local
+          for _ in $(seq 1 30); do
+            curl -fsS http://localhost:8000/healthz && break
+            sleep 2
+          done
           curl -fsS http://localhost:8000/readyz
-          curl -fsS -o /dev/null http://localhost:8000/_allauth/openapi.json
           echo "smoke OK"
 
-      - name: Stack logs
+      - name: Web logs
         if: failure()
-        run: docker compose logs
+        run: docker logs web

@@ -22,8 +22,8 @@ one envelope (below).
 ## App layout and layering
 
 Every domain app (`apps/users` is the reference, `apps/notifications` and
-`apps/payments` the built-out examples, `apps/example` the copy-me template)
-is a set of packages, one module per entity inside each:
+`apps/payments` the built-out examples) is a set of packages, one module per
+entity inside each:
 
 ```
 apps/<app>/
@@ -52,9 +52,10 @@ apis | admin | management  →  services  →  tasks  →  selectors  →  model
   `apps/common/tests/` — the cross-app gates and factory registry — and the
   `seed_db` command, both exempted by name in `pyproject.toml`).
 - **No signals** in first-party code — services call services. At third-party
-  boundaries use the library's hook surface: allauth reports signups through
-  `AccountAdapter.save_user` → `user_post_signup` (`apps/users/adapters.py`),
-  not the `user_signed_up` signal.
+  boundaries use the library's hook surface: allauth hands a completed signup
+  to `AccountAdapter.save_user` (`apps/users/adapters.py`), which creates the
+  user through the ONE signup service, `user_create` (wallet, WELCOME inbox
+  row, welcome-email task) — not the `user_signed_up` signal.
 
 ## BaseModel
 
@@ -65,8 +66,11 @@ apis | admin | management  →  services  →  tasks  →  selectors  →  model
   order ≈ creation order (pagination relies on this).
 - `created_at` (indexed) / `updated_at`.
 
-`User` is email-login only: no username, single `name` field, `language`
-(ar/en) that drives every user-facing email/notification.
+`User` is email-login only: no username, a required `name` (collected at
+signup by `apps/users/forms.py::SignupForm`, allauth's
+`ACCOUNT_SIGNUP_FORM_CLASS`), and a `language` (ar/en, captured from
+`Accept-Language` at signup — no model default) that drives every
+user-facing email/notification.
 
 ## Error contract
 
@@ -81,7 +85,8 @@ Every API error has ONE shape, produced in ONE place
   non-field errors use the `non_field_errors` key (Django's `__all__` is
   normalized to it).
 - Services raise `ApplicationError` (`apps/common/exceptions.py`,
-  `status_code` class attr, default 400); domain apps subclass it
+  `status_code` class attr, default 400; the machine-readable `code` IS the
+  snake_case class name, never overridden); domain apps subclass it
   (`UserError`). Model validation (`full_clean()` in services) → 400;
   request-schema validation → 422; ninja's 401/403/429 all subclass
   `HttpError` and map through one handler.
@@ -104,8 +109,9 @@ Every API error has ONE shape, produced in ONE place
   gate.
 - List endpoints declare `@paginate(CursorPagination)`
   (`apps/common/pagination.py`): cursor over the UUIDv7 pk, newest first,
-  opaque urlsafe-base64 cursor, `limit` 1–100 (default 20). A bad cursor is
-  an `ApplicationError`, not a 500.
+  opaque urlsafe-base64 cursor, `limit` 1–`MAX_PAGE_SIZE` (100),
+  `DEFAULT_PAGE_SIZE` (20) when the client sends none. A bad cursor is an
+  `ApplicationError`, not a 500.
 
 ## Auth
 
@@ -117,8 +123,6 @@ Every API error has ONE shape, produced in ONE place
   is `login_by_code` — the emailed code doubles as email verification.
 - The ninja API accepts **either** the session cookie (browser SPA) **or**
   `X-Session-Token` (mobile/app clients) — `config/api/auth.py`.
-- Signup kill-switch: `ACCOUNT_ALLOW_REGISTRATION` env →
-  `AccountAdapter.is_open_for_signup`.
 - Brute-force lockout: django-axes, 5 failures per (username, ip), 1h
   cooloff, disabled in tests. Rate limiting: django-ratelimit over a LocMem
   cache alias (per-container; Redis/WAF is the documented upgrade).
@@ -143,8 +147,8 @@ Conventions (see `apps/users/tasks/emails.py`):
   a rolled-back write must never produce a task run.
 - Task bodies render user-facing text with
   `translation.override(user.language)` — there is no request in a worker.
-- `TASKS_IMMEDIATE=true` (local/test) swaps in the ImmediateBackend: tasks
-  run inline, no worker needed.
+- `config/settings/test.py` runs tasks on the ImmediateBackend, so a test
+  sees a task's effects right after the enqueue.
 - Scheduled work = management commands triggered by EventBridge Scheduler →
   ECS RunTask. The cadence is code: one `ScheduledJob` entry per command in
   `infra/backend_infra/config.py::SCHEDULES` (`clearsessions`,
@@ -155,11 +159,12 @@ Conventions (see `apps/users/tasks/emails.py`):
 ## Outbound clients (HTTP kernel, SMS, push, payments)
 
 Every call to an external service goes through **one kernel**,
-`apps/common/http.py::request_json` — explicit `httpx.Timeout(10, connect=5)`,
-a typed retry policy (stamina, 3 attempts, jittered backoff), structured
-logs (`outbound_request_ok/failed`; request bodies never logged), and an
-error taxonomy (`OutboundTransportError` / `OutboundStatusError`, body
-truncated). Retry policies are chosen per call semantics:
+`apps/common/http.py::request_json` — every caller states its `timeout`
+(`PROVIDER_TIMEOUT` = `httpx.Timeout(10, connect=5)`) and its `retry`
+policy (stamina, 3 attempts, jittered backoff); structured logs
+(`outbound_request_ok/failed`; request bodies never logged) and an error
+taxonomy (`OutboundTransportError` / `OutboundStatusError`, body truncated).
+The retry policy is the call's idempotency posture:
 
 | Policy | Retries | Use for |
 |---|---|---|
@@ -171,18 +176,18 @@ A 2xx with an error body is the **caller's** job: each provider module owns
 an allowlist success predicate (OurSMS accepted/rejected counts, SMSMisr
 `code == "1901"`) — unknown shapes fail loudly, never pass silently.
 
-**Transport selection = the mail-backend pattern** (settings string,
-resolved per call — what Django itself now spells `MAILERS`): `SMS_BACKEND` / `PUSH_BACKEND` / `WHATSAPP_BACKEND` (base + local = console
-backends with structlog lines; `production.py` swaps in the real transports
-only when `_DEPLOYED`) and `PAYMENT_GATEWAYS` (currency → gateway class —
-the same Tap SAR / Paymob EGP mapping in every environment; the `.env` keys
-pick test vs live mode, and local webhooks arrive through a tunnel such as
-ngrok with `BACKEND_BASE_URL` pointing at it). `test.py` = locmem outboxes
-(`apps/notifications/clients/*/backends.py::outbox` — the `mail.outbox`
-analogue) plus `FakeGateway` for every currency, so tests can never touch
-provider HTTP even with real creds in `.env`. Provider clients live in leaf packages
-(`apps/notifications/clients/`, `apps/payments/gateways/`) — unconstrained
-by the layer contract, called from services/tasks.
+**Transports are fixed**: SMS (OurSMS SA / SMSMisr EG behind country
+routing), push (FCM), WhatsApp (Meta) and the payment gateways
+(`PAYMENT_GATEWAYS`: currency → gateway class — the same Tap SAR / Paymob
+EGP mapping in every environment; the `.env` keys pick test vs live mode,
+and local webhooks arrive through a tunnel such as ngrok with
+`BACKEND_BASE_URL` pointing at it). Tests never touch provider HTTP even
+with real creds in `.env`: the `outboxes` autouse fixture
+(`apps/notifications/tests/conftest.py`) swaps the SMS/push/WhatsApp
+transports for in-memory outboxes (the `mail.outbox` analogue), and
+`test.py` maps every currency to `FakeGateway`. Provider clients live in
+leaf packages (`apps/notifications/clients/`, `apps/payments/gateways/`) —
+unconstrained by the layer contract, called from services/tasks.
 
 Per-area notes:
 
@@ -206,8 +211,8 @@ Per-area notes:
   Delivery = one `NotificationDelivery` row per (notification, channel),
   THE idempotency record: `on_commit` tasks claim PENDING → PROCESSING under
   `select_for_update(skip_locked)`, outcomes persist per channel, no
-  auto-retry (`broadcast_resume` / `sweep_deliveries` re-enqueue exactly the
-  remainder). Mass sends = `Broadcast` rows fanned out on the `bulk` queue.
+  auto-retry (`deliveries_resume` - the admin resume action and the
+  `sweep_deliveries` cron - re-enqueues exactly the remainder). Mass sends = `Broadcast` rows fanned out on the `bulk` queue.
   WhatsApp status webhooks are HMAC-verified and never 5xx on input shape
   (`test_catalog` keeps `NotificationKind` ↔ `CATALOG` in lockstep).
 - **Payments** (Tap SAR / Paymob EGP): gateway Protocol + frozen DTOs in
@@ -239,9 +244,9 @@ Per-area notes:
   `expiration`) to FAILED so abandoned rows stop clogging its oldest-first
   window — FAILED is non-terminal, so a late webhook still heals one.
   Wallet balance moves only through `wallet_apply` (Wallet row lock +
-  append-only `WalletTransaction` ledger with `balance_after`). Local
-  flow: `manage.py simulate_payment_webhook <pk> [--fail] [--save-card]`
-  drives the same transition service (Mailpit's role, for payments).
+  append-only `WalletTransaction` ledger with `balance_after`). Locally,
+  provider TEST-mode keys plus a webhook tunnel drive the same transition
+  service; the test suite uses `apps/payments/tests/fake_gateway.py`.
 - **Saved cards** (built 2026-07-18): `SavedCard` stores only opaque
   provider references (Tap card/customer/agreement ids, Paymob token) —
   PAN and expiry never touch our servers. One row per physical card: Tap
@@ -279,9 +284,10 @@ Per-area notes:
 in `pyproject.toml`): notifications → users (rows belong to a User;
 delivery reads `user.phone`/`user.language`), payments → users +
 payments → notifications (paid events call `notification_send`), and the
-narrow service edge users.services → notifications.services (signup writes
-the WELCOME inbox row, the same shape as `wallet_create`). One-way at the
-model layer; nothing imports payments.
+narrow service edge users.services → notifications.services + payments.services
+(`user_create` writes the WELCOME inbox row and provisions the wallet in
+`wallet_currency_for(language)`). One-way at the model layer; nothing
+imports payments' models.
 
 ## i18n and translated content
 
@@ -289,57 +295,58 @@ model layer; nothing imports payments.
   everywhere — clients and the admin convert for display.
 - **API strings**: `Accept-Language: ar|en` → LocaleMiddleware. Code uses
   `gettext_lazy`.
-- **Content models** (none yet — pattern ready): register translatable
-  fields in a per-app `translation.py`; modeltranslation adds `_ar`/`_en`
-  columns. The API stays single-field (`name: str`): reading `obj.name`
-  returns the active language's value with fallback per
-  `MODELTRANSLATION_FALLBACK_LANGUAGES`; the admin edits both columns.
-- **Script validators**: attach `apps/common/validators.py`
-  (`validate_arabic_text` / `validate_english_text`) to `_ar`/`_en` content
-  columns — wrong-script entry is the classic bilingual-admin data bug, and
-  the validators fire in admin forms and services' `full_clean()` alike.
+- **Content models** (`NotificationKindConfig` is the built one): register
+  translatable fields in a per-app `translation.py`; modeltranslation adds
+  `_ar`/`_en` columns. The API stays single-field (`name: str`): reading
+  `obj.name` returns the active language's value — there is no fallback
+  chain (`MODELTRANSLATION_FALLBACK_LANGUAGES = ()`), both languages are
+  required at write time; the admin edits both columns.
 - **modeltranslation edges** (from production use of the pattern):
-  must-translate models set `required_languages = ("ar", "en")` in their
-  `TranslationOptions` (fallback-only models omit it); translated admins mix
+  every content model sets `required_languages = ("ar", "en")` in its
+  `TranslationOptions`; translated admins mix
   unfold's `TabbedTranslationAdmin` AFTER `BaseModelAdmin` in the MRO; shadow
   columns are created `null=True` and inherit `unique` from the base field;
   fixtures/factories must set the suffixed fields. `FieldPermissions` rules
   on a base field automatically govern its `_ar`/`_en` shadows — the admin
   framework expands them (`expand_translation_shadows`).
 - **Emails/notifications** render in `user.language`, not a request header.
-- `.po` catalogs under `locale/`; `makemessages` / `compilemessages`
-  (compile happens at image build once catalogs exist).
+- One catalog, `locale/ar/` (English is the source language): `just
+  messages` extracts and compiles; `apps/common/tests/test_locale.py` fails
+  the suite while any Arabic `msgstr` is empty.
 
 ## Admin framework
 
 `apps/common/admin/` wraps unfold's `ModelAdmin` (details in the class
 docstrings; proven by the admin-basics gate):
 
-- Every admin **must declare** `can_add` / `can_change` / `can_delete` —
-  missing flags fail at import. Intermediate base classes opt out with
-  `abstract_admin = True` in their own body. The same discipline applies to
-  inlines (`BaseTabularInline`/`BaseStackedInline`); `ReadOnly*Inline`
-  variants are the `can_* = False` preset for display-only child rows.
+- Every admin **must declare** `can_add` / `can_change` / `can_delete` /
+  `resource_classes` — a missing or undecided (`...`) declaration fails at
+  import. Intermediate base classes opt out with `abstract_admin = True` in
+  their own body. The same discipline applies to inlines
+  (`BaseTabularInline`/`BaseStackedInline`); display-only child rows are the
+  three flags set to False.
 - `FieldPermissions(readonly_when=…, hidden_when=…)` drives per-request
   field behavior through `AdminContext` (`ctx.is_add`, `ctx.is_change`,
-  `ctx.user`, `ctx.is_superuser`) — in admins AND inlines. Hidden is
-  airtight: filtered from form, fieldsets, list_display, AND stripped from
-  POSTs; rules auto-cover modeltranslation `_ar`/`_en` shadow columns.
-  `list_editable` may never name a ruled field (import-time failure — the
-  changelist formset ignores per-request rules).
-- `created_at`/`updated_at` auto-readonly; M2M fields get the horizontal
-  widget automatically (custom-`through` fields excluded); inlines hide on
-  the add view unless `show_on_add = True`.
-- Exports: `ExportableModelAdmin` + a `BaseModelResource` subclass whose
-  `Meta.fields` MUST be explicit. Operators pick columns per run
+  `ctx.user`, `ctx.is_superuser`) — one implementation (`FieldRuleLookups`)
+  for admins AND inlines. Hidden is airtight: filtered from form, fieldsets,
+  list_display, AND stripped from POSTs; rules auto-cover modeltranslation
+  `_ar`/`_en` shadow columns. Every rule key must be a real model field
+  (checked at registration) and `list_editable` may never name a ruled field
+  (import-time failure — the changelist formset ignores per-request rules).
+  Unconditionally readonly fields are plain `readonly_fields`, not a rule.
+- `created_at`/`updated_at` readonly on every BaseModel; M2M fields get the
+  horizontal widget (custom-`through` fields excluded); inlines hide on the
+  add view unless `show_on_add = True`.
+- Exports: every `BaseModelAdmin` exports through its `BaseModelResource`
+  subclass, whose `Meta.fields` MUST be explicit. Operators pick columns per run
   (selectable-fields form); offered formats = `EXPORT_FORMATS` (CSV, XLSX).
   Resources humanize output (`column_name=`, `DateTimeWidget`) — exports go
   to non-engineers.
 - Changelists: `search_help_text` says what search matches; date ranges via
   unfold's `RangeDateFilter` + `list_filter_submit = True`; expandable
   per-row related-record previews via `list_sections` +
-  `apps.common.admin.LimitedTableSection` (ordering + row cap; see
-  `apps/users/admin/user/sections.py`).
+  `apps.common.admin.LimitedTableSection` (declares `ordering` + `limit`;
+  see `apps/users/admin/user/sections.py`).
 - State transitions in the admin = unfold detail actions: `actions_detail`
   + `@action(permissions=["…"])` + a `has_<name>_permission` hook for
   state-conditional visibility. The action body **calls a service**, never
@@ -350,7 +357,9 @@ docstrings; proven by the admin-basics gate):
   callables (dotted path, `request -> str`, `""` hides) — use a selector
   behind it and mind that it runs a query per admin page render.
 - New entity → `manage.py generate_dashboard <app> <Model>` scaffolds the
-  8-file `admin/<entity>/` package + checklist.
+  `admin/<entity>/` package + checklist: complete code whose capability
+  flags are `...` — the admin refuses to import until a human decides them.
+  Existing packages are never overwritten.
 - Reads may use admin querysets; anything with business meaning calls the
   service — logic is never duplicated in admin.
 - Third-party admins get re-registered when their defaults don't fit
@@ -370,28 +379,22 @@ docstrings; proven by the admin-basics gate):
 
 ## Deferred paths (decided, not built)
 
-Documented so they're added the intended way when needed. The *Blueprint*
-column points into `Gawdat_Django_Template/` — a local, gitignored copy of
-a real production template audited file-by-file (2026-07-12); start future
-work from that proven code, ported to this repo's conventions (ninja, no
-signals, services, strict mypy).
+Documented so they're added the intended way when needed — one approach
+per need.
 
-| Need | Path | Blueprint (Gawdat_Django_Template/) |
-|---|---|---|
-| Audit history (who changed what) | django-simple-history on the models that need it | `apps/payments/models/` (registration), `apps/users/admin/*/admin.py` (SimpleHistoryAdmin MRO) |
-| Recoverable delete (user-facing rows kept for history, e.g. addresses referenced by orders) | `deleted_at` pattern or django-softdelete — a DIFFERENT need than audit history; decide the lib when first needed | `apps/location/models/address.py` |
-| Direct-to-S3 uploads | presigned-URL endpoint in a service; client uploads, API stores the key | — |
-| Embedded mini-schemas | add the `Ref` tier per entity alongside Summary/Detail | — |
-| Real rate limiting | move the `ratelimit` cache alias to Redis, or push to WAF | — |
-| Slow release-step collectstatic | collectfasta | — |
-| Geo (countries/regions/zones) | postgis image + libgdal in Dockerfile + `django.contrib.gis` | `apps/location/` — Region model, geojson loaders (`loadcountries`/`loadzones` + `assets/countries/`), point-in-region lookups |
-| External-API fan-out | gunicorn gevent worker class for the web service | — |
-| Multi-persona users | one `User` + OneToOne profile models (Customer/Provider). Gate incomplete profiles at the API layer: `is_profile_completed` computed in a selector and exposed on the persona Detail schema, plus a ninja auth class raising an ApplicationError whose envelope carries `action_required: "complete_profile"`. Never path-prefix middleware — exempt lists rot and it bypasses the envelope (the template's own middleware shipped stale and unwired). | `apps/users/` customer/provider models, selectors, setup flows + `tests/test_customer_signup_flow.py` |
-| Admin dashboards (index KPIs/charts) | unfold insights components on the index (`DASHBOARD_CALLBACK`) + per-changelist KPI cards | `common/insights/`, `assets/templates/admin/` (index + components), `assets/templates/admin/payment/*/change_list.html` |
-| Social login (G13) | settings-based `SOCIALACCOUNT_PROVIDERS` from env creds; social adapter calls `user_post_signup` | `config/settings/base.py` SOCIALACCOUNT block, `config/helpers/allauth_adapter.py` (headless `serialize_user` enrichment) |
-| Mobile content app (FAQ/banners/onboarding/contact) | content models with per-app `translation.py` + curated fixtures loaded by a `loadfixtures` command (+ fixtures-loading test) | `apps/appInfo/`, `assets/fixtures/`, `common/management/commands/loadfixtures.py`, `tests/test_fixtures_loading.py` |
-| Runtime-editable operational settings | django-constance with unfold widgets; singleton settings/legal-content models via django-solo | `config/integrations/unfold.py` constance block, `apps/appInfo/models/app_info.py` |
-| Country reference data | code-only Country model + library-derived metadata (dial codes, flags); customer address book with primary-address invariants | `apps/location/models/country.py`, `domain/utils/country_info.py`, `models/address.py` |
-| Public terms/privacy page | one server-rendered page off AppInfo content (the API-only rule's single documented exception) | `common/views/web_view.py`, `assets/templates/terms/` |
-| Release notes discipline | commitizen + conventional-commit CI naming checks | `.github/pr-naming.yml`, `commit-naming.yml`, `release.yml` |
-| ImageField factories | session-shared tiny test image fixture (avoid generating per-row images) | `tests/conftest.py` image fixture |
+| Need | Path |
+|---|---|
+| Audit history (who changed what) | django-simple-history on the models that need it |
+| Direct-to-S3 uploads | presigned-URL endpoint in a service; client uploads, API stores the key |
+| Embedded mini-schemas | add the `Ref` tier per entity alongside Summary/Detail |
+| Real rate limiting | move the `ratelimit` cache alias to Redis |
+| Slow release-step collectstatic | collectfasta |
+| Geo (countries/regions/zones) | postgis image + libgdal in Dockerfile + `django.contrib.gis` |
+| External-API fan-out | gunicorn gevent worker class for the web service |
+| Multi-persona users | one `User` + OneToOne profile models (Customer/Provider). Gate incomplete profiles at the API layer: `is_profile_completed` computed in a selector and exposed on the persona Detail schema, plus a ninja auth class raising an ApplicationError whose envelope carries `action_required: "complete_profile"`. Never path-prefix middleware — exempt lists rot and it bypasses the envelope. |
+| Admin dashboards (index KPIs/charts) | unfold insights components on the index (`DASHBOARD_CALLBACK`) + per-changelist KPI cards |
+| Social login | settings-based `SOCIALACCOUNT_PROVIDERS` from env creds; the social adapter calls `user_create` |
+| Runtime-editable operational settings | django-constance with unfold widgets |
+| Public terms/privacy page | one server-rendered page; the only non-API HTML route |
+| Release notes discipline | commitizen + conventional-commit CI naming checks |
+| ImageField factories | session-shared tiny test image fixture (avoid generating per-row images) |

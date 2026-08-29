@@ -1,72 +1,10 @@
-# Local dev + CI smoke stack. Containers run the production settings module
-# with ENVIRONMENT=local (prod code paths, http + Mailpit). The release-step
-# analog (migrate + createcachetable) runs as a one-off:
-#   docker compose run --rm web python manage.py migrate
-#   docker compose run --rm web python manage.py createcachetable
+# Local services only: Django runs on the host (`just run` + `just worker`,
+# local settings module). The image is built and smoke-tested in CI.
 
 volumes:
   postgres_data: {}
 
-x-app: &app
-  build: .
-  image: backend:local
-  env_file: .env
-  environment:
-    DJANGO_SETTINGS_MODULE: config.settings.production
-    # Container-network overrides; .env stays host-oriented.
-    DATABASE_URL: postgres://postgres:postgres@postgres:5432/backend
-    EMAIL_HOST: mailpit
-    TASKS_IMMEDIATE: "false"  # real queue: the worker service drains it
-  depends_on:
-    postgres:
-      condition: service_healthy
-    mailpit:
-      condition: service_started
-
 services:
-  web:
-    <<: *app
-    ports:
-      - '8000:8000'
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 5s
-    develop:
-      watch:
-        - action: sync+restart
-          path: .
-          target: /app
-
-  worker:
-    <<: *app
-    command: ['python', 'manage.py', 'db_worker']
-    healthcheck:
-      test: ['CMD', 'python', '-c', 'import sys; sys.exit(0)']  # process-alive
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
-  # Broadcast fan-out lane - scale during campaigns:
-  #   docker compose up -d --scale worker-bulk=4
-  # Locally two workers show the two queues; AWS runs ONE worker with
-  # `--queue-name default,bulk` (infra/) and scales a bulk lane only on demand.
-
-  worker-bulk:
-    <<: *app
-    command: ['python', 'manage.py', 'db_worker', '--queue-name', 'bulk']
-    healthcheck:
-      test: ['CMD', 'python', '-c', 'import sys; sys.exit(0)']  # process-alive
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
   postgres:
     image: postgres:18
     volumes:

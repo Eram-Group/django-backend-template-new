@@ -37,11 +37,6 @@ repos:
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
-  - repo: https://github.com/gitleaks/gitleaks
-    rev: v8.30.0
-    hooks:
-      - id: gitleaks
-
   # No `files:` filter on purpose - the hook's own `types: [shell]` matches by
   # extension AND shebang, anywhere in the tree. The previous `^scripts/`
   # restriction stopped matching when that folder went, and would have left
@@ -78,7 +73,7 @@ repos:
 
       - id: makemigrations-check
         name: model changes have migrations (pre-push)
-        entry: uv run manage.py makemigrations --check --dry-run
+        entry: env DJANGO_SETTINGS_MODULE=config.settings.local uv run manage.py makemigrations --check --dry-run
         language: system
         pass_filenames: false
         stages: [pre-push]
@@ -87,8 +82,8 @@ repos:
         name: branch not behind origin/main (pre-push)
         entry: >
           bash -c '
-          git fetch origin main --quiet 2>/dev/null || exit 0;
-          git rev-parse --verify origin/main >/dev/null 2>&1 || exit 0;
+          git fetch origin main --quiet
+          || { echo "Cannot reach origin to verify the branch is current."; exit 1; };
           git merge-base --is-ancestor origin/main HEAD
           || { echo "Branch is behind origin/main - rebase or merge first."; exit 1; }'
         language: system

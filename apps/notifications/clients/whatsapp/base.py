@@ -17,7 +17,7 @@ class WhatsAppError(Exception):
 
 
 class WhatsAppNotConfiguredError(WhatsAppError):
-    """Credentials are absent, or the Meta connector is not implemented yet."""
+    """The Meta connector is not implemented yet - nothing can send."""
 
 
 class WhatsAppProviderError(WhatsAppError):

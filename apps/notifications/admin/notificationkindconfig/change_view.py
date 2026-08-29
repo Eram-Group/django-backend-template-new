@@ -19,4 +19,4 @@ FIELDSETS: _FieldsetSpec = (
     (None, {"fields": ("kind", "channels")}),
     ("Message", {"fields": ("title", "body")}),
 )
-READONLY_FIELDS = ()
+READONLY_FIELDS = ("kind",)  # the identity of the row, never retyped

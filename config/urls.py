@@ -9,13 +9,13 @@ from django.contrib import admin
 from django.http import HttpRequest
 from django.http import HttpResponse
 from django.http import JsonResponse
+from django.urls import URLPattern
+from django.urls import URLResolver
 from django.urls import include
 from django.urls import path
 from django.views.defaults import page_not_found
 from django.views.defaults import server_error
 
-from apps.common.health import healthz
-from apps.common.health import readyz
 from config.api.v1 import api
 from config.env import env
 
@@ -46,21 +46,14 @@ def handle_500(request: HttpRequest) -> HttpResponse:
 handler404 = "config.urls.handle_404"
 handler500 = "config.urls.handle_500"
 
-if env.SECURE_ADMIN_LOGIN:
-    # Admin authenticates via allauth's email-code flow instead of passwords.
-    from allauth.account.decorators import secure_admin_login
-
-    admin.autodiscover()
-    admin.site.login = secure_admin_login(admin.site.login)  # type: ignore[method-assign]
-
-urlpatterns = [
+# /healthz and /readyz are answered by apps.common.middleware.HealthProbeMiddleware
+# before any URL resolution (ALB probes bypass host + TLS checks).
+urlpatterns: list[URLPattern | URLResolver] = [
     path(env.ADMIN_URL, admin.site.urls),
     path("api/v1/", api.urls),
     path("_allauth/", include("allauth.headless.urls")),
     # set_language for the admin's ar/en switcher (UNFOLD SHOW_LANGUAGES).
     path("i18n/", include("django.conf.urls.i18n")),
-    path("healthz", healthz, name="healthz"),
-    path("readyz", readyz, name="readyz"),
 ]
 
 if settings.DEBUG:

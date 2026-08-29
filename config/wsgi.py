@@ -1,12 +1,5 @@
-"""WSGI config.
-
-Exposes the WSGI callable as a module-level variable named ``application``.
-"""
-
-import os
+"""WSGI entrypoint (gunicorn). DJANGO_SETTINGS_MODULE is set by the runtime."""
 
 from django.core.wsgi import get_wsgi_application
-
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.production")
 
 application = get_wsgi_application()

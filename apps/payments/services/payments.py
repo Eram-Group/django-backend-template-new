@@ -28,6 +28,7 @@ from apps.payments.constants import Currency
 from apps.payments.constants import PaymentKind
 from apps.payments.constants import PaymentStatus
 from apps.payments.constants import WalletTransactionKind
+from apps.payments.exceptions import CustomerDetailsRequiredError
 from apps.payments.exceptions import PaymentEventMismatchError
 from apps.payments.exceptions import PaymentGatewayUnavailableError
 from apps.payments.exceptions import PaymentNotFoundError
@@ -39,10 +40,9 @@ from apps.payments.exceptions import WalletCurrencyMismatchError
 from apps.payments.gateways import gateway_by_name
 from apps.payments.gateways import gateway_for_currency
 from apps.payments.gateways.base import CheckoutRequest
-from apps.payments.gateways.base import CheckoutSession
-from apps.payments.gateways.base import GatewayResponseError
+from apps.payments.gateways.base import GatewayError
+from apps.payments.gateways.base import PaymentEvent
 from apps.payments.gateways.base import SavedCardRef
-from apps.payments.gateways.base import WebhookEvent
 from apps.payments.gateways.base import to_minor_units
 from apps.payments.models import Payment
 from apps.payments.models import SavedCard
@@ -61,6 +61,9 @@ logger = structlog.get_logger(__name__)
 #: never auto-applied to the wallet; a human reconciles.
 _PROVIDER_REVERSALS = frozenset({"refund", "void", "refunded", "voided"})
 
+#: A full name has a first and a last part - both gateways bill them.
+_NAME_PARTS = 2
+
 
 def _card_ref(card: SavedCard) -> SavedCardRef:
     return SavedCardRef(
@@ -70,15 +73,41 @@ def _card_ref(card: SavedCard) -> SavedCardRef:
     )
 
 
-def _session_event(payment: Payment, session: CheckoutSession) -> WebhookEvent:
-    """A synchronous charge outcome, shaped like the webhook that will also
-    arrive - both converge on the idempotent payment_apply_gateway_event."""
-    return WebhookEvent(
+def _customer_details(user: User) -> tuple[str, str]:
+    """The billing name and phone the gateways require of every checkout -
+    refused up front, before a row exists, never padded with placeholders."""
+    name = user.name.strip()
+    phone = str(user.phone) if user.phone else ""
+    if len(name.split()) < _NAME_PARTS or not phone:
+        raise CustomerDetailsRequiredError(
+            str(_("Add your full name and phone number before paying."))
+        )
+    return name, phone
+
+
+def _checkout_request(
+    *,
+    payment: Payment,
+    gateway_name: str,
+    customer_name: str,
+    customer_phone: str,
+    saved_card: SavedCardRef | None,
+    customer_id: str,
+) -> CheckoutRequest:
+    return CheckoutRequest(
         reference=str(payment.idempotency_key),
-        transaction_id=session.transaction_id or session.charge_id,
-        is_paid=session.is_paid,
-        status=session.status,
-        raw=session.raw,
+        amount=payment.amount,
+        currency=payment.currency,
+        description=payment.description,
+        customer_email=payment.user.email,
+        customer_name=customer_name,
+        customer_phone=customer_phone,
+        webhook_url=(
+            f"{settings.BACKEND_BASE_URL}/api/v1/payments/webhooks/{gateway_name}"
+        ),
+        redirect_url=f"{settings.FRONTEND_BASE_URL}/payments/{payment.pk}/return",
+        saved_card=saved_card,
+        customer_id=customer_id,
     )
 
 
@@ -108,10 +137,10 @@ def payment_initiate(
     *,
     user: User,
     amount: Decimal,
-    currency: Currency | str,
-    kind: PaymentKind | str = PaymentKind.OTHER,
-    description: str = "",
-    saved_card: SavedCard | None = None,
+    currency: Currency,
+    kind: PaymentKind,
+    description: str,
+    saved_card: SavedCard | None,
 ) -> Payment:
     """Create the PENDING row, then ask the gateway for a checkout URL.
 
@@ -131,11 +160,12 @@ def payment_initiate(
     404s - the gateway's webhook retry, ``payment_verify``, and the
     ``reconcile_payments`` sweep all pick it up.
     """
+    customer_name, customer_phone = _customer_details(user)
     if kind == PaymentKind.WALLET_TOPUP:
         # Fail before the provider charges: waiting for the credit path to
         # reject the mismatch would strand already-captured money.
-        _wallet_for(user=user, currency=str(currency))
-    gateway = gateway_for_currency(str(currency))
+        _wallet_for(user=user, currency=currency)
+    gateway = gateway_for_currency(currency)
     if saved_card is not None:
         _validate_saved_card(
             user=user, saved_card=saved_card, gateway_name=gateway.name
@@ -152,18 +182,11 @@ def payment_initiate(
     )
     payment.full_clean()
     payment.save()
-    request = CheckoutRequest(
-        reference=str(payment.idempotency_key),
-        amount=payment.amount,
-        currency=payment.currency,
-        description=description,
-        customer_email=user.email,
-        customer_name=user.name,
-        customer_phone=str(user.phone) if user.phone else "",
-        webhook_url=(
-            f"{settings.BACKEND_BASE_URL}/api/v1/payments/webhooks/{gateway.name}"
-        ),
-        redirect_url=f"{settings.FRONTEND_BASE_URL}/payments/{payment.pk}/return",
+    request = _checkout_request(
+        payment=payment,
+        gateway_name=gateway.name,
+        customer_name=customer_name,
+        customer_phone=customer_phone,
         saved_card=_card_ref(saved_card) if saved_card is not None else None,
         # A new card is filed under the customer the user's other cards use,
         # so re-entering a card yields the same provider card, not a copy.
@@ -175,7 +198,7 @@ def payment_initiate(
     )
     try:
         session = gateway.create_checkout(request=request)
-    except (OutboundError, GatewayResponseError) as exc:
+    except (OutboundError, GatewayError) as exc:
         payment.status = PaymentStatus.FAILED
         payment.save(update_fields=["status", "updated_at"])
         raise PaymentGatewayUnavailableError(
@@ -193,11 +216,11 @@ def payment_initiate(
             "updated_at",
         ]
     )
-    if not session.checkout_url and session.status:
+    if session.outcome is not None:
         # Synchronous outcome (one-click captured/declined) - apply it now;
         # the webhook that follows is an idempotent replay.
         return payment_apply_gateway_event(
-            gateway_name=gateway.name, event=_session_event(payment, session)
+            gateway_name=gateway.name, event=session.outcome
         )
     return payment
 
@@ -207,9 +230,9 @@ def payment_charge_saved(
     user: User,
     saved_card: SavedCard,
     amount: Decimal,
-    currency: Currency | str,
-    kind: PaymentKind | str = PaymentKind.OTHER,
-    description: str = "",
+    currency: Currency,
+    kind: PaymentKind,
+    description: str,
 ) -> Payment:
     """MIT: charge a stored card server-side, no customer present.
 
@@ -219,9 +242,10 @@ def payment_charge_saved(
     the row update self-heals when the webhook lands; FAILED is non-terminal,
     so a late CAPTURED webhook corrects a wrongly-FAILED row too.
     """
+    customer_name, customer_phone = _customer_details(user)
     if kind == PaymentKind.WALLET_TOPUP:
-        _wallet_for(user=user, currency=str(currency))
-    gateway = gateway_for_currency(str(currency))
+        _wallet_for(user=user, currency=currency)
+    gateway = gateway_for_currency(currency)
     _validate_saved_card(user=user, saved_card=saved_card, gateway_name=gateway.name)
     payment = Payment(
         user=user,
@@ -234,23 +258,17 @@ def payment_charge_saved(
     )
     payment.full_clean()
     payment.save()
-    request = CheckoutRequest(
-        reference=str(payment.idempotency_key),
-        amount=payment.amount,
-        currency=payment.currency,
-        description=description,
-        customer_email=user.email,
-        customer_name=user.name,
-        customer_phone=str(user.phone) if user.phone else "",
-        webhook_url=(
-            f"{settings.BACKEND_BASE_URL}/api/v1/payments/webhooks/{gateway.name}"
-        ),
-        redirect_url=f"{settings.FRONTEND_BASE_URL}/payments/{payment.pk}/return",
+    request = _checkout_request(
+        payment=payment,
+        gateway_name=gateway.name,
+        customer_name=customer_name,
+        customer_phone=customer_phone,
         saved_card=_card_ref(saved_card),
+        customer_id="",  # the stored card already carries its customer
     )
     try:
         session = gateway.charge_saved(request=request)
-    except (OutboundError, GatewayResponseError) as exc:
+    except (OutboundError, GatewayError) as exc:
         payment.status = PaymentStatus.FAILED
         payment.save(update_fields=["status", "updated_at"])
         raise PaymentGatewayUnavailableError(
@@ -260,18 +278,19 @@ def payment_charge_saved(
     payment.gateway_response = session.raw
     payment.full_clean()
     payment.save(update_fields=["gateway_charge_id", "gateway_response", "updated_at"])
-    if session.status:
+    if session.outcome is not None:
         return payment_apply_gateway_event(
-            gateway_name=gateway.name, event=_session_event(payment, session)
+            gateway_name=gateway.name, event=session.outcome
         )
     return payment  # stays PENDING - the webhook/reconcile sweep settles it
 
 
-def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Payment:
-    """Apply one gateway event (webhook or verify) - idempotent on replays.
+def payment_apply_gateway_event(*, gateway_name: str, event: PaymentEvent) -> Payment:
+    """Apply one gateway event (webhook, sync outcome or verify) - idempotent
+    on replays.
 
-    A verified event whose signed amount/currency disagree with the row is
-    never applied (``PaymentEventMismatchError``); an informational event
+    A verified event whose amount/currency disagree with the row is never
+    applied (``PaymentEventMismatchError``); an informational event
     (``is_pending`` - still in flight, or a refund/void/capture child) is
     recorded on the row but never transitions it.
     """
@@ -334,19 +353,18 @@ def payment_apply_gateway_event(*, gateway_name: str, event: WebhookEvent) -> Pa
         return payment
 
 
-def _check_event_matches(*, payment: Payment, event: WebhookEvent) -> None:
-    """Cross-check the gateway's signed amount/currency against the row.
+def _check_event_matches(*, payment: Payment, event: PaymentEvent) -> None:
+    """Cross-check the gateway's amount/currency against the row.
 
     The signature proves the gateway sent it; this proves it is about THIS
-    payment at THIS price. Gateways that do not sign the amount leave
-    ``amount_minor`` unset and skip the check.
+    payment at THIS price. Every gateway supplies both. Informational events
+    are exempt on purpose: they never move money, and a refund/void/capture
+    child carries its own amount (a partial refund's), not the payment's.
     """
-    if event.amount_minor is None:
+    if event.is_pending:
         return
-    expected = to_minor_units(amount=payment.amount, currency=payment.currency)
-    if event.amount_minor == expected and (
-        not event.currency or event.currency == payment.currency
-    ):
+    expected = to_minor_units(amount=payment.amount)
+    if event.amount_minor == expected and event.currency == payment.currency:
         return
     logger.error(
         "payment_event_amount_mismatch",
@@ -376,6 +394,8 @@ def _on_paid(payment: Payment) -> None:
             amount=payment.amount,
             kind=WalletTransactionKind.TOPUP,
             payment=payment,
+            actor=None,
+            note="",
         )
         notification_send(
             recipient=payment.user,
@@ -395,33 +415,26 @@ def _on_paid(payment: Payment) -> None:
 
 
 def payment_verify(*, payment: Payment) -> Payment:
-    """Re-query the gateway on demand (webhook fallback, user is polling)."""
+    """Re-query the gateway on demand (webhook fallback, user is polling).
+
+    Only a PAID answer is applied: a declined attempt on a hosted page can
+    still be retried by the customer, so the row stays PENDING until the
+    webhook or the reconcile sweep settles it.
+    """
     if payment.status in TERMINAL_STATUSES:
         return payment
     gateway = gateway_by_name(payment.gateway)
-    if gateway is None:
-        raise PaymentNotFoundError(str(_("Payment gateway is not configured.")))
     try:
-        status = gateway.fetch_status(
+        event = gateway.fetch_status(
             charge_id=payment.gateway_charge_id,
             reference=str(payment.idempotency_key),
         )
-    except (OutboundError, GatewayResponseError) as exc:
+    except (OutboundError, GatewayError) as exc:
         raise PaymentGatewayUnavailableError(
             str(_("The payment provider is unavailable. Try again shortly."))
         ) from exc
-    if not status.is_paid:
+    if event is None or not event.is_paid:
         return payment
-    event = WebhookEvent(
-        reference=str(payment.idempotency_key),
-        transaction_id=status.transaction_id,
-        is_paid=True,
-        status=status.status,
-        raw=status.raw,
-        saved_card=status.saved_card,
-        amount_minor=status.amount_minor,
-        currency=status.currency,
-    )
     return payment_apply_gateway_event(gateway_name=payment.gateway, event=event)
 
 
@@ -455,11 +468,11 @@ def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
     """Refund phase 1, the interlock - the provider is NOT called here.
 
     Full refund only (partial refunds: extend with an amount arg + partial
-    ledger). Locks the row, requires PAID (a concurrent second refund fails
-    this check before ever reaching the gateway), debits the wallet for
-    top-ups (a spent credit raises InsufficientBalanceError before the
-    provider is contacted), flips to REFUND_PENDING, and enqueues
-    ``process_payment_refund`` on commit.
+    ledger). Locks the row, requires PAID with a settled transaction id (a
+    concurrent second refund fails this check before ever reaching the
+    gateway), debits the wallet for top-ups (a spent credit raises
+    InsufficientBalanceError before the provider is contacted), flips to
+    REFUND_PENDING, and enqueues ``process_payment_refund`` on commit.
 
     The provider call lives in the worker task on purpose: request handlers
     run under ATOMIC_REQUESTS, which would turn the executor's transactions
@@ -468,13 +481,16 @@ def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
     provider refunded. Committing REFUND_PENDING with the request and doing
     the rest in the worker closes both holes.
     """
-    if gateway_by_name(payment.gateway) is None:
-        raise PaymentNotFoundError(str(_("Payment gateway is not configured.")))
+    gateway_by_name(payment.gateway)  # an unconfigured gateway refuses up front
     with transaction.atomic():
         locked = Payment.objects.select_for_update().get(pk=payment.pk)
         if locked.status != PaymentStatus.PAID:
             raise PaymentNotRefundableError(
                 str(_("Only paid payments can be refunded."))
+            )
+        if not locked.gateway_transaction_id:
+            raise PaymentNotRefundableError(
+                str(_("This payment has no settled transaction to refund."))
             )
         if locked.kind == PaymentKind.WALLET_TOPUP:
             wallet = _wallet_for(user=locked.user, currency=locked.currency)
@@ -484,6 +500,7 @@ def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
                 kind=WalletTransactionKind.REFUND,
                 payment=locked,
                 actor=actor,
+                note="",
             )
         locked.status = PaymentStatus.REFUND_PENDING
         locked.refund_attempted_at = None
@@ -497,12 +514,14 @@ def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
         return locked
 
 
-def payment_refund_execute(
-    *, payment_id: uuid.UUID, actor: User | None = None
-) -> Payment:
+def payment_refund_execute(*, payment_id: uuid.UUID, actor: User | None) -> Payment:
     """Refund phases 2+3: provider call + finalization. Worker/sweep only -
     never call from a request handler (ATOMIC_REQUESTS would reopen the
     crash window the start/execute split exists to close).
+
+    ``actor`` is the staff member who started the refund (the worker task
+    carries it); the reconcile sweep passes None - nobody is behind a
+    machine-driven retry.
 
     Safe to re-run: a row no longer REFUND_PENDING is a no-op, and a row
     whose ``refund_attempted_at`` marker is already set is never re-sent to
@@ -512,8 +531,8 @@ def payment_refund_execute(
     Error contract: ``PaymentGatewayUnavailableError`` /
     ``PaymentRefundFailedError`` mean the interlock was reverted (row back
     to PAID, wallet compensated - safe to retry). A raw ``OutboundError`` /
-    ``GatewayResponseError`` escaping means the provider MAY have processed
-    the refund: the row stays REFUND_PENDING with the marker set, the task
+    ``GatewayError`` escaping means the provider MAY have processed the
+    refund: the row stays REFUND_PENDING with the marker set, the task
     fails loudly, and a human reconciles against the provider dashboard.
     """
     with transaction.atomic():
@@ -521,8 +540,6 @@ def payment_refund_execute(
         if locked.status != PaymentStatus.REFUND_PENDING:
             return locked  # replayed task after finalization - nothing to do
         gateway = gateway_by_name(locked.gateway)
-        if gateway is None:
-            raise PaymentNotFoundError(str(_("Payment gateway is not configured.")))
         if locked.refund_attempted_at is not None:
             logger.error(
                 "payment_refund_needs_reconciliation",
@@ -537,11 +554,11 @@ def payment_refund_execute(
         locked.save(update_fields=["refund_attempted_at", "updated_at"])
     try:
         result = gateway.refund(
-            transaction_id=locked.gateway_transaction_id or locked.gateway_charge_id,
+            transaction_id=locked.gateway_transaction_id,
             amount=locked.amount,
             currency=locked.currency,
         )
-    except (OutboundError, GatewayResponseError) as exc:
+    except (OutboundError, GatewayError) as exc:
         if _refund_outcome_unknown(exc):
             logger.exception(
                 "payment_refund_needs_reconciliation",

@@ -71,30 +71,29 @@ class NotificationKindConfig(BaseModel):
         from apps.notifications.catalog import catalog_entry
 
         try:
-            entry = catalog_entry(NotificationKind(self.kind))
-        except ValueError, LookupError:
+            kind = NotificationKind(self.kind)
+        except ValueError:
             return  # invalid choice - clean_fields already reports it
+        # A kind with no catalog entry is a code bug (test_catalog pairs them):
+        # let the LookupError escape rather than validate against nothing.
+        entry = catalog_entry(kind)
         errors: dict[str, str] = {}
         supported = {str(channel) for channel in entry.supported_channels}
-        channel_list = self.channels if isinstance(self.channels, list) else None
-        if channel_list is None:
-            errors["channels"] = str(_("Must be a list of channel names."))
-        else:
-            unsupported = sorted(set(map(str, channel_list)) - supported)
-            if unsupported:
-                errors["channels"] = str(
-                    _(
-                        "%(kind)s does not support: %(channels)s. "
-                        "Supported channels: %(supported)s."
-                    )
-                    % {
-                        "kind": self.kind,
-                        "channels": ", ".join(unsupported),
-                        "supported": ", ".join(sorted(supported)),
-                    }
+        unsupported = sorted(set(map(str, self.channels)) - supported)
+        if unsupported:
+            errors["channels"] = str(
+                _(
+                    "%(kind)s does not support: %(channels)s. "
+                    "Supported channels: %(supported)s."
                 )
+                % {
+                    "kind": self.kind,
+                    "channels": ", ".join(unsupported),
+                    "supported": ", ".join(sorted(supported)),
+                }
+            )
         for field in ("title_ar", "title_en", "body_ar", "body_en"):
-            value = getattr(self, field, None) or ""
+            value = getattr(self, field)
             if not value:
                 continue  # blank enforcement lives on the field (translation.py)
             unknown = sorted(_placeholders(value) - entry.context_keys)

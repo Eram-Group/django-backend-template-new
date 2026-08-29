@@ -16,5 +16,5 @@ def send_welcome_email(user_id: str) -> None:
             subject=_("Welcome!"),
             recipient_list=[user.email],
             template_name="emails/welcome.html",
-            context={"name": user.name or user.email},
+            context={"name": user.name},
         )

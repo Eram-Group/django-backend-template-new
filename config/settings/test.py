@@ -1,7 +1,6 @@
 """Test settings: fast, isolated, everything in memory.
 
 Also the settings django-stubs boots for mypy (pyproject django_settings_module).
-Run with --no-migrations (pytest-django) when migration history slows suites.
 """
 
 from config.settings.base import *
@@ -15,17 +14,15 @@ PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 # so the DatabaseCache default would fail on first hit.
 MAILERS = {"default": {"BACKEND": "django.core.mail.backends.locmem.EmailBackend"}}
 
-# In-memory SMS/push/WhatsApp outboxes (the mail.outbox analogue) - tests
+# SMS/push/WhatsApp transports are swapped for in-memory outboxes by the
+# ``outboxes`` autouse fixture in apps/notifications/tests/conftest.py - tests
 # never touch provider HTTP even when real creds sit in a developer's .env.
-SMS_BACKEND = "apps.notifications.clients.sms.backends.LocmemSmsBackend"
-PUSH_BACKEND = "apps.notifications.clients.push.backends.LocmemPushBackend"
-WHATSAPP_BACKEND = "apps.notifications.clients.whatsapp.backends.LocmemWhatsAppBackend"
 
-# Every currency resolves to FakeGateway, so suites never hit Tap/Paymob even
-# with test keys in .env.
+# Every currency resolves to the test FakeGateway, so suites never hit
+# Tap/Paymob even with test keys in .env.
 PAYMENT_GATEWAYS = {
-    "SAR": "apps.payments.gateways.fake.FakeGateway",
-    "EGP": "apps.payments.gateways.fake.FakeGateway",
+    "SAR": "apps.payments.tests.fake_gateway.FakeGateway",
+    "EGP": "apps.payments.tests.fake_gateway.FakeGateway",
 }
 CACHES = {
     "default": {

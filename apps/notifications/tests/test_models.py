@@ -3,7 +3,9 @@
 import pytest
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
+from django.utils.translation import gettext
 
+from apps.notifications.catalog import CATALOG
 from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import NotificationDelivery
@@ -75,8 +77,15 @@ def test_kind_config_rejects_unsupported_channel() -> None:
     config = NotificationKindConfig.objects.get(kind=NotificationKind.WELCOME)
     config.channels = [Channel.WHATSAPP]
 
-    with pytest.raises(ValidationError, match="does not support"):
+    with pytest.raises(ValidationError) as excinfo:
         config.full_clean()
+    assert excinfo.value.message_dict["channels"] == [
+        gettext(
+            "%(kind)s does not support: %(channels)s. "
+            "Supported channels: %(supported)s."
+        )
+        % {"kind": "welcome", "channels": "whatsapp", "supported": "push"}
+    ]
 
 
 def test_kind_config_rejects_placeholders_outside_the_contract() -> None:
@@ -94,6 +103,27 @@ def test_kind_config_requires_copy_in_both_languages() -> None:
     config.title_ar = ""
 
     with pytest.raises(ValidationError, match="title_ar"):
+        config.full_clean()
+
+
+def test_kind_config_with_an_invalid_kind_reports_the_choice_error() -> None:
+    """clean() steps aside for a bad choice - clean_fields owns that error."""
+    config = NotificationKindConfig(kind="not_a_kind", title="t", body="b")
+
+    with pytest.raises(ValidationError) as excinfo:
+        config.full_clean()
+
+    assert set(excinfo.value.message_dict) >= {"kind"}
+
+
+def test_kind_config_without_a_catalog_entry_is_a_loud_code_bug(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A valid kind with no catalog entry is not a form error to swallow."""
+    monkeypatch.delitem(CATALOG, NotificationKind.WELCOME)
+    config = NotificationKindConfig.objects.get(kind=NotificationKind.WELCOME)
+
+    with pytest.raises(LookupError, match="catalog"):
         config.full_clean()
 
 

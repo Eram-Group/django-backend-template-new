@@ -1,10 +1,15 @@
-"""Delivery-status ingestion (webhooks) + the transactional sweep.
+"""Delivery-status ingestion (webhooks) + the ONE recovery path.
 
 ``delivery_update_status`` is ONE conditional UPDATE with a monotonic
 guard: statuses only move forward (PENDING < PROCESSING < SENT < DELIVERED
 < READ; FAILED only from at-most-SENT), so duplicate or out-of-order
 webhooks are rowcount-0 no-ops. An unknown provider message id logs and
 acks - telemetry, not money; a Meta retry storm must not build.
+
+``deliveries_resume`` recovers incomplete deliveries - for one broadcast
+(the admin "Resume incomplete" action) or for the transactional orphans
+(the scheduled ``sweep_deliveries`` command). There is no auto-retry by
+design; this is the explicit, idempotent re-enqueue.
 """
 
 from datetime import timedelta
@@ -14,27 +19,48 @@ from typing import Any
 import structlog
 from django.db import transaction
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
+from apps.notifications.constants import BroadcastStatus
 from apps.notifications.constants import DeliveryStatus
+from apps.notifications.exceptions import BroadcastStateError
+from apps.notifications.models import Broadcast
 from apps.notifications.models import NotificationDelivery
 from apps.notifications.tasks import deliver_notifications
+from apps.notifications.tasks import dispatch_broadcast
+from apps.notifications.tasks.broadcast import BULK_QUEUE
+from apps.notifications.tasks.broadcast import DELIVERY_BATCH
 from apps.notifications.tasks.delivery import chunk_ids
+from apps.notifications.tasks.delivery import maybe_complete_broadcast
 
 logger = structlog.get_logger(__name__)
 
-_FORWARD_RANK: dict[DeliveryStatus, int] = {
-    DeliveryStatus.PENDING: 0,
-    DeliveryStatus.PROCESSING: 1,
-    DeliveryStatus.SENT: 2,
-    DeliveryStatus.DELIVERED: 3,
-    DeliveryStatus.READ: 4,
+#: Provider-reported target -> the statuses it may move a row FROM. Only what
+#: a provider can report is listed: PENDING/PROCESSING/SKIPPED are ours, and
+#: passing one here is a programming error (KeyError).
+_ALLOWED_FROM: dict[DeliveryStatus, tuple[DeliveryStatus, ...]] = {
+    DeliveryStatus.SENT: (DeliveryStatus.PENDING, DeliveryStatus.PROCESSING),
+    DeliveryStatus.DELIVERED: (
+        DeliveryStatus.PENDING,
+        DeliveryStatus.PROCESSING,
+        DeliveryStatus.SENT,
+    ),
+    DeliveryStatus.READ: (
+        DeliveryStatus.PENDING,
+        DeliveryStatus.PROCESSING,
+        DeliveryStatus.SENT,
+        DeliveryStatus.DELIVERED,
+    ),
+    DeliveryStatus.FAILED: (
+        DeliveryStatus.PENDING,
+        DeliveryStatus.PROCESSING,
+        DeliveryStatus.SENT,
+    ),
 }
-_FAILED_ALLOWED_FROM = (
-    DeliveryStatus.PENDING,
-    DeliveryStatus.PROCESSING,
-    DeliveryStatus.SENT,
-)
-SWEEP_BATCH = 200
+
+#: A PROCESSING row untouched this long was claimed by a worker that died
+#: mid-batch (a batch is one FCM/OurSMS call - seconds, not minutes).
+STALE_PROCESSING_MINUTES = 30
 
 
 def delivery_update_status(
@@ -45,17 +71,7 @@ def delivery_update_status(
     detail: str = "",
 ) -> bool:
     """Apply one provider status report; returns False when ignored."""
-    if status == DeliveryStatus.FAILED:
-        allowed_from: tuple[DeliveryStatus, ...] = _FAILED_ALLOWED_FROM
-    elif status in _FORWARD_RANK:
-        target_rank = _FORWARD_RANK[status]
-        allowed_from = tuple(
-            source for source, rank in _FORWARD_RANK.items() if rank < target_rank
-        )
-    else:  # SKIPPED never arrives from a provider
-        allowed_from = ()
-    if not allowed_from:
-        return False
+    allowed_from = _ALLOWED_FROM[status]
     now = timezone.now()
     updates: dict[str, Any] = {"status": status, "updated_at": now}
     if detail:
@@ -77,37 +93,53 @@ def delivery_update_status(
     return bool(updated)
 
 
-def deliveries_sweep_transactional(
-    *, include_failed: bool = False, stale_minutes: int = 30
+def deliveries_resume(
+    *, broadcast: Broadcast | None, include_failed: bool
 ) -> dict[str, int]:
-    """Recover orphaned single-send deliveries (no broadcast to resume).
+    """Re-enqueue exactly the incomplete remainder, idempotently.
 
-    Stale PROCESSING rows (worker died mid-batch) reset to PENDING; FAILED
-    rows optionally reset; every PENDING row older than the cutoff is
-    re-enqueued in batches. Idempotent - the executor's claim makes an
-    over-enqueued row a no-op.
+    ``broadcast=None`` scopes to transactional sends (rows with no
+    broadcast); a broadcast scopes to its rows, re-runs a dead dispatcher
+    (the cursor committed with its rows, so a fresh run continues where it
+    stopped) and probes completion. Stale PROCESSING rows reset to PENDING;
+    FAILED rows reset when asked; every PENDING row is re-enqueued in
+    executor-sized batches. Over-enqueueing is harmless - the executor's
+    claim makes an already-taken row a no-op.
     """
     now = timezone.now()
-    cutoff = now - timedelta(minutes=stale_minutes)
-    orphans = NotificationDelivery.objects.filter(broadcast__isnull=True)
-    stale_reset = orphans.filter(
+    cutoff = now - timedelta(minutes=STALE_PROCESSING_MINUTES)
+    summary: dict[str, int] = {}
+    if broadcast is None:
+        rows = NotificationDelivery.objects.filter(broadcast__isnull=True)
+        enqueue = deliver_notifications.enqueue
+    else:
+        if broadcast.status == BroadcastStatus.DRAFT:
+            raise BroadcastStateError(str(_("Broadcast has not been dispatched.")))
+        summary["dispatcher_reenqueued"] = 0
+        if broadcast.status == BroadcastStatus.DISPATCHING:
+            transaction.on_commit(
+                partial(dispatch_broadcast.enqueue, str(broadcast.pk))
+            )
+            summary["dispatcher_reenqueued"] = 1
+        rows = NotificationDelivery.objects.filter(broadcast=broadcast)
+        enqueue = deliver_notifications.using(queue_name=BULK_QUEUE).enqueue
+    summary["stale_reset"] = rows.filter(
         status=DeliveryStatus.PROCESSING, updated_at__lt=cutoff
     ).update(status=DeliveryStatus.PENDING, updated_at=now)
-    failed_reset = 0
+    summary["failed_reset"] = 0
     if include_failed:
-        failed_reset = orphans.filter(status=DeliveryStatus.FAILED).update(
+        summary["failed_reset"] = rows.filter(status=DeliveryStatus.FAILED).update(
             status=DeliveryStatus.PENDING, detail="", updated_at=now
         )
-    pending_ids = [
+    pending = [
         str(pk)
-        for pk in orphans.filter(
-            status=DeliveryStatus.PENDING, updated_at__lte=now
-        ).values_list("pk", flat=True)
+        for pk in rows.filter(status=DeliveryStatus.PENDING)
+        .order_by("channel", "pk")
+        .values_list("pk", flat=True)
     ]
-    for batch in chunk_ids(pending_ids, size=SWEEP_BATCH):
-        transaction.on_commit(partial(deliver_notifications.enqueue, batch))
-    return {
-        "stale_reset": stale_reset,
-        "failed_reset": failed_reset,
-        "re_enqueued": len(pending_ids),
-    }
+    for batch in chunk_ids(pending, size=DELIVERY_BATCH):
+        transaction.on_commit(partial(enqueue, batch))
+    summary["re_enqueued"] = len(pending)
+    if broadcast is not None and not pending:
+        maybe_complete_broadcast(broadcast_id=broadcast.pk)
+    return summary

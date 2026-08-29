@@ -1,4 +1,5 @@
-"""FCM backend: chunking, per-token results, dead-token flags, config guard."""
+"""FCM backend: chunking, per-token results, dead-token flags, config guard;
+the ``_backend`` seam the outboxes fixture swaps."""
 
 from collections.abc import Sequence
 from types import SimpleNamespace
@@ -7,13 +8,13 @@ from typing import Any
 import pytest
 from firebase_admin import messaging
 
-from apps.notifications.clients.push import backends as push_backends
 from apps.notifications.clients.push import fcm as fcm_module
 from apps.notifications.clients.push import push_send_many
 from apps.notifications.clients.push.base import PushMessage
 from apps.notifications.clients.push.base import PushNotConfiguredError
 from apps.notifications.clients.push.base import PushResult
 from apps.notifications.clients.push.fcm import FcmPushBackend
+from apps.notifications.tests.locmem import push_outbox
 
 
 @pytest.fixture
@@ -85,7 +86,8 @@ def test_fcm_without_creds_is_loud() -> None:
         FcmPushBackend().send_many(messages=_messages(["x"]))
 
 
-def test_push_send_many_uses_locmem_backend_in_tests() -> None:
+def test_push_send_many_goes_through_the_swapped_seam() -> None:
+    """The outboxes fixture points ``_backend`` at the locmem transport."""
     messages = [
         PushMessage(token="a", title="t", body="b", data={"x": "1"}),
         PushMessage(token="b", title="t", body="b"),
@@ -97,7 +99,7 @@ def test_push_send_many_uses_locmem_backend_in_tests() -> None:
         PushResult(token="a", ok=True),
         PushResult(token="b", ok=True),
     )
-    assert push_backends.outbox == messages
+    assert push_outbox == messages
 
 
 class InvalidTokenPushBackend:

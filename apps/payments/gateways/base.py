@@ -1,36 +1,46 @@
 """Gateway contract + DTOs + money helpers (leaf - importable everywhere).
 
 Every gateway plants ``CheckoutRequest.reference`` (= Payment.idempotency_key)
-at the provider and echoes it back in ``WebhookEvent.reference`` - that is how
-a webhook finds its Payment row. The one exception is ``CARD_TOKEN`` events
-(Paymob sends the card token as a standalone callback carrying no reference) -
-those never touch a Payment row and link to the user by billing email instead.
+at the provider and echoes it back in ``PaymentEvent.reference`` - that is how
+a gateway-reported outcome finds its Payment row. One outcome shape serves
+every channel (webhook, synchronous charge response, status inquiry) so the
+service applies them all through the same idempotent transition, and every
+outcome carries the provider's amount/currency so the service can prove the
+event is about THIS payment at THIS price before any money moves.
+
 Signature verification lives in each gateway's ``parse_webhook`` and REALLY
 verifies (HMAC over the provider's documented fields, constant-time compare) -
-never an echoed shared secret.
+never an echoed shared secret. Card-token callbacks (Paymob TOKEN) carry no
+payment reference at all, so they are their own event type rather than a
+payment event with blank fields.
+
+Gateway constructors read their settings once and refuse to build when a
+required key is missing (``GatewayConfigurationError``) - the registry in
+``gateways/__init__`` turns that into the API's 503.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
-from enum import StrEnum
 from typing import Any
 from typing import Protocol
+from typing import runtime_checkable
 
 
-class GatewayResponseError(Exception):
+class GatewayError(Exception):
+    """Base for gateway-side failures the service maps to a 503."""
+
+
+class GatewayResponseError(GatewayError):
     """The gateway answered 2xx but the payload has no usable shape."""
+
+
+class GatewayConfigurationError(GatewayError):
+    """A required gateway setting is missing - raised by the constructor."""
 
 
 class WebhookVerificationError(Exception):
     """Signature missing or wrong - the request is not from the gateway."""
-
-
-class WebhookEventKind(StrEnum):
-    PAYMENT = "payment"
-    #: Standalone card-token callback (Paymob TOKEN) - no payment state
-    #: change; ``reference``/``transaction_id`` are empty on these events.
-    CARD_TOKEN = "card_token"  # noqa: S105 - event kind, not a secret
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,26 +48,29 @@ class SavedCardRef:
     """What a gateway needs to charge or delete a stored card (input side)."""
 
     token: str  # Tap card_id ("card_...") / Paymob card token
-    customer_id: str  # Tap "cus_..."; "" for Paymob
+    customer_id: str  # Tap "cus_..."; "" for Paymob (it has no customer object)
     agreement_id: str  # Tap "payment_agreement_..."; "" for Paymob
 
 
 @dataclass(frozen=True, slots=True)
 class SavedCardData:
-    """Card payload parsed out of a charge response/webhook (output side)."""
+    """Card payload parsed out of a charge response/webhook (output side).
+
+    The provider's card fingerprint is NOT here on purpose: only Tap has one
+    and it is read from its Card API (``CardVaultGateway``), never trusted
+    from an undocumented field on the charge payload.
+    """
 
     token: str
-    customer_id: str
-    agreement_id: str
+    customer_id: str  # "" for Paymob
+    agreement_id: str  # "" for Paymob, and for Tap accounts without agreements
     brand: str
     last4: str
-    exp_month: int | None  # Paymob provides neither expiry field
+    #: None when the provider did not send an expiry (Paymob token callbacks
+    #: before Aug-2026 carry none; Tap's charge card object may omit it).
+    exp_month: int | None
     exp_year: int | None
-    email: str  # billing email echoed by the gateway ("" when absent)
-    #: The provider's hash of the card number (Tap ``fingerprint``): the same
-    #: physical card has the same value whatever token it was vaulted under.
-    #: "" when the payload does not carry it - the service may fetch it.
-    fingerprint: str = ""
+    email: str  # billing email echoed by the gateway; "" when the shape has none
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,60 +80,61 @@ class CheckoutRequest:
     currency: str
     description: str
     customer_email: str
-    customer_name: str
-    customer_phone: str  # E164 or ""
+    customer_name: str  # full name - the service refuses a checkout without one
+    customer_phone: str  # E164 - the service refuses a checkout without one
     webhook_url: str
     redirect_url: str
     #: Pay WITH this stored card (CIT via create_checkout, MIT via
     #: charge_saved). None = a new card is entered at checkout, and every
     #: new-card checkout requests vaulting (saving is not client-optional).
-    saved_card: SavedCardRef | None = None
+    saved_card: SavedCardRef | None
     #: The gateway customer the user's other cards already live under (Tap
     #: "cus_..."); "" = let the gateway create one. Reusing it is what makes
     #: the same physical card come back with the same card id.
-    customer_id: str = ""
+    customer_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class PaymentEvent:
+    """One gateway-reported outcome for a Payment - webhook, synchronous
+    charge response or status inquiry alike."""
+
+    reference: str  # the planted idempotency key, echoed back
+    #: The settled transaction id. "" ONLY on a refund/void/capture child
+    #: action (Paymob), which must not replace the id our refund targets.
+    transaction_id: str
+    is_paid: bool
+    #: Informational (still in flight, or a refund/void/capture child): the
+    #: service records the callback and never transitions the row.
+    is_pending: bool
+    status: str  # gateway-native status string (audit/logging)
+    #: What the gateway says was charged, in minor units, and in what
+    #: currency - the service cross-checks both against the row before a
+    #: transition. On a child action they describe the child (a partial
+    #: refund's amount), which is why pending events skip that check.
+    amount_minor: int
+    currency: str
+    saved_card: SavedCardData | None  # the card vaulted by this charge, if any
+    raw: dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class CardTokenEvent:
+    """A standalone card-token callback (Paymob TOKEN) - no payment state
+    change; the card links to its user by billing email."""
+
+    saved_card: SavedCardData
+    raw: dict[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
 class CheckoutSession:
     charge_id: str
-    checkout_url: str  # "" = no redirect; the outcome was synchronous
+    checkout_url: str  # "" when there is nothing to redirect to
     raw: dict[str, Any]
-    is_paid: bool = False  # meaningful only when status != ""
-    #: Gateway-native FINAL status; "" = pending (redirect/webhook settles it).
-    status: str = ""
-    transaction_id: str = ""  # settled txn id for synchronous outcomes
-
-
-@dataclass(frozen=True, slots=True)
-class WebhookEvent:
-    reference: str  # the planted idempotency key, echoed back
-    transaction_id: str  # "" = do not touch Payment.gateway_transaction_id
-    is_paid: bool
-    status: str  # gateway-native status string (audit/logging)
-    raw: dict[str, Any]
-    kind: WebhookEventKind = WebhookEventKind.PAYMENT
-    saved_card: SavedCardData | None = None
-    #: The event is informational (still in flight, or a refund/void/capture
-    #: child transaction): record the callback, never transition the row.
-    is_pending: bool = False
-    #: What the gateway says was charged, in minor units - set when the
-    #: provider signs these fields so the service can cross-check the row.
-    amount_minor: int | None = None
-    currency: str = ""
-
-
-@dataclass(frozen=True, slots=True)
-class ChargeStatus:
-    transaction_id: str
-    is_paid: bool
-    status: str
-    raw: dict[str, Any]
-    #: Lets payment_verify persist a card when the webhook was lost.
-    saved_card: SavedCardData | None = None
-    is_pending: bool = False
-    amount_minor: int | None = None
-    currency: str = ""
+    #: A synchronous FINAL outcome (one-click captured/declined). None = the
+    #: redirect/webhook/reconcile sweep settles it later.
+    outcome: PaymentEvent | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -140,9 +154,12 @@ class PaymentGateway(Protocol):
         headers: Mapping[str, str],
         params: Mapping[str, str],
         body: bytes,
-    ) -> WebhookEvent: ...
+    ) -> PaymentEvent | CardTokenEvent: ...
 
-    def fetch_status(self, *, charge_id: str, reference: str) -> ChargeStatus: ...
+    def fetch_status(self, *, charge_id: str, reference: str) -> PaymentEvent | None:
+        """The provider's current outcome; None when it holds no transaction
+        for the reference yet (an unpaid Paymob order) - still pending."""
+        ...
 
     def refund(
         self, *, transaction_id: str, amount: Decimal, currency: str
@@ -150,22 +167,36 @@ class PaymentGateway(Protocol):
 
     def charge_saved(self, *, request: CheckoutRequest) -> CheckoutSession: ...
 
-    def delete_saved_card(self, *, saved_card: SavedCardRef) -> bool: ...
+
+@runtime_checkable
+class CardVaultGateway(Protocol):
+    """A gateway whose vault we can read and prune (Tap's Card API).
+
+    Paymob exposes neither call: its tokens dedupe on their own and cannot be
+    detached, so the service checks this capability instead of asking every
+    gateway and trusting a made-up answer.
+    """
 
     def saved_card_fingerprint(self, *, saved_card: SavedCardRef) -> str:
-        """The provider's fingerprint for a vaulted card; "" when unknown."""
+        """The provider's hash of the card number - the same physical card
+        keeps it across tokens and customers."""
+        ...
+
+    def delete_saved_card(self, *, saved_card: SavedCardRef) -> None:
+        """Detach the card at the provider; raises when it did not happen."""
         ...
 
 
-_MINOR_UNIT_EXPONENT = {"SAR": 2, "EGP": 2}
+#: Decimal places of every currency this scaffold ships (SAR, EGP). Adding a
+#: 3-decimal currency (KWD, BHD) turns this into a per-currency table.
+MINOR_UNITS = 2
 
 
-def to_minor_units(*, amount: Decimal, currency: str) -> int:
+def to_minor_units(*, amount: Decimal) -> int:
     """Decimal major units -> integer minor units (never float math)."""
-    exponent = _MINOR_UNIT_EXPONENT[currency]
-    quantum = Decimal(1).scaleb(-exponent)  # 0.01 for 2-decimal currencies
+    quantum = Decimal(1).scaleb(-MINOR_UNITS)  # 0.01
     quantized = amount.quantize(quantum)
     if quantized != amount:
-        msg = f"{amount} has more than {exponent} decimal places for {currency}"
+        msg = f"{amount} has more than {MINOR_UNITS} decimal places"
         raise ValueError(msg)
-    return int(quantized.scaleb(exponent))
+    return int(quantized.scaleb(MINOR_UNITS))

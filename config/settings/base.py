@@ -4,8 +4,6 @@ Every environment-dependent value comes from the typed ``config.env.env``
 singleton - never from ``os.environ`` directly.
 """
 
-from collections.abc import Mapping
-from collections.abc import Sequence
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -28,7 +26,7 @@ BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 ENVIRONMENT = env.ENVIRONMENT
 SECRET_KEY = env.SECRET_KEY.get_secret_value()
 SECRET_KEY_FALLBACKS = [key.get_secret_value() for key in env.SECRET_KEY_FALLBACKS]
-DEBUG = False  # local.py turns it on
+DEBUG = False
 ALLOWED_HOSTS = env.ALLOWED_HOSTS
 ROOT_URLCONF = "config.urls"
 WSGI_APPLICATION = "config.wsgi.application"
@@ -135,7 +133,7 @@ RATELIMIT_USE_CACHE = "ratelimit"
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 # Two queues: "default" for transactional work (emails, refunds, single
 # notification sends), "bulk" for broadcast dispatch + delivery batches so a
-# campaign never starves an OTP. Workers: `just worker` / `just worker-bulk`.
+# campaign never starves an OTP. One worker drains both (`just worker`).
 TASKS = {
     "default": {
         "BACKEND": "django_tasks_db.DatabaseBackend",
@@ -177,6 +175,7 @@ ACCOUNT_ADAPTER = "apps.users.adapters.AccountAdapter"
 ACCOUNT_USER_MODEL_USERNAME_FIELD = None
 ACCOUNT_LOGIN_METHODS = {"email"}
 ACCOUNT_SIGNUP_FIELDS = ["email*"]  # no password anywhere in signup
+ACCOUNT_SIGNUP_FORM_CLASS = "apps.users.forms.SignupForm"  # + required name
 ACCOUNT_LOGIN_BY_CODE_ENABLED = True
 # Method-list semantics: these methods (and unknown ones) require the email
 # OTP; "code" is always exempt and social logins already prove identity.
@@ -185,7 +184,7 @@ ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED = True
 # Without contrib.sites allauth derives "[<request host>]" - brand the OTP
 # emails (the product's first touchpoint) deliberately instead.
-ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Backend] "
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Backend] "  # SITE_NAME is defined below
 
 # API-only: no server-rendered account pages; browser + app clients are the
 # HEADLESS_CLIENTS default. The auth OpenAPI spec serves at /_allauth/openapi.json.
@@ -211,11 +210,12 @@ USE_I18N = True
 USE_TZ = True
 LOCALE_PATHS = [BASE_DIR / "locale"]
 MODELTRANSLATION_DEFAULT_LANGUAGE = "ar"
-MODELTRANSLATION_FALLBACK_LANGUAGES = ("ar", "en")
+# No fallback chain: content models declare required_languages, so a missing
+# translation is a validation error at write time, never a silent substitute.
+MODELTRANSLATION_FALLBACK_LANGUAGES = ()
 
 # --- Admin (unfold) ----------------------------------------------------------
-# SECURE_ADMIN_LOGIN env flag (off by default) swaps the admin's password
-# login for allauth's email-code flow - wired in config/urls.py.
+SITE_NAME = "Backend"  # admin header, email branding, OTP subject prefix
 
 
 def environment_callback(request: Any) -> list[str]:
@@ -231,8 +231,8 @@ def environment_callback(request: Any) -> list[str]:
 
 
 UNFOLD = {
-    "SITE_TITLE": "Backend Admin",
-    "SITE_HEADER": "Backend",
+    "SITE_TITLE": f"{SITE_NAME} Admin",
+    "SITE_HEADER": SITE_NAME,
     "SITE_SYMBOL": "hub",  # material symbol shown next to the site header
     # ar/en switcher in the header (POSTs to the i18n/ urlconf in urls.py).
     "SHOW_LANGUAGES": True,
@@ -464,8 +464,8 @@ MEDIA_ROOT = BASE_DIR / "media"
 # chain - Django raises ImproperlyConfigured on any leftover, so a new mailer
 # option goes in OPTIONS, never back into an EMAIL_* global. DEFAULT_FROM_EMAIL
 # is not part of that deprecation and stays put.
-# Default = SMTP at whatever env points to (Mailpit locally); test.py swaps in
-# locmem, production.py swaps in SES once deployed.
+# SMTP at whatever env points to (Mailpit locally); production.py = SES,
+# test.py = in-memory outbox.
 DEFAULT_FROM_EMAIL = env.DEFAULT_FROM_EMAIL
 MAILERS = {
     "default": {
@@ -478,19 +478,15 @@ MAILERS = {
     }
 }
 
-# --- Outbound clients: SMS + push + WhatsApp (the EMAIL_BACKEND pattern) ------
-# Console backends log locally; production.py swaps in the real transports
-# (RoutingSmsBackend / FcmPushBackend / MetaWhatsAppBackend) when deployed;
-# test.py uses locmem.
-SMS_BACKEND = "apps.notifications.clients.sms.backends.ConsoleSmsBackend"
-PUSH_BACKEND = "apps.notifications.clients.push.backends.ConsolePushBackend"
-WHATSAPP_BACKEND = "apps.notifications.clients.whatsapp.backends.ConsoleWhatsAppBackend"
+# --- Outbound clients: SMS + push + WhatsApp provider credentials --------------
+# The transports are fixed (RoutingSmsBackend / FcmPushBackend /
+# MetaWhatsAppBackend); an unset credential means the provider is absent.
 OURSMS_API_KEY = env.OURSMS_API_KEY
 OURSMS_SENDER = env.OURSMS_SENDER
 SMSMISR_USERNAME = env.SMSMISR_USERNAME
 SMSMISR_PASSWORD = env.SMSMISR_PASSWORD
 SMSMISR_SENDER = env.SMSMISR_SENDER
-SMSMISR_LIVE = False  # "1" live vs "2" test API mode; production.py decides
+SMSMISR_LIVE = env.ENVIRONMENT == "production"  # "1" live vs "2" test API mode
 FIREBASE_CREDENTIALS_B64 = env.FIREBASE_CREDENTIALS_B64
 WHATSAPP_ACCESS_TOKEN = env.WHATSAPP_ACCESS_TOKEN
 WHATSAPP_PHONE_NUMBER_ID = env.WHATSAPP_PHONE_NUMBER_ID
@@ -499,7 +495,7 @@ WHATSAPP_WEBHOOK_VERIFY_TOKEN = env.WHATSAPP_WEBHOOK_VERIFY_TOKEN
 
 # --- Payments: currency -> gateway class. One mapping for every environment;
 # the .env keys decide test vs live mode (locally: provider TEST keys + a
-# tunnel for webhooks). test.py pins FakeGateway so suites never do HTTP. --
+# tunnel for webhooks). test.py pins the test FakeGateway. ------------------
 PAYMENT_GATEWAYS = {
     "SAR": "apps.payments.gateways.tap.TapGateway",
     "EGP": "apps.payments.gateways.paymob.PaymobGateway",
@@ -525,18 +521,6 @@ SECURE_CSP: dict[str, list[str]] = {
     "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
     "script-src": [CSP.SELF, CSP.NONCE],
 }
-
-
-def csp_with_origin(
-    csp: Mapping[str, Sequence[str]], origin: str
-) -> dict[str, list[str]]:
-    """Return ``csp`` with ``origin`` allowed for every fetch directive.
-
-    Deployed environments serve static + media from CloudFront (a different
-    origin), which a 'self'-only policy blocks - the admin renders unstyled.
-    production.py applies this once AWS_S3_CUSTOM_DOMAIN is known.
-    """
-    return {directive: [*sources, origin] for directive, sources in csp.items()}
 
 
 # --- Cross-origin (browser SPA clients) ----------------------------------------
