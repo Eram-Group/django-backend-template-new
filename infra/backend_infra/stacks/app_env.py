@@ -32,7 +32,6 @@ from backend_infra.constructs.worker import worker_service
 from backend_infra.stacks.shared import SharedStack
 
 WORKER_COMMAND = ["python", "manage.py", "db_worker", "--queue-name", "default,bulk"]
-BULK_WORKER_COMMAND = ["python", "manage.py", "db_worker", "--queue-name", "bulk"]
 
 
 class AppEnvStack(Stack):
@@ -191,7 +190,6 @@ class AppEnvStack(Stack):
             security_group=app_sg,
             desired_count=1,
             spot=cfg.worker_spot,
-            scale_to_zero_overnight=cfg.scale_to_zero_schedule,
         )
         # First deploy of an environment: migrate + cache table + static files
         # BEFORE any service task answers /readyz or drains the queue.
@@ -205,31 +203,6 @@ class AppEnvStack(Stack):
             image_tag=image_tag,
             execute_before=[self.web, self.worker],
         )
-        if cfg.worker_bulk_desired_count:
-            bulk_task = fargate_task(
-                self,
-                "BulkWorkerTask",
-                family=naming.bulk_worker_family(app, cfg),
-                cpu=cfg.worker_cpu,
-                memory=cfg.worker_memory,
-                log_group=worker_logs,
-                stream_prefix="worker-bulk",
-                command=BULK_WORKER_COMMAND,
-                web_port=None,
-                stop_timeout=Duration.seconds(120),
-                **common,  # type: ignore[arg-type]
-            )
-            worker_service(
-                self,
-                "BulkWorker",
-                service_name=naming.bulk_worker_family(app, cfg),
-                cluster=shared.cluster,
-                task_definition=bulk_task,
-                security_group=app_sg,
-                desired_count=cfg.worker_bulk_desired_count,
-                spot=cfg.worker_spot,
-                scale_to_zero_overnight=False,
-            )
         scheduled_jobs(
             self,
             group_name=f"{app.name}-{cfg.name}",

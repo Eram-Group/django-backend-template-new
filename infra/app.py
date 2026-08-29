@@ -7,11 +7,9 @@ Context (``-c key=value``):
   image_tag       ECR tag baked into the task definitions (required to deploy;
                   ``just infra-deploy`` resolves the live one automatically)
   sentry_release  value of SENTRY_RELEASE (defaults to image_tag)
-  nag=true        run cdk-nag AwsSolutions checks
 """
 
 from aws_cdk import App
-from aws_cdk import Aspects
 from aws_cdk import Environment
 from aws_cdk import Tags
 from backend_infra.config import APP
@@ -52,10 +50,5 @@ for name, cfg in ENVIRONMENTS.items():
 
 Tags.of(app).add("app", APP.name)
 Tags.of(app).add("managed-by", "cdk")
-
-if app.node.try_get_context("nag"):
-    from cdk_nag import AwsSolutionsChecks
-
-    Aspects.of(app).add(AwsSolutionsChecks(verbose=True))
 
 app.synth()

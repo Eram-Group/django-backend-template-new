@@ -152,7 +152,7 @@ infra-lint:
 infra-diff env:
     cd infra && npx cdk diff App-{{ env }} $(./scripts/live_context.sh {{ app_name }} {{ env }})
 
-# Deploy the app-level stack (ECR, cluster, roles, dev-DB bootstrap task). Once per app.
+# Deploy the app-level stack (ECR, cluster, roles). Once per app.
 infra-deploy-shared:
     cd infra && npx cdk deploy Shared --require-approval broadening
 
@@ -164,10 +164,6 @@ infra-deploy env *args:
 # JSON skeleton of the <env>/<app> Secrets Manager secret (every key present).
 infra-secret-skeleton env="dev":
     cd infra && uv run python scripts/secret_skeleton.py {{ env }}
-
-# Create <app>_<env> on the shared dev RDS + write DATABASE_URL into the env secret (in-VPC task).
-infra-dev-db env="dev":
-    ./infra/scripts/dev_db.sh {{ app_name }} {{ env }}
 
 # One-off task on the worker family, e.g. `just infra-run-task dev python manage.py createsu`.
 infra-run-task env +cmd:

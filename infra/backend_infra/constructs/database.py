@@ -1,9 +1,9 @@
 """RDS for PostgreSQL 18 - one dedicated instance per production environment.
 
 Dev/staging databases live on the account's shared instance, which is not
-managed here (``AppConfig.dev_db_host``). ``DedicatedDatabase`` composes the
-``DATABASE_URL`` secret from the generated master password so no human ever
-copies one.
+managed here (created once by hand - docs/DEPLOYMENT.md). ``DedicatedDatabase``
+composes the ``DATABASE_URL`` secret from the generated master password so no
+human ever copies one.
 """
 
 from aws_cdk import Duration

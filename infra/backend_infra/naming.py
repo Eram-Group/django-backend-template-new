@@ -16,10 +16,6 @@ def worker_family(app: AppConfig, env: EnvConfig) -> str:
     return f"{app.name}-{env.name}-worker"
 
 
-def bulk_worker_family(app: AppConfig, env: EnvConfig) -> str:
-    return f"{app.name}-{env.name}-worker-bulk"
-
-
 def app_secret_name(app: AppConfig, env: EnvConfig) -> str:
     return f"{env.name}/{app.name}"
 

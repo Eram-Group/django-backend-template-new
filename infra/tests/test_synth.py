@@ -51,9 +51,7 @@ def test_shared_owns_cluster_repo_and_deploy_role(
     t.has_resource_properties(
         "AWS::IAM::Role", {"RoleName": f"{APP.name}-github-deploy"}
     )
-    t.has_resource_properties(
-        "AWS::ECS::TaskDefinition", {"Family": f"{APP.name}-dev-db-bootstrap"}
-    )
+    t.resource_count_is("AWS::ECS::TaskDefinition", 0)
 
 
 def test_account_level_resources_are_referenced_not_created(
@@ -64,7 +62,7 @@ def test_account_level_resources_are_referenced_not_created(
         assert not t.find_resources("Custom::AWSCDKOpenIdConnectProvider")
         assert not t.find_resources("AWS::IAM::OIDCProvider")
     templates["Shared"].resource_count_is("AWS::RDS::DBInstance", 0)
-    templates["Shared"].resource_count_is("AWS::EC2::SecurityGroup", 1)  # bootstrap
+    templates["Shared"].resource_count_is("AWS::EC2::SecurityGroup", 0)
 
 
 @pytest.mark.parametrize("env_name", list(ENVIRONMENTS))

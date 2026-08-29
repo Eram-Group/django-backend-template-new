@@ -13,13 +13,10 @@ from aws_cdk import Stack
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_ecs as ecs
-from aws_cdk import aws_logs as logs
-from aws_cdk import aws_secretsmanager as secretsmanager
 from constructs import Construct
 
 from backend_infra.config import AppConfig
 from backend_infra.constructs import roles
-from backend_infra.constructs.dev_db_bootstrap import DevDbBootstrapTask
 from backend_infra.constructs.network import default_vpc
 from backend_infra.constructs.network import public_subnets
 
@@ -77,37 +74,10 @@ class SharedStack(Stack):
             ],
         )
 
-        # One-off task that creates this app's dev/staging databases on the
-        # shared instance (per app: its family carries the app name).
-        bootstrap_family = f"{app.name}-dev-db-bootstrap"
-        bootstrap = DevDbBootstrapTask(
-            self,
-            "DevDbBootstrap",
-            family=bootstrap_family,
-            host=app.dev_db_host,
-            master_secret=secretsmanager.Secret.from_secret_name_v2(
-                self, "DevDbMasterSecret", app.dev_db_master_credentials
-            ),
-            vpc=self.vpc,
-            log_group=logs.LogGroup(
-                self,
-                "DevDbBootstrapLogs",
-                log_group_name=f"/aws/ecs/{bootstrap_family}",
-                retention=logs.RetentionDays.ONE_MONTH,
-                removal_policy=RemovalPolicy.DESTROY,
-            ),
-        )
-
         CfnOutput(self, "RepositoryUri", value=self.repository.repository_uri)
         CfnOutput(self, "ClusterName", value=self.cluster.cluster_name)
         CfnOutput(self, "GithubDeployRoleArn", value=self.deploy_role.role_arn)
         CfnOutput(self, "PublicSubnets", value=",".join(public_subnets(app)))
-        CfnOutput(self, "DevDbBootstrapFamily", value=bootstrap.task_definition.family)
-        CfnOutput(
-            self,
-            "DevDbBootstrapSecurityGroupId",
-            value=bootstrap.security_group.security_group_id,
-        )
 
 
 def vpc_of(stack: SharedStack) -> ec2.IVpc:

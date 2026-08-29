@@ -45,11 +45,10 @@ class AppConfig:
     # Account-level resources that exist ONCE per AWS account and are only
     # referenced here - never created - so every app copied from this
     # template shares them without fighting over ownership
-    # (docs/DEPLOYMENT.md "Account prerequisites").
+    # (docs/DEPLOYMENT.md "Account prerequisites"). The shared dev RDS
+    # instance is one too: apps reach it only through DATABASE_URL.
     github_oidc_provider_arn: str
     db_security_group_id: str  # allows 5432 from the VPC; on every RDS instance
-    dev_db_host: str  # shared dev/staging PostgreSQL 18 instance
-    dev_db_master_credentials: str  # Secrets Manager name holding its master password
 
 
 @dataclass(frozen=True)
@@ -65,8 +64,6 @@ class EnvConfig:
     custom_domain: str | None = None
     worker_cpu: int = 256
     worker_memory: int = 512
-    worker_bulk_desired_count: int = 0
-    scale_to_zero_schedule: bool = False  # dev-only: worker to 0 tasks overnight
     plain_env: dict[str, str] = field(default_factory=dict)
 
 
@@ -202,8 +199,6 @@ APP = AppConfig(
         "arn:aws:iam::975049989256:oidc-provider/token.actions.githubusercontent.com"
     ),
     db_security_group_id="sg-0ebcaa5f2e9f3d3fd",
-    dev_db_host="development-shared-pg18.czmo4ogc4d15.eu-central-1.rds.amazonaws.com",
-    dev_db_master_credentials="shared/development-shared-pg18/master",
 )
 
 

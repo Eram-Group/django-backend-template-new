@@ -105,9 +105,9 @@ replacement.
 
 The web tier cannot scale to zero on Fargate (the ALB needs ≥ 1 healthy
 target); its floor is one 0.25 vCPU task ≈ $10/mo. The worker is the only
-tier that can: `EnvConfig.scale_to_zero_schedule=True` scales the dev worker
-to 0 tasks 20:00–05:00 UTC, or replace the service with a scheduled
-`db_worker --batch` run if minutes of latency are acceptable. Lambda was
+tier that could: replace the service with a scheduled `db_worker --batch`
+run if minutes of latency are acceptable (not done - Spot already makes it
+≈ $2.5/mo). Lambda was
 rejected for the web tier: one request per sandbox means a database
 connection per concurrent request (a t4g.micro would collapse), plus cold
 starts and a second runtime to maintain.
@@ -122,7 +122,7 @@ them. For a new account create them once, then copy the values into
 |---|---|---|
 | GitHub OIDC provider | `github_oidc_provider_arn` | `aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com --client-id-list sts.amazonaws.com` |
 | DB security group (5432 from the VPC CIDR) | `db_security_group_id` | `aws ec2 create-security-group --group-name postgres-from-vpc --description "Postgres from the VPC" --vpc-id <vpc>` + `authorize-security-group-ingress --protocol tcp --port 5432 --cidr <vpc-cidr>` |
-| Shared dev RDS (PostgreSQL 18, db.t4g.small, gp3 20 GB, private, RDS-managed master password) | `dev_db_host`, `dev_db_master_credentials` | `aws rds create-db-instance --db-instance-identifier development-shared-pg18 --engine postgres --engine-version 18 --db-instance-class db.t4g.small --allocated-storage 20 --storage-type gp3 --storage-encrypted --master-username postgres --manage-master-user-password --no-publicly-accessible --vpc-security-group-ids <sg> --backup-retention-period 1 --deletion-protection` — the managed secret (`rds!db-…`, JSON with a `password` key) is the credentials name |
+| Shared dev RDS (PostgreSQL 18, db.t4g.small, gp3 20 GB, RDS-managed master password, reachable from the team's IPs so databases are created with `psql`) | — (apps only see their `DATABASE_URL`) | `aws rds create-db-instance --db-instance-identifier development-shared-pg18 --engine postgres --engine-version 18 --db-instance-class db.t4g.small --allocated-storage 20 --storage-type gp3 --storage-encrypted --master-username postgres --manage-master-user-password --publicly-accessible --vpc-security-group-ids <sg> --backup-retention-period 1 --deletion-protection`, then `aws ec2 authorize-security-group-ingress --group-id <sg> --protocol tcp --port 5432 --cidr <your-ip>/32` per team member. (Existing private instance: `aws rds modify-db-instance --db-instance-identifier development-shared-pg18 --publicly-accessible --apply-immediately`.) TLS is required (`sslmode=require`); the master password lives in Secrets Manager and is read in the console when needed — never printed by tooling. |
 
 Why not CDK: an account-global resource in a per-app stack has exactly one
 owner, and a template copied into ten repos cannot express that safely —
@@ -147,12 +147,15 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    then fill the values in the console (`SECRET_KEY`, `DATABASE_URL` for
    shared-DB envs, gateway keys…). Production gets its `DATABASE_URL` from
    CDK — leave that key out (`infra-secret-skeleton production` already does).
-6. Dev database on the shared instance: `just infra-dev-db dev` runs a
-   one-off task inside the VPC that creates the `<app>_dev` role + database
-   and writes `DATABASE_URL` into the `dev/<app>` secret — no database
-   password ever leaves AWS. It refuses to run until `SECRET_KEY` and
-   `DJANGO_SUPERUSER_PASSWORD` have been set in the secret by you.
-   Re-running rotates the database password.
+6. Dev database on the shared instance — once per app, with `psql` as the
+   master user (`psql "host=<endpoint> user=postgres dbname=postgres sslmode=require"`):
+   ```sql
+   CREATE ROLE <app>_dev LOGIN PASSWORD '<choose one>';
+   GRANT <app>_dev TO postgres;   -- RDS master is not a superuser: needed to hand over ownership
+   CREATE DATABASE <app>_dev OWNER <app>_dev;
+   ```
+   then set `DATABASE_URL=postgres://<app>_dev:<password>@<endpoint>:5432/<app>_dev`
+   in the `dev/<app>` secret.
 7. GitHub repo variables: `AWS_ECR_REPOSITORY=eram/<app>`,
    `AWS_OIDC_ROLE_ARN` (Shared output `GithubDeployRoleArn`), `AWS_REGION`.
    Push to `main` → the `build` job pushes `:<sha>` to ECR (the deploy job
