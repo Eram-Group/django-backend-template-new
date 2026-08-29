@@ -1,7 +1,9 @@
-"""CDK entry point: ``Shared`` once per app, ``Db-<env>`` + ``App-<env>`` per env.
+"""CDK entry point: ``<app>-Shared`` once per app, ``<app>-Db-<env>`` +
+``<app>-App-<env>`` per env (names in ``backend_infra.naming``).
 
-``cdk deploy App-<env>`` deploys its dependencies (``Shared``, ``Db-<env>``)
-first; ``Db-<env>`` exists only for environments with a dedicated database.
+``cdk deploy <app>-App-<env>`` deploys its dependencies (``<app>-Shared``,
+``<app>-Db-<env>``) first; ``<app>-Db-<env>`` exists only for environments
+with a dedicated database.
 
 Context (``-c key=value``):
   image_tag       ECR tag baked into the task definitions (required to deploy;
@@ -12,6 +14,7 @@ Context (``-c key=value``):
 from aws_cdk import App
 from aws_cdk import Environment
 from aws_cdk import Tags
+from backend_infra import naming
 from backend_infra.config import APP
 from backend_infra.config import ENVIRONMENTS
 from backend_infra.stacks.app_env import AppEnvStack
@@ -23,13 +26,15 @@ image_tag = str(app.node.try_get_context("image_tag") or "synth")
 sentry_release = str(app.node.try_get_context("sentry_release") or image_tag)
 aws_env = Environment(account=APP.account, region=APP.region)
 
-shared = SharedStack(app, "Shared", app=APP, env=aws_env, termination_protection=True)
+shared = SharedStack(
+    app, naming.shared_stack(APP), app=APP, env=aws_env, termination_protection=True
+)
 for name, cfg in ENVIRONMENTS.items():
     database = None
     if cfg.database == "dedicated":
         database = DatabaseStack(
             app,
-            f"Db-{name}",
+            naming.db_stack(APP, name),
             app=APP,
             env_config=cfg,
             env=aws_env,
@@ -37,7 +42,7 @@ for name, cfg in ENVIRONMENTS.items():
         ).database
     AppEnvStack(
         app,
-        f"App-{name}",
+        naming.app_stack(APP, name),
         app=APP,
         env_config=cfg,
         shared=shared,

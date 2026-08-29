@@ -1,6 +1,6 @@
 """Everything one environment needs: storage, roles, web, worker, jobs.
 
-Stateless by design - the dedicated production database lives in ``Db-<env>``
+Stateless by design - the dedicated production database lives in ``<app>-Db-<env>``
 (``stacks/database.py``) so this stack can be torn down without touching data.
 """
 
@@ -188,7 +188,7 @@ class AppEnvStack(Stack):
             cluster=shared.cluster,
             task_definition=self.worker_task,
             security_group=app_sg,
-            desired_count=1,
+            desired_count=cfg.worker_count,
             spot=cfg.worker_spot,
         )
         # First deploy of an environment: migrate + cache table + static files

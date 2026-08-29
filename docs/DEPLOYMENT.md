@@ -11,7 +11,7 @@ flows. The reasoning behind the design is in
 ```
 GitHub Actions (OIDC, arm64 build) ──push :sha──▶ ECR eram/<app>
         │
-        ├─ 1. release  : ECS RunTask (worker family)  check --deploy, migrate, createcachetable, collectstatic
+        ├─ 1. release  : ECS RunTask (worker family)  check --deploy, migrate, createcachetable, seed_notification_config, collectstatic
         ├─ 2. web      : update ECS Express Mode service   canary, auto-rollback on 5XX / unhealthy
         └─ 3. worker   : update ECS Fargate service        db_worker --queue-name default,bulk
 
@@ -51,10 +51,11 @@ dedicated production VPC is the escape hatch).
 
 `dev` and `production` are defined; `staging` is supported by the app
 (`ENVIRONMENT=staging`, test payment keys) and is one more `EnvConfig` entry.
-Stacks, per app: `Shared` (ECR, cluster, roles, dev-DB bootstrap task),
-`Db-<env>` (the dedicated RDS instance of environments with
-`database="dedicated"`, kept apart so the app stack can be recreated without
-touching data) and `App-<env>` (everything else, stateless). Resources that
+Stacks, per app and prefixed with the app name because every app shares one
+account+region: `<app>-Shared` (ECR, cluster, roles), `<app>-Db-<env>` (the
+dedicated RDS instance of environments with `database="dedicated"`, kept
+apart so the app stack can be recreated without touching data) and
+`<app>-App-<env>` (everything else, stateless). Resources that
 exist **once per AWS account** — the GitHub OIDC provider, the shared dev RDS
 instance `development-shared-pg18` and the database security group — are
 never created by any app's stacks: `AppConfig` references them by value, so
@@ -139,9 +140,9 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
 3. Edit `infra/backend_infra/config.py`: `APP.name` and `APP.github_repo`
    (the account-level fields stay as they are for every app in the same
    account); `ENVIRONMENTS`: sizes, domain, frontend origins.
-4. `just infra-deploy-shared` — ECR, cluster, roles, dev-DB bootstrap task.
+4. `just infra-deploy-shared` — ECR, cluster, roles (stack `<app>-Shared`).
    If the ECR repository `eram/<app>` already exists, import it first
-   (`npx cdk import Shared`) or delete it.
+   (`npx cdk import <app>-Shared`) or delete it.
 5. Create the app secret with every key present (empty = unset):
    `aws secretsmanager create-secret --name dev/<app> --secret-string "$(just infra-secret-skeleton dev)"`
    then fill the values in the console (`SECRET_KEY`, `DATABASE_URL` for
@@ -157,26 +158,28 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    then set `DATABASE_URL=postgres://<app>_dev:<password>@<endpoint>:5432/<app>_dev`
    in the `dev/<app>` secret.
 7. GitHub repo variables: `AWS_ECR_REPOSITORY=eram/<app>`,
-   `AWS_OIDC_ROLE_ARN` (Shared output `GithubDeployRoleArn`), `AWS_REGION`.
-   Push to `main` → the `build` job pushes `:<sha>` to ECR (the deploy job
-   still skips).
+   `AWS_OIDC_ROLE_ARN` (`<app>-Shared` output `GithubDeployRoleArn`),
+   `AWS_REGION`. Do not push to `main` before step 9 is complete: the
+   `deploy` job expects every `ECS_*` / `EXPRESS_*` variable and fails the run
+   on a missing one — it does not skip.
 8. `just infra-deploy-first dev <sha>` — first environment deploy
    (≈ 10 min; the Express service provisions the ALB). The stack's release
-   trigger runs `check --deploy`, `migrate`, `createcachetable` and
-   `collectstatic` on the worker task definition *before* the services are
+   trigger runs `check --deploy`, `migrate`, `createcachetable`,
+   `seed_notification_config` and `collectstatic` on the worker task
+   definition *before* the services are
    created, so `/readyz` is green on the first task.
-9. Create the GitHub environment `dev` and copy the `App-dev` outputs into
+9. Create the GitHub environment `dev` and copy the `<app>-App-dev` outputs into
    its variables:
    `ECS_CLUSTER`, `ECS_FAMILY_WEB`, `ECS_FAMILY_WORKER`, `ECS_SERVICE_WORKER`,
    `EXPRESS_SERVICE_ARN`, `EXPRESS_SERVICE_NAME`, `ECS_SUBNETS`,
-   `ECS_SECURITY_GROUPS`, `ECS_ASSIGN_PUBLIC_IP=ENABLED`. Set the repo-level
-   sentinel `DEV_DEPLOY_ENABLED=1` and re-run `Deploy dev`.
+   `ECS_SECURITY_GROUPS`. Then push to `main` (or re-run `Deploy dev`).
 10. `just infra-run-task dev python manage.py createsu` (first superuser) and
     `just infra-run-task dev python manage.py shell -c "1/0"` (Sentry smoke:
     the event must carry `environment=dev` and `release=<sha>`).
-11. Production: `just infra-deploy production -- -c image_tag=<sha>` deploys
-    `Db-production` first (RDS takes ~10 min; the instance carries deletion
-    protection and outlives the app stack), then `App-production` (the ACM
+11. Production: `just infra-deploy-first production <sha>` deploys
+    `<app>-Db-production` first (RDS takes ~10 min; the instance and its
+    secrets carry deletion protection and outlive the app stack), then
+    `<app>-App-production` (the ACM
     certificate validates automatically through Route 53); fill
     `production/<app>`, create the GitHub environment
     `production` with required reviewers, add its variables, then dispatch
@@ -191,7 +194,8 @@ identity and change `AppConfig.ses_identity`).
 1. **release** — `amazon-ecs-deploy-task-definition` registers a worker
    revision with the new image and runs it once (on-demand Fargate) with the
    command `check --deploy --fail-level WARNING && migrate && createcachetable
-   && collectstatic`. Any Django deploy warning stops the rollout before the
+   && seed_notification_config && collectstatic`. Any Django deploy warning
+   stops the rollout before the
    database is touched. Migrations must be expand/contract: web rolls before
    worker by design. (`cdk deploy` runs the same command through its release
    trigger before touching the services, so IaC-driven rollouts are migrated
@@ -219,7 +223,6 @@ and `aws ecs update-service --cluster <app> --service <app>-<env>-worker --task-
 | prune-task-results | `30 3 * * ? *` | `manage.py prune_db_task_results --min-age-days 14` |
 | reconcile-payments | `*/10 * * * ? *` | `manage.py reconcile_payments` |
 | sweep-deliveries | `*/15 * * * ? *` | `manage.py sweep_deliveries` |
-| sample-scheduled-job | disabled | template reference |
 
 Adding one = a management command (thin wrapper over a service, safe to
 re-run) + a `ScheduledJob` entry in `config.py` + `just infra-deploy <env>`.
@@ -253,10 +256,35 @@ and a Route 53 alias record to the ALB. If an Express update ever rewrites
 the rule's conditions, re-run `just infra-deploy <env>` or add the host in
 the console (EC2 → Load balancers → listener rules).
 
+## Renaming stacks deployed before the app-name prefix
+
+Stacks deployed before 2026-08-29 were named `Shared` / `App-<env>` /
+`Db-<env>`; CDK now names them `<app>-Shared` / `<app>-App-<env>` /
+`<app>-Db-<env>`. CloudFormation cannot rename a stack, and the old `Shared`
+owns physically named resources (ECR `eram/<app>`, cluster `<app>`, role
+`<app>-github-deploy`) that the new stack must own instead, so it is a
+recreate, in this order:
+
+1. `npx cdk destroy App-<env>` for every env (stateless; the retained log
+   groups/buckets of production block recreation — delete or `cdk import`
+   them). `Db-<env>` (if any) keeps its instance and secrets: `cdk import`
+   them into `<app>-Db-<env>` rather than recreating.
+2. `npx cdk destroy Shared` (turn off termination protection first). The ECR
+   repository is RETAINed: `npx cdk import <app>-Shared` to adopt it, or
+   delete it and rebuild the image.
+3. The migration history was squashed to one `0001_initial` per app on the
+   same day: a database migrated under the old files will refuse the new
+   ones. For dev, drop and recreate `<app>_dev` on the shared instance
+   (step 6 of the bootstrap) before the next release task runs; a production
+   database that predates the squash keeps the old files instead.
+4. `just infra-deploy-shared`, then `just infra-deploy-first <env> <sha>`,
+   then refresh the GitHub environment variables from the new stack outputs
+   (`ECS_CLUSTER` and the families keep their names; the role ARN too).
+
 ## Migrating an existing App Runner app
 
-1. Copy `infra/` with its own `AppConfig` (name, repo), deploy `Shared` +
-   `App-production` alongside the App Runner service.
+1. Copy `infra/` with its own `AppConfig` (name, repo), deploy `<app>-Shared`
+   + `<app>-App-production` alongside the App Runner service.
 2. Point `custom_domain` at the existing hostname; CDK adds the certificate,
    rule and DNS alias — switch the DNS record when the Express URL is verified.
 3. PostgreSQL 17 → 18: new instance + `pg_dump | pg_restore` (uuidv7 defaults

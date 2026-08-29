@@ -4,7 +4,7 @@
   "created": "2026-07-11",
   "workflow": [
     "Groups run in array order; tasks run in array order within their group unless dependsOn says otherwise.",
-    "Completed work is removed from this file - done through the easy-sweep (2026-07-11): G00-G05, G08, G09, G10 (workflows verified green on GitHub 2026-07-18: remote created at omargawdat/django-backend-template, first real run exposed 5 defects invisible locally - unresolvable setup-uv@v8 tag, invalid `compose run --no-build` flag, TruffleHog flagging the repo's own dev creds, guard-migrations missing the pull-requests scope so it failed every PR without ever evaluating its rule, and a .env.example trailing comment parsed as the value; all fixed in PR #1, and the migration guard was then proven to reject a modified migration and to bypass on the allow-migration-edit label), superuser bootstrap, and the /users/me slice; G14 template-enhancement sweep fully adopted 2026-07-12 (wp1-wp8 commits); G15 external-client build complete 2026-07-12 (wp-a HTTP kernel, wp-b User.phone, wp-c apps/notifications, wp-d apps/payments, wp-e docs - plan in ~/.claude/plans/toasty-snuggling-gosling.md). Notifications v2 rebuilt 2026-07-27 on feat/notification-refactor (plan in ~/.claude/plans/please-plan-and-think-curious-glacier.md): SMS+WhatsApp+FCM channels behind settings-string triads, typed catalog + admin NotificationChannelOverride channel policy, NotificationDelivery idempotency/recovery log, Broadcast 100k fan-out on a dedicated bulk queue, signed WhatsApp status webhook; Meta Cloud API connector and SMS DLR ingestion deferred as follow-up PRs. Group ARRAY ORDER = execution order. Broadcast compose form added 2026-07-27 (admin/broadcast/form.py - the project's first form class): announcement-only title+body composer replacing the raw context JSON, audience filters (language, require_device, joined_after/joined_before) and per-broadcast channel selection; extended 2026-07-27 into a standalone composer screen (live reach estimate, push preview, advisory counters, confirm modal) and ANNOUNCEMENT's catalog title became \"{title}\" so the headline is operator-authored - migration notifications/0005 backfills the key into pre-existing rows; the admin add path now routes through notification_broadcast so catalog context validation runs (it previously called obj.save() and skipped it). Supersedes the same-day global-only channel-policy decision; PLAN.md updated.",
+    "Completed work is removed from this file - done through the easy-sweep (2026-07-11): G00-G05, G08, G09, G10 (workflows verified green on GitHub 2026-07-18: remote created at omargawdat/django-backend-template, first real run exposed 5 defects invisible locally - unresolvable setup-uv@v8 tag, invalid `compose run --no-build` flag, TruffleHog flagging the repo's own dev creds, guard-migrations missing the pull-requests scope so it failed every PR without ever evaluating its rule, and a .env.example trailing comment parsed as the value; all fixed in PR #1, and the migration guard was then proven to reject a modified migration and to bypass on the allow-migration-edit label), superuser bootstrap, and the /users/me slice; G14 template-enhancement sweep fully adopted 2026-07-12 (wp1-wp8 commits); G15 external-client build complete 2026-07-12 (wp-a HTTP kernel, wp-b User.phone, wp-c apps/notifications, wp-d apps/payments, wp-e docs). G19 aws-deploy-runbook done (docs/DEPLOYMENT.md, 2026-08-28). Template review 2026-08-29 (68/100, plan file in the reviewer's session): auth-order CSRF bug, app-prefixed stack names, cluster-scoped deploy role, RETAINed RDS secrets, worker min-healthy 100, release-trigger failure handling, CSP navigation directives, readyz leak, gunicorn timeout, throttling on the shared cache (django-ratelimit removed), migrations squashed to 0001 per app with the NotificationKindConfig seed moved to `seed_notification_config` in the release step, missing allauth email templates (unknown_account, account_already_exists), docs drift, docs/NEW_PROJECT.md - all landed; the rest is G24. Notifications v2 rebuilt 2026-07-27 on feat/notification-refactor: SMS+WhatsApp+FCM channels behind settings-string triads, typed catalog + admin NotificationChannelOverride channel policy, NotificationDelivery idempotency/recovery log, Broadcast 100k fan-out on a dedicated bulk queue, signed WhatsApp status webhook; Meta Cloud API connector and SMS DLR ingestion deferred as follow-up PRs. Group ARRAY ORDER = execution order. Broadcast compose form added 2026-07-27 (admin/broadcast/form.py - the project's first form class): announcement-only title+body composer replacing the raw context JSON, audience filters (language, require_device, joined_after/joined_before) and per-broadcast channel selection; extended 2026-07-27 into a standalone composer screen (live reach estimate, push preview, advisory counters, confirm modal) and ANNOUNCEMENT's catalog title became \"{title}\" so the headline is operator-authored - migration notifications/0005 backfills the key into pre-existing rows; the admin add path now routes through notification_broadcast so catalog context validation runs (it previously called obj.save() and skipped it). Supersedes the same-day global-only channel-policy decision; PLAN.md updated.",
     "2026-07-18 regroup (user request): remaining work reorganized into thematic groups G16-G20 (authentication / testing incl. factories / cron jobs / AWS instructions / Claude structure). Empty shells G07, G11, G12 removed - their tasks were already swept; G07's gate requirements live on in G17's checkpoint. G13's deferred-review intent (reviews don't block build work) carries on in the review tasks' tips unchanged.",
     "One task = one working session. Set status=in_progress before starting; set done only when the endGoal is observed, not assumed.",
     "Never start a task whose dependsOn are not all done.",
@@ -12,7 +12,7 @@
     "Tips are guidance, not prescriptions - decide from context; PLAN.md wins over any tip; record resolutions by appending to the task's tips.",
     "Any task that adds an Env field updates config/env.py AND .env.example in the same task.",
     "From G03 onward ruff+mypy must be green at every checkpoint. Since 2026-07-18 the remote exists and CI runs for real, so GitHub is a gate alongside the local checkpoint - not a substitute: CI is the only place `cp .env.example .env` happens, which is exactly how the .env.example comment-as-value bug surfaced.",
-    "2026-07-18 saved cards built (user request; plan in ~/.claude/plans/curious-bubbling-kernighan.md): SavedCard vault + opt-in save at checkout + one-click CIT + service-only MIT (payment_charge_saved) + cards API + admin, Tap tokens->charge with payment_agreement, Paymob TOKEN callback (own 8-field HMAC) + card_tokens CIT + MOTO payments/pay; local suites green - the live test-mode proof is G22. Simplified later the same day (user request): save is always-on (save_card left the API), and the add-card-without-payment flow (Tap authorize+auto-void, Paymob Verification intention - both live-verified) was removed; git history keeps the working implementation."
+    "2026-07-18 saved cards built (user request): SavedCard vault + opt-in save at checkout + one-click CIT + service-only MIT (payment_charge_saved) + cards API + admin, Tap tokens->charge with payment_agreement, Paymob TOKEN callback (own 8-field HMAC) + card_tokens CIT + MOTO payments/pay; local suites green - the live test-mode proof is G22. Simplified later the same day (user request): save is always-on (save_card left the API), and the add-card-without-payment flow (Tap authorize+auto-void, Paymob Verification intention - both live-verified) was removed; git history keeps the working implementation."
   ],
   "groups": [
     {
@@ -34,12 +34,6 @@
       "checkpoint": "Sweep pattern demonstrated end-to-end locally (enqueue -> worker executes -> re-run is a no-op); every gap in the task tips has a named owner (code, worker, or scheduler); docs updated; gates green; commit."
     },
     {
-      "id": "G19",
-      "title": "AWS instructions",
-      "rationale": "Deployment knowledge from the ECS Express Mode research (Nov 2025 launch through July 2026 updates) written down before it goes stale; the web tier, worker, and schedules each need a stated home.",
-      "checkpoint": "A deployment runbook exists in docs/ that a newcomer could follow to stand up web + worker + schedules from scratch; commit."
-    },
-    {
       "id": "G20",
       "title": "Claude structure",
       "rationale": "CLAUDE.md digest, .claude/rules topic files, PLAN.md, and ARCHITECTURE.md must say the same thing - drift here silently misleads every future session.",
@@ -50,6 +44,12 @@
       "title": "Product expansion",
       "rationale": "Market-facing features requested 2026-07-18: true multi-country/multi-currency support beyond the SAR/EGP pair, and operational zones managed from the dashboard instead of code.",
       "checkpoint": "Each feature demonstrated end-to-end locally; design decisions recorded in the task tips; ruff+mypy+pytest+lint-imports green; commit."
+    },
+    {
+      "id": "G24",
+      "title": "Template hardening follow-ups",
+      "rationale": "What the 2026-08-29 template review left open because each item needs an owner decision or an input that does not exist yet (an alerts address, a live migration window). Ordered by impact.",
+      "checkpoint": "Each task's endGoal observed; ruff+mypy+pytest+lint-imports+infra-test green; docs updated; commit."
     },
     {
       "id": "G22",
@@ -131,18 +131,83 @@
       "status": "pending"
     },
     {
-      "id": "aws-deploy-runbook",
-      "group": "G19",
-      "title": "Write the AWS deployment runbook (ECS Express Mode + worker + schedules)",
-      "endGoal": "docs/ contains a runbook covering: web tier via ECS Express Mode (ECR image, execution + infrastructure roles, containerPort, health-check path, env/secrets, task role for S3/SES), worker as a plain ECS service on the same cluster, EventBridge Scheduler entries kept in IaC for every cron job, and the explicit note that DB/Redis are outside Express Mode's scope.",
+      "id": "live-stack-rename",
+      "group": "G24",
+      "title": "Recreate the live dev stacks under the app-prefixed names",
+      "endGoal": "`template-Shared` and `template-App-dev` are the deployed stacks (old `Shared`/`App-dev` gone), the dev database was recreated for the squashed migrations, CD is green end-to-end from the new stack outputs.",
       "tips": [
-        "Express Mode facts (researched 2026-07-18): HTTPS URL https://<name>.ecs.<region>.on.aws, ALB auto-shared across up to 25 services with same networking, canary deploys + 5XX rollback alarm (strategy not changeable), defaults 1 vCPU/2GB, target-tracking 60% CPU min 1/max 20 tasks, no extra charge - pay for Fargate/ALB/CloudWatch/transfer.",
-        "Custom task definitions supported since July 2026: container must be named 'Main' with a single TCP port mapping and FARGATE compatibility; taskDefinitionArn is mutually exclusive with primaryContainer/cpu/memory/role params. Never rename the Main container - it breaks Express Mode updates.",
-        "First Express service in a VPC pins the shared ALB's subnets/AZs - create with subnets from ALL AZs. Public subnets -> internet-facing ALB + public task IPs; private subnets -> internal ALB (bring your own NAT).",
-        "Custom domain is not first-class: manual ACM cert + host-header listener rule on the shared ALB + Route 53 record.",
-        "IaC: AWS CDK (Python) in infra/ - CfnExpressGatewayService has been supported by CloudFormation/CDK since launch. Schedules live in IaC next to the commands they trigger - never click-ops.",
-        "Recurring jobs: EventBridge Scheduler -> ECS RunTask with command override `python manage.py <command>` reusing the task definition family; one-off Fargate seconds per run, no always-on beat process.",
-        "AWS positions Express Mode as the migration target for App Runner (availability changing) and the EOL Copilot CLI - a point in favor of betting on it."
+        "Runbook: docs/DEPLOYMENT.md 'Renaming stacks deployed before the app-name prefix' - destroy App-dev, destroy Shared (termination protection off; cdk import the RETAINed ECR repo or delete it), recreate dev DB on the shared instance, infra-deploy-shared + infra-deploy-first dev <sha>, refresh the GitHub dev environment variables.",
+        "Until this runs, `just infra-deploy dev` targets a stack that does not exist yet and `deploy-dev.yml` still rolls the OLD stack's services (families and cluster keep their names)."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "alarms-and-dlq",
+      "group": "G24",
+      "title": "Alerting: SNS topic + RDS/ECS alarms + schedule DLQ",
+      "endGoal": "Synthesized templates contain an SNS topic with a subscribed alerts address, alarms for RDS (CPU credit balance on t4g, free storage, connections), ECS running-count < desired for web and worker, and a DLQ on every EventBridge schedule with retry_attempts > 0; a forced failure of one schedule lands in the DLQ and pages.",
+      "tips": [
+        "Needs an `alerts_email` on AppConfig (decision: who receives) - never a code default.",
+        "Express Mode's own 5XX alarm only drives its canary rollback; it notifies nobody.",
+        "constructs/schedules.py currently sets retry_attempts=0 and max_event_age 5 min: a reconcile-payments launch failure is silently dropped today."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "superuser-password-out-of-task-env",
+      "group": "G24",
+      "title": "Stop injecting DJANGO_SUPERUSER_PASSWORD into every running task",
+      "endGoal": "The long-running web/worker task definitions carry no superuser password; `createsu` reads it from a one-off source (a dedicated secret read at run time, or a run-task-only override) and the Env field is optional outside that path.",
+      "tips": [
+        "Today config/env.py requires it in every environment and infra ENV_SECRET injects it into all tasks - any env read (SSRF, /proc/self/environ) yields admin.",
+        "Keep one road: pick the mechanism, delete the other."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "apidog-opt-in",
+      "group": "G24",
+      "title": "Decide where the Apidog sync lives",
+      "endGoal": "A project without Apidog does not carry an `apidog` job in its deploy pipeline: either the job moves to its own workflow (kept by projects that use it, deleted by the rest, documented in docs/NEW_PROJECT.md) or it stays and NEW_PROJECT.md's 'delete the job' step is the answer.",
+      "tips": [
+        "Owner rejects toggles: no `if: vars.APIDOG_PROJECT_ID` guard - the job exists or it does not."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "supply-chain-pins",
+      "group": "G24",
+      "title": "Pin GitHub Actions to commit SHAs and base images to digests; add a dependency-vulnerability gate",
+      "endGoal": "Every `uses:` carries a full SHA with a version comment (Dependabot keeps them fresh), the Dockerfile FROM lines carry digests, and CI fails on a known-vulnerable locked dependency (pip-audit or OSV over uv.lock).",
+      "tips": [
+        "TruffleHog covers secrets only; nothing blocks a vulnerable transitive dependency today.",
+        "Dependabot's `cooldown` already delays new releases; digest pins make the image build reproducible."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "domain-app-hardening",
+      "group": "G24",
+      "title": "Payments/notifications correctness items from the review",
+      "endGoal": "Provider HTTP never runs inside a held row lock or the request transaction; sweeps are bounded; list endpoints have indexes matching the cursor; the inbox renderer cannot 500 on a stale row; notifications task bodies are thin trampolines into services.",
+      "tips": [
+        "services/payments.py:312 calls saved_card_store (-> Tap fingerprint API) while holding select_for_update on the Payment; payment_initiate/payment_charge_saved hold ATOMIC_REQUESTS across create_checkout.",
+        "services/deliveries.py deliveries_resume materializes every PENDING pk unbounded; reconcile_payments is serial with no time budget (500 x 10 s worst case).",
+        "Indexes: payment (user, id), notification (recipient, id), wallet_transaction (wallet, id) + filter on wallet_id instead of the join; payment (status, updated_at) for the sweep; Broadcast has none.",
+        "selectors/messages.py notification_render .format(**context) raises KeyError on rows written before a catalog change - make it defensive.",
+        "tasks/delivery.py (332 lines) and tasks/broadcast.py hold business logic and services/deliveries.py imports from the task layer - the recorded rule is lean tasks; payments/tasks/refunds.py is the reference shape.",
+        "Tests: one real two-connection test for wallet_apply and the delivery claim; payments/tests/test_admin.py covers 1 of 4 admins; DATA_UPLOAD_MAX_NUMBER_FIELDS=100_000 (commit 536bf09, 'm2m form limit fields') should be scoped to the form that needs it."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "infra-typecheck-and-dx",
+      "group": "G24",
+      "title": "Type-check infra/ and close the small DX gaps",
+      "endGoal": "mypy runs over infra/ in CI (aws-cdk-lib ships stubs); README prerequisites list jq + AWS credentials for `just infra-*`; media is either documented as world-readable via CloudFront or gets a private-read path; `.gitignore` covers `.claude/settings.local.json` (done 2026-08-29).",
+      "tips": [
+        "pyproject.toml used to claim infra was 'typed by its own gate' - it was not; the comment now says so.",
+        "CloudFront fronts the whole media prefix unsigned: every upload is public to anyone with the URL - a decision to record, not an accident to keep."
       ],
       "status": "pending"
     },

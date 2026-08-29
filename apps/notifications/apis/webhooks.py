@@ -44,6 +44,7 @@ _META_STATUS_MAP = {
 @router.get(
     "/webhooks/whatsapp",
     auth=None,
+    throttle=[],  # token-verified handshake, Meta-driven cadence
     summary="Meta webhook verification handshake",
     include_in_schema=False,
 )
@@ -66,6 +67,7 @@ def whatsapp_webhook_verify(request: HttpRequest) -> HttpResponse:
 @router.post(
     "/webhooks/whatsapp",
     auth=None,
+    throttle=[],  # HMAC-verified; a Meta status burst must never be dropped
     response=dict[str, bool],
     summary="WhatsApp delivery statuses (server-to-server)",
     include_in_schema=False,

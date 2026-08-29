@@ -15,6 +15,7 @@ from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_ecs as ecs
 from constructs import Construct
 
+from backend_infra import naming
 from backend_infra.config import AppConfig
 from backend_infra.constructs import roles
 from backend_infra.constructs.network import default_vpc
@@ -67,10 +68,19 @@ class SharedStack(Stack):
             provider_arn=app.github_oidc_provider_arn,
             github_repo=app.github_repo,
             ecr_repository_arn=self.repository.repository_arn,
+            cluster_arn=self.cluster.cluster_arn,
+            log_group_arns=[
+                (
+                    f"arn:aws:logs:{self.region}:{self.account}:log-group:"
+                    f"{naming.log_group_prefix(app)}*"
+                )
+            ],
             passable_role_arns=[
                 self.infrastructure_role.role_arn,
-                # Per-env execution + task roles are CDK-named after their stack.
-                f"arn:aws:iam::{self.account}:role/App-*",
+                # Per-env execution + task roles are CDK-named after their
+                # stack, and the stack name starts with the app name - so this
+                # pattern cannot match another app's roles in the account.
+                f"arn:aws:iam::{self.account}:role/{naming.app_stack(app, '')}*",
             ],
         )
 

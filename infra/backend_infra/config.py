@@ -64,6 +64,9 @@ class EnvConfig:
     custom_domain: str | None = None
     worker_cpu: int = 256
     worker_memory: int = 512
+    # Always-on queue consumers. No autoscaling: the DB queue exposes no depth
+    # metric yet, so a busier app raises this number per environment.
+    worker_count: int = 1
     plain_env: dict[str, str] = field(default_factory=dict)
 
 
@@ -230,8 +233,10 @@ def _plain_env(*, environment: EnvName, base_url: str, hosts: str) -> dict[str, 
 
 
 # Express Mode hands out https://<service>-<hash>.ecs.<region>.on.aws; the
-# suffix wildcard covers it before the hostname is known.
-_EXPRESS_HOSTS = ".ecs.eu-central-1.on.aws"
+# suffix wildcard covers it before the hostname is known. It also admits every
+# other Express hostname in the region - narrow ALLOWED_HOSTS to the real
+# service hostname once the first deploy printed it (WebEndpoint output).
+_EXPRESS_HOSTS = f".ecs.{APP.region}.on.aws"
 
 ENVIRONMENTS: dict[EnvName, EnvConfig] = {
     "dev": EnvConfig(

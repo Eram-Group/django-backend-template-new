@@ -65,7 +65,11 @@ STORAGES = {
 # CloudFront is a separate origin: every fetch directive must allow it or the
 # admin loads bare.
 SECURE_CSP = {
-    directive: [*sources, f"https://{env.AWS_S3_CUSTOM_DOMAIN}"]
+    directive: (
+        [*sources, f"https://{env.AWS_S3_CUSTOM_DOMAIN}"]
+        if directive in CSP_FETCH_DIRECTIVES
+        else sources
+    )
     for directive, sources in SECURE_CSP.items()
 }
 

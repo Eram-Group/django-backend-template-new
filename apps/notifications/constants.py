@@ -12,10 +12,9 @@ class NotificationKind(models.TextChoices):
 
 
 class NotificationCategory(models.TextChoices):
-    """Preference granularity: users may opt out of MARKETING channels only.
-
-    TRANSACTIONAL is structurally exempt - the preference model refuses to
-    store an opt-out for it, and the send path never consults preferences.
+    """MARKETING is the opt-out-able class of notification; TRANSACTIONAL is
+    always delivered. Per-user preferences are not implemented - today the
+    split only labels each NotificationKind in the catalog.
     """
 
     TRANSACTIONAL = "transactional", _("Transactional")

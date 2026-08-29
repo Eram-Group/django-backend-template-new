@@ -7,8 +7,11 @@ view so the module imports without configured settings.
 
 import asyncio
 
+import structlog
 from django.http import HttpRequest
 from django.http import JsonResponse
+
+logger = structlog.get_logger(__name__)
 
 
 def healthz(request: HttpRequest) -> JsonResponse:
@@ -34,8 +37,15 @@ def readyz(request: HttpRequest) -> JsonResponse:
 
     results = asyncio.run(run_all())
     failed = {
-        repr(result.check): str(result.error) for result in results if result.error
+        type(result.check).__name__: str(result.error)
+        for result in results
+        if result.error
     }
     if failed:
-        return JsonResponse({"status": "unavailable", "failed": failed}, status=503)
+        # The probe answers before ALLOWED_HOSTS and without auth: only the
+        # check names go on the wire, the driver errors go to the log.
+        logger.warning("readiness_failed", checks=failed)
+        return JsonResponse(
+            {"status": "unavailable", "failed": sorted(failed)}, status=503
+        )
     return JsonResponse({"status": "ok"})

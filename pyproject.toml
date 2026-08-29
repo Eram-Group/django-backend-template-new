@@ -26,7 +26,6 @@ dependencies = [
   "django-import-export>=4.4.1",
   "django-modeltranslation>=0.20.3",
   "django-ninja>=1.6.2",
-  "django-ratelimit>=4.1.0",
   "django-storages[s3]>=1.14.6",
   "django-structlog>=10.1.0",
   "django-tasks-db>=0.12.0",
@@ -149,7 +148,8 @@ enable_error_code = [
   "possibly-undefined",
 ]
 files = [ "apps", "config", "manage.py" ]
-# infra/ is a separate uv project (own venv, aws-cdk-lib); typed by its own gate.
+# infra/ is a separate uv project (own venv, aws-cdk-lib) and is NOT
+# type-checked: its gate is synth + template assertions + cfn-lint.
 exclude = [ "^infra/" ]
 plugins = [
   "mypy_django_plugin.main",
@@ -159,7 +159,7 @@ overrides = [
   # Django migrations should not produce any errors:
   { module = "*.migrations.*", ignore_errors = true },
   # Third-party packages without type stubs / py.typed:
-  { module = [ "allauth.*", "axes.*", "health_check.*", "django_ratelimit.*", "unfold.*", "import_export.*", "phonenumber_field.*", "firebase_admin.*" ], ignore_missing_imports = true },
+  { module = [ "allauth.*", "axes.*", "health_check.*", "unfold.*", "import_export.*", "phonenumber_field.*", "firebase_admin.*" ], ignore_missing_imports = true },
   # The framework wraps unfold/import-export (untyped) once; per-entity
   # admins subclass OUR typed classes and need no exemption:
   { module = "apps.common.admin.*", disallow_subclassing_any = false },
@@ -208,6 +208,7 @@ filterwarnings = [
 # ==== Coverage ====
 run.include = [ "apps/**", "config/**" ]
 run.omit = [ "*/migrations/*", "*/tests/*" ]
+run.branch = true
 report.fail_under = 80
 
 # ==== import-linter (architecture boundaries; run: uv run lint-imports) ====
@@ -245,7 +246,7 @@ type = "independence"
 modules = [ "apps.users", "apps.notifications", "apps.payments" ] # append each new app
 ignore_imports = [
   # Explicit decision (2026-07-12, restored 2026-07-27): notifications
-  # addresses users - Notification/Device/Preference rows belong to a User,
+  # addresses users - Notification/Device rows belong to a User,
   # delivery reads user.phone/.language. One-way only at the model layer;
   # users reaches back ONLY via the narrow service edge below.
   "apps.notifications.** -> apps.users.**",

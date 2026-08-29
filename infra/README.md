@@ -9,10 +9,14 @@ just infra-install            # uv sync + npm ci (CDK CLI is pinned in package.j
 just infra-synth              # synth every stack (no AWS credentials needed)
 just infra-test               # template assertions
 just infra-diff dev           # what a deploy would change
-just infra-deploy-shared      # once per account/region
+just infra-deploy-shared      # once per app
 just infra-deploy dev         # per environment (reads the live image tag)
 ```
 
 Topology and env-var ownership live in `backend_infra/config.py`; resource
-names in `backend_infra/naming.py`. Stacks: `Shared` (ECR, cluster, roles,
-GitHub OIDC, shared dev DB) and `App-<env>` (everything else).
+and stack names in `backend_infra/naming.py`. Stacks, all prefixed with the
+app name because many apps share one account: `<app>-Shared` (ECR, cluster,
+roles), `<app>-Db-<env>` (dedicated RDS, stateful) and `<app>-App-<env>`
+(everything else, stateless). Account-level resources (GitHub OIDC provider,
+shared dev RDS, DB security group) are referenced by value in `AppConfig`,
+never created here.

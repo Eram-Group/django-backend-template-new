@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-08-29 11:34+0300\n"
+"POT-Creation-Date: 2026-08-29 11:39+0000\n"
 "PO-Revision-Date: 2026-08-29 00:00+0000\n"
 "Last-Translator: Eram dev team\n"
 "Language-Team: Arabic\n"
@@ -94,8 +94,12 @@ msgid "The text every recipient sees. Sent as-is, in one piece."
 msgstr "النص الذي يراه كل مستلم. يُرسل كما هو، قطعة واحدة."
 
 #: apps/notifications/admin/broadcast/form.py:143
-msgid "Leave every channel off to use this kind's configured policy. Turning any on overrides that policy for this broadcast only."
-msgstr "اترك جميع القنوات معطّلة لاستخدام السياسة المضبوطة لهذا النوع. تفعيل أي قناة يتجاوز تلك السياسة لهذا البث فقط."
+msgid ""
+"Leave every channel off to use this kind's configured policy. Turning any on "
+"overrides that policy for this broadcast only."
+msgstr ""
+"اترك جميع القنوات معطّلة لاستخدام السياسة المضبوطة لهذا النوع. تفعيل أي قناة "
+"يتجاوز تلك السياسة لهذا البث فقط."
 
 #: apps/notifications/admin/device/list_view.py:9
 msgid "Search by user email or registration token."
@@ -138,38 +142,39 @@ msgstr "غير متاح لهذا الإجراء."
 msgid "WhatsApp sends the Meta-approved template \"%(name)s\"."
 msgstr "يرسل واتساب القالب \"%(name)s\" المعتمد من Meta."
 
-#: apps/notifications/apis/webhooks.py:80
-#: apps/notifications/apis/webhooks.py:85
+#: apps/notifications/apis/webhooks.py:82
+#: apps/notifications/apis/webhooks.py:87
 msgid "Webhook payload is not valid JSON."
 msgstr "محتوى الويب هوك ليس JSON صالحًا."
 
-#: apps/notifications/apis/webhooks.py:123 apps/payments/apis/webhooks.py:63
+#: apps/notifications/apis/webhooks.py:125 apps/payments/apis/webhooks.py:64
 msgid "Webhook verification failed."
 msgstr "فشل التحقق من الويب هوك."
 
-#: apps/notifications/catalog.py:89 apps/users/tasks/emails.py:16
+#: apps/notifications/catalog.py:90 apps/users/tasks/emails.py:16
+#: apps/users/tests/test_adapters.py:119
 msgid "Welcome!"
 msgstr "مرحبًا بك!"
 
-#: apps/notifications/catalog.py:90
+#: apps/notifications/catalog.py:91
 #, python-brace-format
 msgid "Welcome aboard, {name}!"
 msgstr "مرحبًا بك معنا يا {name}!"
 
-#: apps/notifications/catalog.py:115 apps/notifications/constants.py:10
+#: apps/notifications/catalog.py:116 apps/notifications/constants.py:10
 msgid "Payment received"
 msgstr "تم استلام الدفعة"
 
-#: apps/notifications/catalog.py:116
+#: apps/notifications/catalog.py:117
 #, python-brace-format
 msgid "Your payment of {amount} {currency} was received."
 msgstr "تم استلام دفعتك بقيمة {amount} {currency}."
 
-#: apps/notifications/catalog.py:123 apps/notifications/constants.py:11
+#: apps/notifications/catalog.py:124 apps/notifications/constants.py:11
 msgid "Wallet credited"
 msgstr "تمت إضافة رصيد إلى المحفظة"
 
-#: apps/notifications/catalog.py:124
+#: apps/notifications/catalog.py:125
 #, python-brace-format
 msgid "{amount} {currency} was added to your wallet. New balance: {balance}."
 msgstr "تمت إضافة {amount} {currency} إلى محفظتك. الرصيد الجديد: {balance}."
@@ -182,79 +187,79 @@ msgstr "ترحيب"
 msgid "Announcement"
 msgstr "إعلان"
 
-#: apps/notifications/constants.py:21
+#: apps/notifications/constants.py:20
 msgid "Transactional"
 msgstr "معاملات"
 
-#: apps/notifications/constants.py:22
+#: apps/notifications/constants.py:21
 msgid "Marketing"
 msgstr "تسويق"
 
-#: apps/notifications/constants.py:28
+#: apps/notifications/constants.py:27
 msgid "Push"
 msgstr "إشعار فوري"
 
-#: apps/notifications/constants.py:29
+#: apps/notifications/constants.py:28
 msgid "SMS"
 msgstr "رسالة نصية"
 
-#: apps/notifications/constants.py:30
+#: apps/notifications/constants.py:29
 msgid "WhatsApp"
 msgstr "واتساب"
 
-#: apps/notifications/constants.py:42 apps/payments/constants.py:31
+#: apps/notifications/constants.py:41 apps/payments/constants.py:31
 msgid "Pending"
 msgstr "قيد الانتظار"
 
-#: apps/notifications/constants.py:43
+#: apps/notifications/constants.py:42
 msgid "Processing"
 msgstr "قيد المعالجة"
 
-#: apps/notifications/constants.py:44
+#: apps/notifications/constants.py:43
 msgid "Sent"
 msgstr "تم الإرسال"
 
-#: apps/notifications/constants.py:45
+#: apps/notifications/constants.py:44
 msgid "Delivered"
 msgstr "تم التسليم"
 
-#: apps/notifications/constants.py:46
+#: apps/notifications/constants.py:45
 msgid "Read"
 msgstr "مقروء"
 
-#: apps/notifications/constants.py:47 apps/payments/constants.py:33
+#: apps/notifications/constants.py:46 apps/payments/constants.py:33
 msgid "Failed"
 msgstr "فشل"
 
-#: apps/notifications/constants.py:48
+#: apps/notifications/constants.py:47
 msgid "Skipped"
 msgstr "تم التخطي"
 
-#: apps/notifications/constants.py:54
+#: apps/notifications/constants.py:53
 msgid "Draft"
 msgstr "مسودة"
 
-#: apps/notifications/constants.py:55
+#: apps/notifications/constants.py:54
 msgid "Dispatching"
 msgstr "جارٍ البث"
 
-#: apps/notifications/constants.py:56
+#: apps/notifications/constants.py:55
 msgid "Dispatched"
 msgstr "تم البث"
 
-#: apps/notifications/constants.py:57
+#: apps/notifications/constants.py:56
 msgid "Completed"
 msgstr "مكتمل"
 
-#: apps/notifications/constants.py:61
+#: apps/notifications/constants.py:60
 msgid "Android"
 msgstr "أندرويد"
 
-#: apps/notifications/constants.py:62
+#: apps/notifications/constants.py:61
 msgid "iOS"
 msgstr "iOS"
 
-#: apps/notifications/constants.py:63
+#: apps/notifications/constants.py:62
 msgid "Web"
 msgstr "الويب"
 
@@ -284,8 +289,12 @@ msgid "registered device required"
 msgstr "يتطلب جهازًا مسجّلًا"
 
 #: apps/notifications/models/broadcast.py:41
-msgid "Skip users with no registered device. They would receive an inbox entry but no push."
-msgstr "تخطّ المستخدمين الذين لا يملكون جهازًا مسجّلًا. سيصلهم إدخال في صندوق الوارد دون إشعار فوري."
+msgid ""
+"Skip users with no registered device. They would receive an inbox entry but "
+"no push."
+msgstr ""
+"تخطّ المستخدمين الذين لا يملكون جهازًا مسجّلًا. سيصلهم إدخال في صندوق الوارد دون "
+"إشعار فوري."
 
 #: apps/notifications/models/broadcast.py:45
 msgid "joined on or after"
@@ -296,7 +305,7 @@ msgid "joined on or before"
 msgstr "انضم في أو قبل"
 
 #: apps/notifications/models/broadcast.py:52
-#: apps/notifications/models/kind_config.py:43
+#: apps/notifications/models/kind_config.py:44
 msgid "channels"
 msgstr "القنوات"
 
@@ -396,32 +405,34 @@ msgstr "جهاز"
 msgid "devices"
 msgstr "الأجهزة"
 
-#: apps/notifications/models/kind_config.py:40
+#: apps/notifications/models/kind_config.py:41
 msgid "action"
 msgstr "الإجراء"
 
-#: apps/notifications/models/kind_config.py:44
+#: apps/notifications/models/kind_config.py:45
 msgid "title"
 msgstr "العنوان"
 
-#: apps/notifications/models/kind_config.py:45
+#: apps/notifications/models/kind_config.py:46
 msgid "body"
 msgstr "النص"
 
-#: apps/notifications/models/kind_config.py:57
+#: apps/notifications/models/kind_config.py:58
 msgid "notification action"
 msgstr "إجراء إشعار"
 
-#: apps/notifications/models/kind_config.py:58
+#: apps/notifications/models/kind_config.py:59
 msgid "notification actions"
 msgstr "إجراءات الإشعارات"
 
-#: apps/notifications/models/kind_config.py:86
+#: apps/notifications/models/kind_config.py:87
+#: apps/notifications/tests/test_models.py:84
 #, python-format
-msgid "%(kind)s does not support: %(channels)s. Supported channels: %(supported)s."
+msgid ""
+"%(kind)s does not support: %(channels)s. Supported channels: %(supported)s."
 msgstr "%(kind)s لا يدعم: %(channels)s. القنوات المدعومة: %(supported)s."
 
-#: apps/notifications/models/kind_config.py:103
+#: apps/notifications/models/kind_config.py:104
 #, python-format
 msgid "Unknown placeholders: %(unknown)s. This action provides: %(keys)s."
 msgstr "متغيرات غير معروفة: %(unknown)s. يوفر هذا الإجراء: %(keys)s."
@@ -447,6 +458,7 @@ msgid "The joined-after date must not be later than joined-before."
 msgstr "يجب ألا يكون تاريخ «الانضمام بعد» لاحقًا لتاريخ «الانضمام قبل»."
 
 #: apps/notifications/services/broadcasts.py:85
+#: apps/notifications/tests/test_broadcasts.py:182
 msgid "Pick at least one channel, or leave the kind's policy in place."
 msgstr "اختر قناة واحدة على الأقل، أو أبقِ سياسة النوع كما هي."
 
@@ -459,8 +471,11 @@ msgstr "لا يمكن إرسال هذا النوع من الإشعارات عب�
 msgid "Broadcast was already dispatched."
 msgstr "تم بث هذا البث من قبل."
 
-#: apps/notifications/services/config.py:48
-msgid "This action's message is authored per broadcast - compose it from the Broadcasts page."
+#: apps/notifications/services/config.py:78
+#: apps/notifications/tests/test_config_admin.py:183
+msgid ""
+"This action's message is authored per broadcast - compose it from the "
+"Broadcasts page."
 msgstr "رسالة هذا الإجراء تُكتب لكل بث على حدة - أنشئها من صفحة عمليات البث."
 
 #: apps/notifications/services/deliveries.py:117
@@ -471,13 +486,14 @@ msgstr "لم يُبث هذا البث بعد."
 msgid "Refund"
 msgstr "استرداد"
 
-#: apps/payments/admin/payment/admin.py:77
+#: apps/payments/admin/payment/admin.py:77 apps/payments/tests/test_admin.py:53
 msgid "Refund started - refresh to see the final status."
 msgstr "بدأ الاسترداد - حدّث الصفحة لرؤية الحالة النهائية."
 
 #: apps/payments/admin/payment/list_view.py:16
 msgid "Search by user email or gateway charge/transaction id."
-msgstr "ابحث بالبريد الإلكتروني للمستخدم أو معرّف الشحن/المعاملة لدى بوابة الدفع."
+msgstr ""
+"ابحث بالبريد الإلكتروني للمستخدم أو معرّف الشحن/المعاملة لدى بوابة الدفع."
 
 #: apps/payments/admin/savedcard/list_view.py:22
 msgid "Search by owner email or gateway token."
@@ -491,11 +507,11 @@ msgstr "ابحث بالبريد الإلكتروني للمستخدم."
 msgid "Search by wallet owner email."
 msgstr "ابحث بالبريد الإلكتروني لمالك المحفظة."
 
-#: apps/payments/apis/webhooks.py:54 apps/payments/gateways/__init__.py:41
+#: apps/payments/apis/webhooks.py:55 apps/payments/gateways/__init__.py:41
 msgid "Unknown payment gateway."
 msgstr "بوابة دفع غير معروفة."
 
-#: apps/payments/apis/webhooks.py:70
+#: apps/payments/apis/webhooks.py:71
 msgid "Webhook payload is malformed."
 msgstr "محتوى الويب هوك غير صالح."
 
@@ -748,11 +764,11 @@ msgstr "ابحث بالبريد الإلكتروني أو الاسم الكام�
 msgid "Recent sessions"
 msgstr "الجلسات الأخيرة"
 
-#: apps/users/constants.py:6 config/settings/base.py:204
+#: apps/users/constants.py:6 config/settings/base.py:203
 msgid "Arabic"
 msgstr "العربية"
 
-#: apps/users/constants.py:7 config/settings/base.py:205
+#: apps/users/constants.py:7 config/settings/base.py:204
 msgid "English"
 msgstr "الإنجليزية"
 
@@ -776,66 +792,94 @@ msgstr "اللغة"
 msgid "User not found."
 msgstr "المستخدم غير موجود."
 
-#: config/settings/base.py:298 config/settings/base.py:301
+#: apps/users/tests/test_adapters.py:48
+#: templates/account/email/login_code_message.html:10
+#, python-format
+msgid "This code expires in %(minutes)s minutes."
+msgstr "تنتهي صلاحية هذا الرمز خلال %(minutes)s دقائق."
+
+#: config/settings/base.py:297 config/settings/base.py:300
 msgid "Users"
 msgstr "المستخدمون"
 
-#: config/settings/base.py:309
+#: config/settings/base.py:308
 msgid "Email addresses"
 msgstr "عناوين البريد الإلكتروني"
 
-#: config/settings/base.py:317
+#: config/settings/base.py:316
 msgid "Sessions"
 msgstr "الجلسات"
 
-#: config/settings/base.py:327
+#: config/settings/base.py:326
 msgid "Groups"
 msgstr "المجموعات"
 
-#: config/settings/base.py:337 config/settings/base.py:340
+#: config/settings/base.py:336 config/settings/base.py:339
 msgid "Notifications"
 msgstr "الإشعارات"
 
-#: config/settings/base.py:350
+#: config/settings/base.py:349
 msgid "Deliveries"
 msgstr "عمليات التسليم"
 
-#: config/settings/base.py:360
+#: config/settings/base.py:359
 msgid "Broadcasts"
 msgstr "عمليات البث"
 
-#: config/settings/base.py:370
+#: config/settings/base.py:369
 msgid "Devices"
 msgstr "الأجهزة"
 
-#: config/settings/base.py:378
+#: config/settings/base.py:377
 #: templates/admin/notifications/notificationkindconfig/change_list.html:31
 msgid "Notification actions"
 msgstr "إجراءات الإشعارات"
 
-#: config/settings/base.py:390 config/settings/base.py:393
+#: config/settings/base.py:389 config/settings/base.py:392
 msgid "Payments"
 msgstr "المدفوعات"
 
-#: config/settings/base.py:401
+#: config/settings/base.py:400
 msgid "Wallets"
 msgstr "المحافظ"
 
-#: config/settings/base.py:409
+#: config/settings/base.py:408
 msgid "Wallet transactions"
 msgstr "معاملات المحافظ"
 
-#: config/settings/base.py:421
+#: config/settings/base.py:420
 msgid "Operations"
 msgstr "العمليات"
 
-#: config/settings/base.py:424
+#: config/settings/base.py:423
 msgid "Task results"
 msgstr "نتائج المهام"
 
-#: config/settings/base.py:434
+#: config/settings/base.py:433
 msgid "Login attempts"
 msgstr "محاولات تسجيل الدخول"
+
+#: templates/account/email/account_already_exists_message.html:4
+#: templates/account/email/account_already_exists_message.html:7
+msgid "You already have an account"
+msgstr "لديك حساب بالفعل"
+
+#: templates/account/email/account_already_exists_message.html:8
+msgid ""
+"Someone tried to sign up with this email address, but an account with it "
+"already exists. Sign in instead - a code is emailed to you each time, no "
+"password needed."
+msgstr ""
+"حاول شخص ما إنشاء حساب بهذا البريد الإلكتروني، لكن يوجد حساب به بالفعل. "
+"سجّل دخولك بدلًا من ذلك؛ يصلك رمز عبر البريد في كل مرة دون الحاجة إلى كلمة "
+"مرور."
+
+#: templates/account/email/account_already_exists_message.html:9
+#: templates/account/email/email_confirmation_message.html:10
+#: templates/account/email/login_code_message.html:11
+#: templates/account/email/unknown_account_message.html:11
+msgid "This mail can be safely ignored if you did not initiate this action."
+msgstr "يمكنك تجاهل هذه الرسالة بأمان إن لم تكن أنت من بدأ هذا الإجراء."
 
 #: templates/account/email/email_confirmation_message.html:4
 #: templates/account/email/email_confirmation_message.html:7
@@ -846,11 +890,6 @@ msgstr "أكّد بريدك الإلكتروني"
 msgid "Enter this code to verify your email address:"
 msgstr "أدخل هذا الرمز للتحقق من بريدك الإلكتروني:"
 
-#: templates/account/email/email_confirmation_message.html:10
-#: templates/account/email/login_code_message.html:11
-msgid "This mail can be safely ignored if you did not initiate this action."
-msgstr "يمكنك تجاهل هذه الرسالة بأمان إن لم تكن أنت من بدأ هذا الإجراء."
-
 #: templates/account/email/login_code_message.html:4
 #: templates/account/email/login_code_message.html:7
 msgid "Your sign-in code"
@@ -860,10 +899,24 @@ msgstr "رمز تسجيل الدخول"
 msgid "Enter this code to continue signing in:"
 msgstr "أدخل هذا الرمز لمتابعة تسجيل الدخول:"
 
-#: templates/account/email/login_code_message.html:10
-#, python-format
-msgid "This code expires in %(minutes)s minutes."
-msgstr "تنتهي صلاحية هذا الرمز خلال %(minutes)s دقائق."
+#: templates/account/email/unknown_account_message.html:4
+#: templates/account/email/unknown_account_message.html:7
+msgid "No account with this email"
+msgstr "لا يوجد حساب بهذا البريد الإلكتروني"
+
+#: templates/account/email/unknown_account_message.html:8
+msgid ""
+"Someone asked for a sign-in code with this email address, but there is no "
+"account for it."
+msgstr "طلب شخص ما رمز تسجيل دخول لهذا البريد الإلكتروني، لكن لا يوجد حساب له."
+
+#: templates/account/email/unknown_account_message.html:9
+msgid "If that was you, create an account first:"
+msgstr "إن كنت أنت من طلب ذلك، فأنشئ حسابًا أولًا:"
+
+#: templates/account/email/unknown_account_message.html:10
+msgid "Create an account"
+msgstr "إنشاء حساب"
 
 #: templates/admin/notifications/broadcast/compose.html:25
 #: templates/admin/notifications/broadcast/compose.html:120
@@ -905,8 +958,12 @@ msgid "New broadcast"
 msgstr "بث جديد"
 
 #: templates/admin/notifications/broadcast/compose.html:37
-msgid "Compose once, deliver to every targeted recipient. Nothing sends until you dispatch the draft from the broadcast page."
-msgstr "اكتب مرة واحدة، ويصل إلى كل مستلم مستهدف. لا يُرسل شيء حتى تبث المسودة من صفحة البث."
+msgid ""
+"Compose once, deliver to every targeted recipient. Nothing sends until you "
+"dispatch the draft from the broadcast page."
+msgstr ""
+"اكتب مرة واحدة، ويصل إلى كل مستلم مستهدف. لا يُرسل شيء حتى تبث المسودة من "
+"صفحة البث."
 
 #: templates/admin/notifications/broadcast/compose.html:57
 #: templates/admin/notifications/notificationkindconfig/change_list.html:81
@@ -939,8 +996,11 @@ msgid "Send to"
 msgstr "إرسال إلى"
 
 #: templates/admin/notifications/broadcast/compose.html:147
-msgid "SMS is billed per message. Check the reach above before creating this draft."
-msgstr "تُحتسب تكلفة الرسائل النصية لكل رسالة. راجع مدى الوصول أعلاه قبل إنشاء هذه المسودة."
+msgid ""
+"SMS is billed per message. Check the reach above before creating this draft."
+msgstr ""
+"تُحتسب تكلفة الرسائل النصية لكل رسالة. راجع مدى الوصول أعلاه قبل إنشاء هذه "
+"المسودة."
 
 #: templates/admin/notifications/broadcast/compose.html:154
 #: templates/admin/notifications/broadcast/compose.html:177
@@ -984,12 +1044,21 @@ msgid "Unsaved changes"
 msgstr "تغييرات غير محفوظة"
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:33
-msgid "What each action sends, and where. Changes apply to the very next send; the in-app inbox entry is always written — all channels off means inbox only."
-msgstr "ما يرسله كل إجراء، وإلى أين. تسري التغييرات على الإرسال التالي مباشرة؛ ويُكتب إدخال صندوق الوارد داخل التطبيق دائمًا — تعطيل جميع القنوات يعني صندوق الوارد فقط."
+msgid ""
+"What each action sends, and where. Changes apply to the very next send; the "
+"in-app inbox entry is always written — all channels off means inbox only."
+msgstr ""
+"ما يرسله كل إجراء، وإلى أين. تسري التغييرات على الإرسال التالي مباشرة؛ ويُكتب "
+"إدخال صندوق الوارد داخل التطبيق دائمًا — تعطيل جميع القنوات يعني صندوق الوارد "
+"فقط."
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:48
-msgid "The variables this action provides — the only placeholders its message may use."
-msgstr "المتغيرات التي يوفرها هذا الإجراء — وهي المتغيرات الوحيدة التي يمكن لرسالته استخدامها."
+msgid ""
+"The variables this action provides — the only placeholders its message may "
+"use."
+msgstr ""
+"المتغيرات التي يوفرها هذا الإجراء — وهي المتغيرات الوحيدة التي يمكن لرسالته "
+"استخدامها."
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:54
 msgid "Full form"
@@ -1000,7 +1069,9 @@ msgid "Save"
 msgstr "حفظ"
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:83
-msgid "Written per broadcast — title and body pass through exactly as the operator types them."
+msgid ""
+"Written per broadcast — title and body pass through exactly as the operator "
+"types them."
 msgstr "تُكتب لكل بث على حدة — يمرّ العنوان والنص تمامًا كما يكتبهما المشغّل."
 
 #: templates/admin/notifications/notificationkindconfig/change_list.html:86

@@ -6,7 +6,10 @@ from apps.common.admin import on_change
 
 CAN_ADD = False  # users exist only via signup; superuser via `just superuser`
 CAN_CHANGE = True
-CAN_DELETE = True
+# Account removal is deactivation (users.user_deactivate): payments, wallets
+# and saved cards PROTECT their user FK, so a row delete of anyone who ever
+# paid raised ProtectedError in the admin.
+CAN_DELETE = False
 
 
 def _not_superuser(context: AdminContext) -> bool:

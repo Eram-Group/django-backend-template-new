@@ -54,7 +54,7 @@ def notification_read(
 
 
 # The uuid: converter is load-bearing: a bare {notification_id} compiles to a
-# [^/]+ wildcard that would swallow /preferences and /devices for DELETE.
+# [^/]+ wildcard that would swallow sibling literal paths (e.g. /devices).
 @router.delete(
     "/{uuid:notification_id}", response={204: None}, summary="Delete one notification"
 )

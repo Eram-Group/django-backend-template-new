@@ -8,6 +8,10 @@ task queue), one Docker image deployed as an ECS Express Mode web service +
 a Fargate worker (CDK in `infra/`). Arabic-first
 (ar/en).
 
+**Starting a new project from this repo?** Follow
+[docs/NEW_PROJECT.md](docs/NEW_PROJECT.md) first — it lists every value to
+change and every optional module to keep or drop.
+
 How the code is organized: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md);
 why the AWS shape is what it is: [docs/AWS_ARCHITECTURE.md](docs/AWS_ARCHITECTURE.md);
 how to operate it: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md);
@@ -30,9 +34,9 @@ Prerequisites: [uv](https://docs.astral.sh/uv/), [just](https://just.systems),
 Docker (for Postgres + Mailpit).
 
 ```bash
-just bootstrap   # (alias: install, setup) deps, .env, git hooks, postgres:18 + mailpit, migrate + cache table
+just bootstrap   # deps, .env, git hooks, postgres:18 + mailpit, migrate + cache table
 just superuser   # admin@example.com / admin (from .env, idempotent)
-just seed        # ~300 realistic fake users (see "Seed data" below)
+just seed        # ~300 realistic fake users (scale 0.3; see "Seed data" below)
 just run         # dev server on http://localhost:8000
 ```
 
@@ -54,14 +58,14 @@ Run `just` for the full list. The ones you'll use daily:
 
 | Recipe | Does |
 |---|---|
-| `just run` | runserver_plus with the local settings module |
+| `just run` | runserver with the local settings module (debug toolbar on) |
 | `just test [args]` | pytest (append paths/flags as needed) |
 | `just lint` / `just fmt` / `just typecheck` | ruff check / ruff format / mypy --strict |
 | `just manage <cmd>` | any manage.py command |
 | `just migrate` / `just makemigrations` | migrations (+ cache table) |
-| `just seed <scale> <seed>` | fake data; scale 0..1 is logarithmic (0 = 10 users, 1 = 1,000,000), seed = RNG seed |
+| `just seed [scale] [seed]` | fake data; scale 0..1 is logarithmic (0 = 10 users, 0.3 = ~300, 1 = 1,000,000), seed = RNG seed; defaults 0.3 / 0 |
 | `just worker` | drain the task queue (`manage.py db_worker`) |
-| `just shell` | shell_plus |
+| `just shell` | Django shell |
 | `just db-reset` | destroy volumes + re-migrate (asks first) |
 
 ## Testing & quality gates
@@ -132,23 +136,25 @@ definitions with secrets pulled from Secrets Manager.
 
 One image, three run modes: **web** (gunicorn, ECS Express Mode), **worker**
 (`db_worker`, Fargate), **release task** (`check --deploy` + `migrate` +
-`createcachetable` + `collectstatic`, run before each rollout from the exact
-revision being deployed). Infrastructure is code: [`infra/`](infra) (AWS CDK,
-Python — `just infra-*`). The full runbook — architecture, cost, one-time
-bootstrap, deploy flow, schedules, operations — is
-[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+`createcachetable` + `seed_notification_config` + `collectstatic`, run before
+each rollout from the exact revision being deployed). Infrastructure is code: [`infra/`](infra) (AWS CDK,
+Python — `just infra-*`; needs Node, `jq` and AWS credentials in the shell,
+e.g. `AWS_PROFILE=<profile> just infra-deploy dev`). The full runbook —
+architecture, cost, one-time bootstrap, deploy flow, schedules, operations —
+is [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ### GitHub variables / secrets
 
 Repo-level: `AWS_ECR_REPOSITORY`, `AWS_OIDC_ROLE_ARN`, `AWS_REGION`,
-`DEV_DEPLOY_ENABLED` (sentinel: any value), `APIDOG_PROJECT_ID` (+ secret
-`APIDOG_ACCESS_TOKEN`). Per environment (`dev`, `production`, optionally
-`staging`), all printed as `App-<env>` stack outputs: `ECS_CLUSTER`,
-`ECS_FAMILY_WEB`, `ECS_FAMILY_WORKER`, `ECS_SERVICE_WORKER`,
-`EXPRESS_SERVICE_ARN`, `EXPRESS_SERVICE_NAME`, `ECS_SUBNETS`,
-`ECS_SECURITY_GROUPS`, `ECS_ASSIGN_PUBLIC_IP`. Every deploy stage skips
-gracefully until its variables exist — the repo stays green with zero infra
-provisioned.
+`APIDOG_PROJECT_ID`, `APIDOG_SERVER_URL` (+ secret `APIDOG_ACCESS_TOKEN`).
+Per environment (`dev`, `production`, optionally `staging`), all printed as
+`<app>-App-<env>` stack outputs: `ECS_CLUSTER`, `ECS_FAMILY_WEB`,
+`ECS_FAMILY_WORKER`, `ECS_SERVICE_WORKER`, `EXPRESS_SERVICE_ARN`,
+`EXPRESS_SERVICE_NAME`, `ECS_SUBNETS`, `ECS_SECURITY_GROUPS`. The deploy
+workflows expect every variable to exist and fail the run on a missing one
+(`ci.yml` alone stays green without infrastructure) — provision the dev
+environment (docs/DEPLOYMENT.md, bootstrap steps 1–9) before the first push
+to `main`.
 
 ### Pipelines
 

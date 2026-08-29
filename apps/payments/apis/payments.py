@@ -8,6 +8,7 @@ from ninja.pagination import paginate
 
 from apps.common.pagination import CursorPagination
 from apps.common.requests import AuthedRequest
+from apps.common.throttling import PrincipalRateThrottle
 from apps.payments import selectors
 from apps.payments import services
 from apps.payments.models import Payment
@@ -19,7 +20,15 @@ from apps.users.models import User
 router = Router(tags=["payments"])
 
 
-@router.post("", response=PaymentDetail, summary="Start a checkout")
+# Every checkout opens a gateway session (an outbound call, a pending row, a
+# card-charge attempt on the saved-card path): far tighter than the API-wide
+# ceiling, per user.
+@router.post(
+    "",
+    response=PaymentDetail,
+    summary="Start a checkout",
+    throttle=[PrincipalRateThrottle("10/m", scope="checkout")],
+)
 def payment_create(request: AuthedRequest[User], payload: PaymentCreateIn) -> Payment:
     """Returns the payment with ``checkout_url`` - open it to complete the
     payment; then poll GET /payments/{id} (the webhook flips the status).

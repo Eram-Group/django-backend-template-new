@@ -163,7 +163,8 @@ jobs:
           docker run --rm --network host --env-file .env.image backend:local
           sh -c "python manage.py check --deploy --fail-level WARNING
           && python manage.py migrate --noinput
-          && python manage.py createcachetable"
+          && python manage.py createcachetable
+          && python manage.py seed_notification_config"
 
       - name: Boot web + smoke
         run: |

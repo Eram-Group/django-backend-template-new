@@ -37,7 +37,9 @@ def worker_service(
             )
         ],
         circuit_breaker=ecs.DeploymentCircuitBreaker(enable=True, rollback=True),
-        min_healthy_percent=0,
+        # Start the new task before stopping the old one: with min 0 every
+        # rollout drained the worker count to zero and stalled the queue.
+        min_healthy_percent=100,
         max_healthy_percent=200,
         enable_execute_command=True,
         propagate_tags=ecs.PropagatedTagSource.SERVICE,

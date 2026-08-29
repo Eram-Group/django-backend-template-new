@@ -60,8 +60,9 @@ balancer.
 - **dev** ≈ $23/month, **production** ≈ $55/month per app, plus a share of the
   two shared pieces (load balancer ≈ $34, dev database ≈ $30 — split across
   all ~10 apps).
-- Roughly **$78/month per app** for dev + production, versus ≈ $105–120 on the
-  previous App Runner setup.
+- Roughly **$91/month per app** for dev + production once those shares are
+  counted (the per-environment detail is in docs/DEPLOYMENT.md), versus
+  ≈ $105–120 on the previous App Runner setup.
 
 ## Why these choices
 

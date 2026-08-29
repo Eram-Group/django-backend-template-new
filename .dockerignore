@@ -35,7 +35,6 @@ docs
 infra
 
 # Reference material (never ship)
-Gawdat_Django_Template
 
 # Local runtime artifacts (produced by release step / runserver)
 staticfiles

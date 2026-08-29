@@ -14,7 +14,6 @@ from django.utils import timezone
 from apps.notifications import selectors
 from apps.notifications.catalog import MessageTemplate
 from apps.notifications.catalog import catalog_entry
-from apps.notifications.constants import DeliveryStatus
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import Notification
 from apps.notifications.models import NotificationDelivery
@@ -61,12 +60,8 @@ def notification_send(
         delivery.full_clean()
         deliveries.append(delivery)
     NotificationDelivery.objects.bulk_create(deliveries)
-    pending_ids = [
-        str(delivery.pk)
-        for delivery in deliveries
-        if delivery.status == DeliveryStatus.PENDING
-    ]
-    if pending_ids:
+    if deliveries:
+        pending_ids = [str(delivery.pk) for delivery in deliveries]
         transaction.on_commit(lambda: deliver_notifications.enqueue(pending_ids))
     return notification
 

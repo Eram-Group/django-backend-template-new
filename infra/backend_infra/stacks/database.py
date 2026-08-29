@@ -1,6 +1,6 @@
 """Stateful stack for a dedicated (production) database.
 
-Kept apart from ``App-<env>`` so the stateless stack can be rolled back,
+Kept apart from ``<app>-App-<env>`` so the stateless stack can be rolled back,
 deleted and recreated freely while the instance - and its data - never move.
 """
 

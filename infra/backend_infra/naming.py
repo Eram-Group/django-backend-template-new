@@ -8,6 +8,21 @@ from backend_infra.config import EnvConfig
 MAIN_CONTAINER = "Main"
 
 
+# CloudFormation stack names are unique per account+region, and every app
+# copied from this template deploys into the same account - so the app name
+# leads every stack name. The justfile and infra/scripts quote these shapes.
+def shared_stack(app: AppConfig) -> str:
+    return f"{app.name}-Shared"
+
+
+def db_stack(app: AppConfig, env_name: str) -> str:
+    return f"{app.name}-Db-{env_name}"
+
+
+def app_stack(app: AppConfig, env_name: str) -> str:
+    return f"{app.name}-App-{env_name}"
+
+
 def web_family(app: AppConfig, env: EnvConfig) -> str:
     return f"{app.name}-{env.name}-web"
 
@@ -24,5 +39,9 @@ def bucket_name(app: AppConfig, env: EnvConfig) -> str:
     return f"eram-{app.name}-{env.name}"
 
 
+def log_group_prefix(app: AppConfig) -> str:
+    return f"/aws/ecs/{app.name}-"
+
+
 def log_group(app: AppConfig, env: EnvConfig, role: str) -> str:
-    return f"/aws/ecs/{app.name}-{env.name}-{role}"
+    return f"{log_group_prefix(app)}{env.name}-{role}"

@@ -37,10 +37,12 @@ docs/ARCHITECTURE.md explains the conventions in depth.
 - Deploy: ECS Express Mode (web) + Fargate (worker); the task-definition
   container is named `Main` — load-bearing for Express Mode and the CD
   render steps, never rename. `ENVIRONMENT` ∈ local/dev/staging/production.
-  Stacks per app: `Shared`, `Db-<env>` (stateful, dedicated RDS), `App-<env>`
-  (stateless). Account-level resources (GitHub OIDC provider, shared dev RDS,
-  DB security group) are referenced by value in `AppConfig`, never created —
-  this template is copied into many apps and none may own them.
+  Stacks per app, app-name-prefixed because every app shares one account:
+  `<app>-Shared`, `<app>-Db-<env>` (stateful, dedicated RDS), `<app>-App-<env>`
+  (stateless) — names in `infra/backend_infra/naming.py`. Account-level
+  resources (GitHub OIDC provider, shared dev RDS, DB security group) are
+  referenced by value in `AppConfig`, never created — this template is
+  copied into many apps and none may own them.
 - Admin: subclass `apps.common.admin.BaseModelAdmin`; declare
   `can_add/can_change/can_delete`; field rules via `FieldPermissions`;
   scaffold new packages with `manage.py generate_dashboard <app> <Model>`.

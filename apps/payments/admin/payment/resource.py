@@ -1,19 +1,27 @@
-"""Import-export resource for Payment (explicit fields only)."""
+"""Import-export resource for Payment (explicit fields only).
+
+Gateway payloads (``gateway_response`` / ``gateway_callback``) and the
+checkout URL stay OUT: raw provider data, read by non-engineers.
+"""
 
 from apps.common.admin import BaseModelResource
 from apps.payments.models import Payment
 
 
 class PaymentResource(BaseModelResource):
-    # Exports are read by non-engineers - rename columns and format dates:
-    #   from import_export.fields import Field
-    #   from import_export.widgets import DateTimeWidget
-    #
-    #   created_at = Field(
-    #       attribute="created_at",
-    #       column_name="Created At",
-    #       widget=DateTimeWidget(format="%Y-%m-%d %H:%M:%S"),
-    #   )
     class Meta:
         model = Payment
-        fields = ("id", "created_at")
+        fields = (
+            "id",
+            "created_at",
+            "user",
+            "kind",
+            "description",
+            "amount",
+            "currency",
+            "status",
+            "gateway",
+            "gateway_charge_id",
+            "gateway_transaction_id",
+            "paid_at",
+        )

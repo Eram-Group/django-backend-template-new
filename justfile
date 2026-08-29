@@ -7,7 +7,9 @@ set dotenv-load := true
 
 export DJANGO_SETTINGS_MODULE := "config.settings.local"
 
-app_name := `grep -o 'name="[^"]*"' infra/backend_infra/config.py | head -1 | cut -d'"' -f2`
+# The app name from `APP = AppConfig(name="...")` - anchored on that line so a
+# `name=` elsewhere in config.py (a ScheduledJob, a Subnet) can never win.
+app_name := `grep -A1 '^APP = AppConfig(' infra/backend_infra/config.py | grep -o 'name="[^"]*"' | cut -d'"' -f2`
 
 # Default: list all recipes.
 default:
@@ -62,6 +64,7 @@ typecheck:
 migrate:
     uv run manage.py migrate
     uv run manage.py createcachetable
+    uv run manage.py seed_notification_config
 
 # makemigrations passthrough, e.g. `just makemigrations users`.
 makemigrations *args:
@@ -75,8 +78,8 @@ shell *args:
 superuser:
     uv run manage.py createsu
 
-# Seed fake data: scale 0..1 is logarithmic (0 = 10 users, 1 = 1,000,000); seed = RNG seed.
-seed scale seed:
+# Seed fake data: scale 0..1 is logarithmic (0 = 10 users, 0.3 = ~300, 1 = 1,000,000); seed = RNG seed.
+seed scale="0.3" seed="0":
     uv run manage.py seed_db --scale {{ scale }} --seed {{ seed }}
 
 # Destroy the database volume and rebuild from zero.
@@ -122,20 +125,20 @@ infra-lint:
 
 # Diff one environment against what is deployed, pinning the LIVE image tag.
 infra-diff env:
-    cd infra && npx cdk diff App-{{ env }} $(./scripts/live_context.sh {{ app_name }} {{ env }})
+    cd infra && npx cdk diff {{ app_name }}-App-{{ env }} $(./scripts/live_context.sh {{ app_name }} {{ env }})
 
 # Deploy the app-level stack (ECR, cluster, roles). Once per app.
 infra-deploy-shared:
-    cd infra && npx cdk deploy Shared --require-approval broadening
+    cd infra && npx cdk deploy {{ app_name }}-Shared --require-approval broadening
 
 # Deploy an environment that is already running, keeping its live image tag.
 infra-deploy env:
-    cd infra && npx cdk deploy App-{{ env }} --require-approval broadening \
+    cd infra && npx cdk deploy {{ app_name }}-App-{{ env }} --require-approval broadening \
         $(./scripts/live_context.sh {{ app_name }} {{ env }})
 
 # First deploy of an environment: the image tag (git sha in ECR) is explicit.
 infra-deploy-first env tag:
-    cd infra && npx cdk deploy App-{{ env }} --require-approval broadening \
+    cd infra && npx cdk deploy {{ app_name }}-App-{{ env }} --require-approval broadening \
         -c image_tag={{ tag }}
 
 # JSON skeleton of the <env>/<app> Secrets Manager secret (every key present).

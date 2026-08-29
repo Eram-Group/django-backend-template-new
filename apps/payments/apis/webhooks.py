@@ -34,6 +34,7 @@ router = Router(tags=["payments-webhooks"])
 @router.post(
     "/webhooks/{gateway_name}",
     auth=None,
+    throttle=[],  # HMAC-verified; a provider retry burst must never be dropped
     response=dict[str, bool],
     summary="Gateway webhook (server-to-server)",
     include_in_schema=False,

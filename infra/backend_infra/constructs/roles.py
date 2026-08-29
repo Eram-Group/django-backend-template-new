@@ -67,9 +67,17 @@ def github_deploy_role(
     provider_arn: str,
     github_repo: str,
     ecr_repository_arn: str,
+    cluster_arn: str,
+    log_group_arns: list[str],
     passable_role_arns: list[str],
 ) -> iam.Role:
-    """Assumed by the deploy workflows via OIDC - no static AWS keys."""
+    """Assumed by the deploy workflows via OIDC - no static AWS keys.
+
+    Many apps share one AWS account, so every statement is scoped to THIS
+    app: its ECR repository, its cluster (``ecs:cluster`` condition), its log
+    groups and its own task/execution roles. The role must never be able to
+    run a task or roll a service on another app's cluster.
+    """
     role = iam.Role(
         scope,
         construct_id,
@@ -110,21 +118,42 @@ def github_deploy_role(
             resources=[ecr_repository_arn],
         )
     )
-    # ECS control-plane calls are not resource-scopable in a useful way for
-    # RegisterTaskDefinition; the role is already trust-scoped to one repo.
+    # Task definitions have no cluster and no useful resource ARN before they
+    # exist; RunTask/UpdateService with them is what the cluster condition and
+    # the PassRole allowlist below constrain.
     role.add_to_policy(
         iam.PolicyStatement(
             actions=[
                 "ecs:DescribeTaskDefinition",
                 "ecs:RegisterTaskDefinition",
+                "ecs:TagResource",
+            ],
+            resources=["*"],
+        )
+    )
+    # Service rollouts and one-off tasks: this app's cluster only.
+    role.add_to_policy(
+        iam.PolicyStatement(
+            actions=[
                 "ecs:DescribeServices",
                 "ecs:UpdateService",
                 "ecs:RunTask",
                 "ecs:DescribeTasks",
                 "ecs:ListTasks",
+            ],
+            resources=["*"],
+            conditions={"ArnEquals": {"ecs:cluster": cluster_arn}},
+        )
+    )
+    # Express Mode services: the service ARN shape and the condition keys the
+    # Express APIs honour are not in the Service Authorization Reference yet
+    # (2026-08-29), so these two calls stay unscoped. Re-scope by service ARN
+    # the moment AWS documents it.
+    role.add_to_policy(
+        iam.PolicyStatement(
+            actions=[
                 "ecs:DescribeExpressGatewayService",
                 "ecs:UpdateExpressGatewayService",
-                "ecs:TagResource",
             ],
             resources=["*"],
         )
@@ -143,6 +172,7 @@ def github_deploy_role(
             },
         )
     )
+    # Failure-path diagnostics in the deploy workflow: this app's log groups.
     role.add_to_policy(
         iam.PolicyStatement(
             actions=[
@@ -150,7 +180,7 @@ def github_deploy_role(
                 "logs:FilterLogEvents",
                 "logs:DescribeLogStreams",
             ],
-            resources=["*"],
+            resources=[*log_group_arns, *(f"{arn}:*" for arn in log_group_arns)],
         )
     )
     return role

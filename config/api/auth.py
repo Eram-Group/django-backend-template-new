@@ -34,5 +34,10 @@ class SessionTokenAuth(APIKeyHeader):
         return user
 
 
-# Tried in order: session cookie (browser SPA), then app-client token.
-api_auth = [django_auth, SessionTokenAuth()]
+# Order is load-bearing. ninja's ``django_auth`` (an APIKeyCookie) runs the
+# CSRF check BEFORE looking for a cookie, and an auth callback that raises
+# short-circuits the whole chain - so with the cookie auth first, an app
+# client sending only X-Session-Token got 403 "CSRF check Failed" on every
+# unsafe method. Token first: app clients resolve without touching CSRF;
+# cookie clients fall through and still get CSRF enforced.
+api_auth = [SessionTokenAuth(), django_auth]

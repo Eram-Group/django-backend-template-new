@@ -20,7 +20,6 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.http import HttpRequest
 from django.http import HttpResponse
-from django_ratelimit.exceptions import Ratelimited
 from ninja import NinjaAPI
 from ninja.errors import HttpError
 from ninja.errors import ValidationError as RequestValidationError
@@ -92,9 +91,3 @@ def register_exception_handlers(api: NinjaAPI) -> None:
     @api.exception_handler(Http404)
     def not_found(request: HttpRequest, exc: Http404) -> HttpResponse:
         return respond(request, message="Not found.", status=404, extra={})
-
-    @api.exception_handler(Ratelimited)
-    def ratelimited(request: HttpRequest, exc: Ratelimited) -> HttpResponse:
-        # django-ratelimit raises a PermissionDenied subclass; without this
-        # handler a burst would surface as a 403/500 instead of 429.
-        return respond(request, message="Too many requests.", status=429, extra={})

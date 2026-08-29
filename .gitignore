@@ -271,8 +271,8 @@ tags
 # IDE
 .idea/
 
-# Reference template (read-only concept quarry - never committed)
-Gawdat_Django_Template/
+# Per-machine Claude Code settings (permission allowlists, live hostnames)
+.claude/settings.local.json
 
 # CDK (infra/)
 infra/cdk.out/

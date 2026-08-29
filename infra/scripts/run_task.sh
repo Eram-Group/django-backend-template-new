@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run a one-off command on the worker task definition of one environment and
 # stream its exit code back (createsu, Sentry smoke, ad-hoc management
-# commands). Network settings come from the App-<env> stack outputs.
+# commands). Network settings come from the <app>-App-<env> stack outputs.
 #
 #   usage: run_task.sh <app> <env> <command...>
 set -euo pipefail
@@ -9,7 +9,7 @@ set -euo pipefail
 app="${1:?app name}"; env="${2:?env name}"; shift 2
 [ "$#" -gt 0 ] || { echo "usage: run_task.sh <app> <env> <command...>" >&2; exit 2; }
 
-stack="App-${env}"
+stack="${app}-App-${env}"
 output() {
   aws cloudformation describe-stacks --stack-name "$stack" \
     --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text

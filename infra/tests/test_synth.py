@@ -3,6 +3,7 @@
 import aws_cdk as cdk
 import pytest
 from aws_cdk import assertions
+from backend_infra import naming
 from backend_infra.config import APP
 from backend_infra.config import ENVIRONMENTS
 from backend_infra.config import SCHEDULES
@@ -15,18 +16,18 @@ from backend_infra.stacks.shared import SharedStack
 def templates() -> dict[str, assertions.Template]:
     app = cdk.App()
     env = cdk.Environment(account=APP.account, region=APP.region)
-    shared = SharedStack(app, "Shared", app=APP, env=env)
+    shared = SharedStack(app, naming.shared_stack(APP), app=APP, env=env)
     stacks = {"Shared": shared}
     for name, cfg in ENVIRONMENTS.items():
         database = None
         if cfg.database == "dedicated":
             stacks[f"Db-{name}"] = DatabaseStack(
-                app, f"Db-{name}", app=APP, env_config=cfg, env=env
+                app, naming.db_stack(APP, name), app=APP, env_config=cfg, env=env
             )
             database = stacks[f"Db-{name}"].database  # type: ignore[attr-defined]
         stacks[f"App-{name}"] = AppEnvStack(
             app,
-            f"App-{name}",
+            naming.app_stack(APP, name),
             app=APP,
             env_config=cfg,
             shared=shared,
@@ -109,6 +110,22 @@ def test_express_service_uses_custom_task_definition(
 
 
 @pytest.mark.parametrize("env_name", list(ENVIRONMENTS))
+def test_worker_never_drains_to_zero_on_rollout(
+    templates: dict[str, assertions.Template], env_name: str
+) -> None:
+    t = templates[f"App-{env_name}"]
+    t.has_resource_properties(
+        "AWS::ECS::Service",
+        {
+            "DesiredCount": ENVIRONMENTS[env_name].worker_count,
+            "DeploymentConfiguration": assertions.Match.object_like(
+                {"MinimumHealthyPercent": 100, "MaximumPercent": 200}
+            ),
+        },
+    )
+
+
+@pytest.mark.parametrize("env_name", list(ENVIRONMENTS))
 def test_worker_capacity_provider_matches_config(
     templates: dict[str, assertions.Template], env_name: str
 ) -> None:
@@ -160,10 +177,57 @@ def test_production_database_is_its_own_protected_stack(
         },
     )
     db.has_resource("AWS::RDS::DBInstance", {"DeletionPolicy": "Retain"})
+    # The retained instance is useless without its password: both the
+    # generated master secret and the composed DATABASE_URL outlive the stack.
+    secrets = db.find_resources("AWS::SecretsManager::Secret")
+    assert len(secrets) == 2
+    for r in secrets.values():
+        assert r["DeletionPolicy"] == "Retain", r
     app = templates["App-production"]
     app.resource_count_is("AWS::RDS::DBInstance", 0)
     app.resource_count_is("AWS::CertificateManager::Certificate", 1)
     app.resource_count_is("AWS::Route53::RecordSet", 1)
+
+
+def test_stack_names_lead_with_the_app_name() -> None:
+    """Many apps share one account+region; bare Shared/App-<env> would collide."""
+    assert naming.shared_stack(APP) == f"{APP.name}-Shared"
+    assert naming.db_stack(APP, "production") == f"{APP.name}-Db-production"
+    assert naming.app_stack(APP, "dev") == f"{APP.name}-App-dev"
+    app = cdk.App()
+    stack = SharedStack(app, naming.shared_stack(APP), app=APP)
+    assert stack.stack_name == f"{APP.name}-Shared"
+
+
+def test_deploy_role_is_scoped_to_this_app(
+    templates: dict[str, assertions.Template],
+) -> None:
+    """The GitHub role must not be able to roll or run tasks on another app."""
+    t = templates["Shared"]
+    policies = t.find_resources("AWS::IAM::Policy")
+    statements = [
+        s
+        for p in policies.values()
+        for s in p["Properties"]["PolicyDocument"]["Statement"]
+    ]
+    by_action: dict[str, list[dict[str, object]]] = {}
+    for s in statements:
+        for action in s["Action"] if isinstance(s["Action"], list) else [s["Action"]]:
+            by_action.setdefault(action, []).append(s)
+    for action in ("ecs:RunTask", "ecs:UpdateService", "ecs:DescribeServices"):
+        (statement,) = by_action[action]
+        assert "ecs:cluster" in statement["Condition"]["ArnEquals"], action  # type: ignore[index]
+    (pass_role,) = by_action["iam:PassRole"]
+    resources = pass_role["Resource"]
+    assert isinstance(resources, list)
+    patterns = [r for r in resources if isinstance(r, str)]
+    assert patterns == [f"arn:aws:iam::{APP.account}:role/{APP.name}-App-*"]
+    (logs_stmt,) = by_action["logs:GetLogEvents"]
+    assert all(
+        f":log-group:/aws/ecs/{APP.name}-" in r
+        for r in logs_stmt["Resource"]  # type: ignore[union-attr]
+    )
+    assert "*" not in logs_stmt["Resource"]  # type: ignore[operator]
 
 
 def test_dev_uses_shared_database(templates: dict[str, assertions.Template]) -> None:

@@ -13,13 +13,14 @@ validates against:
 - ``category`` and the WhatsApp template mapping (Meta hosts the approved
   per-language bodies, so entries carry only the template NAME plus the
   ordered context keys that fill its {{1}}, {{2}}, ... slots).
-- ``title``/``body``/``default_channels``: SEED values only - what migration
-  0004 wrote into each config row and what the test reset restores; edits
-  here do not change a database that already has its rows.
+- ``title``/``body``/``default_channels``: SEED values only - what
+  ``manage.py seed_notification_config`` (release step) writes into a kind's
+  config row when it has none, and what the test reset restores; edits here
+  do not change a database that already has its rows.
 
-Entries are append-only: adding a NotificationKind requires seeding its
-config row in the same change; removing one requires a data migration for
-surviving rows. test_catalog and test_config keep everything in lockstep.
+Entries are append-only: adding a NotificationKind gets its row on the next
+release; removing one requires a data migration for surviving rows.
+test_catalog and test_config keep everything in lockstep.
 """
 
 from collections.abc import Mapping

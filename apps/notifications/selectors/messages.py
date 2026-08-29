@@ -25,8 +25,9 @@ from apps.notifications.models import NotificationKindConfig
 ConfigMap = Mapping[NotificationKind, NotificationKindConfig]
 
 _MISSING_ROW_HINT = (
-    "seeded by migration 0005; a new NotificationKind must seed its row "
-    "in the same change (test_config enforces the pairing)"
+    "seeded by `manage.py seed_notification_config` in the release step; a new "
+    "NotificationKind needs its catalog entry in the same change "
+    "(test_config enforces the pairing)"
 )
 
 

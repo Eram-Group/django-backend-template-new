@@ -124,8 +124,12 @@ Every API error has ONE shape, produced in ONE place
 - The ninja API accepts **either** the session cookie (browser SPA) **or**
   `X-Session-Token` (mobile/app clients) — `config/api/auth.py`.
 - Brute-force lockout: django-axes, 5 failures per (username, ip), 1h
-  cooloff, disabled in tests. Rate limiting: django-ratelimit over a LocMem
-  cache alias (per-container; Redis/WAF is the documented upgrade).
+  cooloff, disabled in tests. Rate limiting: allauth's own per-ip/per-key
+  limits on `/_allauth/` (`ACCOUNT_RATE_LIMITS` defaults) and ninja
+  throttles on `/api/v1/` (API-wide per-principal ceiling in
+  `config/api/v1.py`, tighter `throttle=` on costly endpoints such as
+  checkout) — all counted in the shared DatabaseCache, so ceilings hold
+  across web tasks.
 - **Error-shape decision (2026-07-12)**: `/_allauth/` endpoints keep
   allauth's **native** error format (`{status, errors[]}`) — rewriting
   responses would fork the library's documented contract and its spec.
@@ -387,7 +391,7 @@ per need.
 | Audit history (who changed what) | django-simple-history on the models that need it |
 | Direct-to-S3 uploads | presigned-URL endpoint in a service; client uploads, API stores the key |
 | Embedded mini-schemas | add the `Ref` tier per entity alongside Summary/Detail |
-| Real rate limiting | move the `ratelimit` cache alias to Redis |
+| Edge rate limiting / bot control | AWS WAF on the Express ALB, in front of the app-level throttles |
 | Slow release-step collectstatic | collectfasta |
 | Geo (countries/regions/zones) | postgis image + libgdal in Dockerfile + `django.contrib.gis` |
 | External-API fan-out | gunicorn gevent worker class for the web service |

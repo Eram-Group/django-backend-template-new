@@ -298,3 +298,21 @@ def test_webhook_token_event_with_bad_signature_is_400(client: Client) -> None:
 
     assert response.status_code == 400
     assert not SavedCard.objects.filter(token="tok_hosted_1").exists()
+
+
+def test_checkout_is_throttled_per_user(client: Client) -> None:
+    """10 checkouts a minute per user; the 11th is the 429 envelope and opens
+    no gateway session. Another user is unaffected."""
+    payer = _payer()
+    client.force_login(payer)
+
+    statuses = [_checkout(client).status_code for _ in range(11)]
+
+    assert statuses[:10] == [200] * 10
+    assert statuses[10] == 429
+    assert _checkout(client).json() == {"message": "Too many requests.", "extra": {}}
+    assert Payment.objects.filter(user=payer).count() == 10
+
+    other = Client()
+    other.force_login(_payer())
+    assert _checkout(other).status_code == 200

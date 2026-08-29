@@ -1,6 +1,9 @@
 """Channel resolution: one explicit config row per kind - no fallback layer."""
 
+from io import StringIO
+
 import pytest
+from django.core.management import call_command
 
 from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationKind
@@ -16,10 +19,30 @@ def _set_channels(kind: NotificationKind, channels: list[str]) -> None:
 
 def test_every_kind_has_exactly_one_config_row() -> None:
     """The no-fallback deal: rows ARE the policy, so all of them must exist
-    (migration 0005 seeds them; the conftest reset restores them)."""
+    (the release step seeds them; the conftest reset restores them)."""
     kinds = list(NotificationKindConfig.objects.values_list("kind", flat=True))
 
     assert sorted(kinds) == sorted(NotificationKind.values)
+
+
+def test_seed_command_creates_only_missing_rows_from_catalog() -> None:
+    """Release-step idempotency: a fresh database gets every row, an operator
+    edit on an existing row survives the next deploy."""
+    _set_channels(NotificationKind.WELCOME, [Channel.PUSH])
+    NotificationKindConfig.objects.filter(kind=NotificationKind.PAYMENT_PAID).delete()
+    out = StringIO()
+
+    call_command("seed_notification_config", stdout=out)
+
+    assert out.getvalue().strip() == "created: PAYMENT_PAID"
+    seeded = NotificationKindConfig.objects.get(kind=NotificationKind.PAYMENT_PAID)
+    assert seeded.channels == ["push"]
+    assert seeded.title_en == seeded.title_ar == "Payment received"
+    assert effective_channels(kind=NotificationKind.WELCOME) == frozenset(
+        {Channel.PUSH}
+    )
+    assert call_command("seed_notification_config", stdout=StringIO()) is None
+    assert NotificationKindConfig.objects.count() == len(NotificationKind)
 
 
 def test_seeded_rows_mirror_catalog_seed_channels() -> None:

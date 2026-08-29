@@ -118,18 +118,16 @@ DATABASES = {
 }
 
 # --- Cache / sessions / tasks (Postgres-only infrastructure) --------------
+# One shared cache: it also backs every rate limit (allauth's per-ip/per-key
+# limits on /_allauth/, ninja throttles on /api/v1/), so the counters are
+# global across web tasks - a per-process cache would multiply every ceiling
+# by the task count.
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.db.DatabaseCache",
         "LOCATION": "django_cache",  # created by `manage.py createcachetable`
     },
-    # Per-container counters for django-ratelimit (PLAN: upgrade = Redis/WAF).
-    "ratelimit": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "ratelimit",
-    },
 }
-RATELIMIT_USE_CACHE = "ratelimit"
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 # Two queues: "default" for transactional work (emails, refunds, single
 # notification sends), "bulk" for broadcast dispatch + delivery batches so a
@@ -520,7 +518,16 @@ SECURE_CSP: dict[str, list[str]] = {
     # Admin widgets ship inline styles; scripts stay nonce-gated.
     "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
     "script-src": [CSP.SELF, CSP.NONCE],
+    # These four do NOT fall back to default-src.
+    "base-uri": [CSP.SELF],  # an injected <base> would redirect relative scripts
+    "form-action": [CSP.SELF],  # admin forms post to the admin only
+    "frame-ancestors": [CSP.NONE],  # the CSP twin of X_FRAME_OPTIONS = DENY
+    "object-src": [CSP.NONE],
 }
+# Fetch directives get the CloudFront origin appended in production.py; the
+# navigation/embedding directives above must not (a source list that mixes
+# 'none' with an origin is invalid and browsers drop the whole directive).
+CSP_FETCH_DIRECTIVES = ("default-src", "img-src", "font-src", "style-src", "script-src")
 
 
 # --- Cross-origin (browser SPA clients) ----------------------------------------

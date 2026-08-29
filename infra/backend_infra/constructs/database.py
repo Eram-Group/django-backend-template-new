@@ -31,8 +31,7 @@ def _instance(
     security_group: ec2.ISecurityGroup,
     size: ec2.InstanceSize,
     backup_days: int,
-    username: str,
-    secret_name: str,
+    credentials: rds.Credentials,
     database_name: str | None,
 ) -> rds.DatabaseInstance:
     return rds.DatabaseInstance(
@@ -51,9 +50,7 @@ def _instance(
         storage_encrypted=True,
         multi_az=False,
         database_name=database_name,
-        credentials=rds.Credentials.from_generated_secret(
-            username, secret_name=secret_name, exclude_characters=URL_UNSAFE
-        ),
+        credentials=credentials,
         backup_retention=Duration.days(backup_days),
         delete_automated_backups=False,
         deletion_protection=True,
@@ -79,6 +76,18 @@ class DedicatedDatabase(Construct):
         security_group: ec2.ISecurityGroup,
     ) -> None:
         super().__init__(scope, construct_id)
+        # Created explicitly (not via Credentials.from_generated_secret) so the
+        # removal policy lands on the secret itself: the instance is RETAINed
+        # on stack deletion and its only password must be too, or the retained
+        # database becomes unreachable.
+        master = rds.DatabaseSecret(
+            self,
+            "MasterSecret",
+            username="app",
+            secret_name=f"{secret_prefix}/rds",
+            exclude_characters=URL_UNSAFE,
+        )
+        master.apply_removal_policy(RemovalPolicy.RETAIN)
         self.instance = _instance(
             self,
             "Instance",
@@ -87,12 +96,9 @@ class DedicatedDatabase(Construct):
             security_group=security_group,
             size=ec2.InstanceSize.MICRO,
             backup_days=7,
-            username="app",
-            secret_name=f"{secret_prefix}/rds",
+            credentials=rds.Credentials.from_secret(master),
             database_name="app",
         )
-        master = self.instance.secret
-        assert master is not None  # noqa: S101 - generated above
         # The template only carries a {{resolve:secretsmanager}} dynamic
         # reference; CloudFormation materialises the URL into this secret.
         url = Fn.join(
@@ -111,4 +117,5 @@ class DedicatedDatabase(Construct):
             secret_name=f"{secret_prefix}/database-url",
             description=f"DATABASE_URL for {identifier} (composed by CDK)",
             secret_string_value=SecretValue.unsafe_plain_text(url),
+            removal_policy=RemovalPolicy.RETAIN,
         )

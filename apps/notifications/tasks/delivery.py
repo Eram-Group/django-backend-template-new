@@ -168,7 +168,7 @@ def _deliver_push(
             row.sent_at = now
         else:  # every token failed - the first failure names why
             row.status = DeliveryStatus.FAILED
-            row.detail = failure_detail[row.pk]
+            row.detail = failure_detail.get(row.pk, "no result from push provider")
     if invalid_tokens:  # FCM says these tokens are dead - prune
         Device.objects.filter(registration_id__in=invalid_tokens).delete()
 

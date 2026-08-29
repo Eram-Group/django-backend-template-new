@@ -29,10 +29,6 @@ CACHES = {
         "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
         "LOCATION": "test-default",
     },
-    "ratelimit": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
-        "LOCATION": "test-ratelimit",
-    },
 }
 
 # Tasks run inline so assertions see their effects immediately.

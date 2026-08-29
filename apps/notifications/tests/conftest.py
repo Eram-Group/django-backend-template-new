@@ -30,8 +30,8 @@ def _catalog_seed_config(request: pytest.FixtureRequest) -> None:
     """Every DB test starts from catalog-seeded config rows.
 
     --reuse-db keeps edits committed by earlier runs, and rendering has no
-    code fallback - so each test restores the exact state migration 0005
-    wrote (which also self-heals a reused DB that predates the rows). Tests
+    code fallback - so each test restores the exact state the seed command
+    writes (which also self-heals a reused DB that predates the rows). Tests
     that WANT different channels or copy edit rows after this ran.
     Client-only tests (no django_db marker) skip the queries entirely.
     """
