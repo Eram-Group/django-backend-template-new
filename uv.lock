@@ -271,7 +271,7 @@ dev = [
     { name = "coverage", specifier = ">=7.15" },
     { name = "django-debug-toolbar", specifier = ">=7.0" },
     { name = "django-extensions", specifier = ">=4.1" },
-    { name = "django-stubs", extras = ["compatible-mypy"], specifier = ">=6.0.7" },
+    { name = "django-stubs", extras = ["compatible-mypy"], specifier = ">=6.1.0" },
     { name = "django-test-migrations", specifier = ">=1.5.0" },
     { name = "django-upgrade", specifier = ">=1.31" },
     { name = "factory-boy", specifier = ">=3.3.3" },
