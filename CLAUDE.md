@@ -153,7 +153,9 @@ transitive dependency of factory_boy — never import it.
 - The repo is a Copier template, not a runnable project: files ending in
   `.jinja` are rendered, everything else is copied verbatim; `docs/TEMPLATE.md`
   is the how-to. Knobs are `database` (postgres | postgis → the `apps/zones`
-  directory exists or not) and branding/identity answers; nothing else.
+  directory exists or not) and identity answers; nothing else - branding
+  (`BRAND_COLOR`, `SITE_SYMBOL`) is edited in `config/branding.py` after
+  generation, `ADMIN_URL` is a per-environment env value.
 - Work on a generated preset (`uvx copier copy --defaults --data-file
   presets/<p>.yml . build/<p>`, gitignored), run its gates there, then
   back-port into the `.jinja`/plain source. CI (`template.yml`) does exactly

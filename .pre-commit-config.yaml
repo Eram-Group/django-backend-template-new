@@ -14,7 +14,6 @@ repos:
       - id: check-json
       - id: check-toml
       - id: check-yaml
-        exclude: ^_includes/
       - id: check-added-large-files
       - id: check-case-conflict
       - id: check-merge-conflict

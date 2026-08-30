@@ -16,6 +16,9 @@ from django.utils.csp import CSP
 from django.utils.translation import gettext_lazy as _
 from import_export.formats import base_formats
 
+from config.branding import BRAND_COLOR
+from config.branding import PALETTES
+from config.branding import SITE_SYMBOL
 from config.env import env
 
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
@@ -251,35 +254,31 @@ def environment_callback(request: Any) -> list[str]:
     }[env.ENVIRONMENT]
 
 
-# Tailwind-style ramp as "R G B" strings - the one brand colour source: the
-# admin reads it here, the email layouts through EMAIL_BRAND below. The
-# Copier template writes it from `brand_color`.
-{%- from "_includes/palettes.jinja" import ramp %}
-_PRIMARY = {
-{{- ramp(brand_color) }}
-}
+# The one brand colour source (config/branding.py): unfold wants the ramp as
+# "R G B" strings, the email layouts inline hex (emails cannot use CSS vars).
+_PALETTE = PALETTES[BRAND_COLOR]
 
 
-def _hex(rgb: str) -> str:
-    r, g, b = (int(part) for part in rgb.split())
-    return f"#{r:02x}{g:02x}{b:02x}"
+def _rgb(hex_: str) -> str:
+    return " ".join(str(int(hex_[i : i + 2], 16)) for i in (0, 2, 4))
 
 
-# Colours the HTML email layouts inline (emails cannot use CSS variables).
+_PRIMARY = {shade: _rgb(hex_) for shade, hex_ in _PALETTE.items()}
+
 EMAIL_BRAND = {
-    "background": _hex(_PRIMARY["50"]),
-    "tagline": _hex(_PRIMARY["100"]),
-    "border": _hex(_PRIMARY["200"]),
-    "gradient_end": _hex(_PRIMARY["400"]),
-    "gradient_start": _hex(_PRIMARY["600"]),
-    "text": _hex(_PRIMARY["800"]),
+    "background": f"#{_PALETTE['50']}",
+    "tagline": f"#{_PALETTE['100']}",
+    "border": f"#{_PALETTE['200']}",
+    "gradient_end": f"#{_PALETTE['400']}",
+    "gradient_start": f"#{_PALETTE['600']}",
+    "text": f"#{_PALETTE['800']}",
     "shadow": f"rgba({_PRIMARY['600'].replace(' ', ', ')}, 0.08)",
 }
 
 UNFOLD = {
     "SITE_TITLE": f"{SITE_NAME} Admin",
     "SITE_HEADER": SITE_NAME,
-    "SITE_SYMBOL": "{{ site_symbol }}",  # material symbol shown next to the site header
+    "SITE_SYMBOL": SITE_SYMBOL,  # material symbol shown next to the site header
     # ar/en switcher in the header (POSTs to the i18n/ urlconf in urls.py).
     "SHOW_LANGUAGES": True,
     "SHOW_BACK_BUTTON": True,

@@ -1,6 +1,5 @@
 """Notification factories - factory_boy structure, mimesis values."""
 
-import uuid
 from typing import Any
 
 from django.utils import translation
@@ -20,10 +19,6 @@ from apps.notifications.models import Notification
 from apps.notifications.models import NotificationDelivery
 from apps.notifications.models import NotificationKindConfig
 from apps.users.tests.factories import UserFactory
-
-# Sequences restart at 0 per process, but --reuse-db keeps rows committed by
-# session fixtures in earlier runs - the tag keeps registration_id unique.
-_RUN_TAG = uuid.uuid4().hex[:6]
 
 
 def _context_for(kind: str, *, name: str) -> dict[str, str]:
@@ -50,7 +45,7 @@ class DeviceFactory(DjangoModelFactory[Device]):
         skip_postgeneration_save = True
 
     user = SubFactory(UserFactory)
-    registration_id = Sequence(lambda n: f"fcm-token-{_RUN_TAG}-{n:08d}")
+    registration_id = Sequence(lambda n: f"fcm-token-{n:08d}")
     platform = DevicePlatform.ANDROID
 
 

@@ -699,8 +699,8 @@ def test_reconcile_reports_attempted_refund_without_recontacting_provider(
 
 
 def test_reconcile_leaves_fresh_rows_alone(monkeypatch: pytest.MonkeyPatch) -> None:
-    # NOTE: --reuse-db keeps committed rows from the admin-gate session
-    # fixture around, so assertions are scoped to THIS test's rows rather
+    # NOTE: the admin-gate session fixture commits rows outside the test
+    # transaction, so assertions are scoped to THIS test's rows rather
     # than "the provider was never contacted at all".
     staff = UserFactory.create(staff=True)
     fresh_pending = PaymentFactory.create()
@@ -795,8 +795,8 @@ def test_paid_event_with_card_payload_stores_saved_card() -> None:
     services.payment_apply_gateway_event(gateway_name=GATEWAY, event=event)
     services.payment_apply_gateway_event(gateway_name=GATEWAY, event=event)  # replay
 
-    # Scoped to this test's rows: --reuse-db keeps rows committed by the
-    # admin-gate session fixture around (reconcile-test precedent).
+    # Scoped to this test's rows: the admin-gate session fixture commits
+    # rows outside the test transaction (reconcile-test precedent).
     card = SavedCard.objects.get(user=payment.user)  # one despite the replay
     assert card.user == payment.user
     assert card.token == "fake_card_A"

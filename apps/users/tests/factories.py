@@ -1,7 +1,6 @@
 """User factories - factory_boy structure, mimesis values (apps.common.tests.fake)."""
 
 import random
-import uuid
 
 from allauth.account.models import EmailAddress
 from factory.declarations import LazyAttribute
@@ -24,11 +23,6 @@ LANGUAGE_WEIGHTS = (
     Language.ENGLISH,
 )
 
-# Sequences restart at 0 in every process, but --reuse-db keeps rows that
-# session fixtures committed in earlier runs - without a per-process tag,
-# get_or_create would silently return those stale users.
-_RUN_TAG = uuid.uuid4().hex[:6]
-
 
 class UserFactory(DjangoModelFactory[User]):
     class Meta:
@@ -36,7 +30,7 @@ class UserFactory(DjangoModelFactory[User]):
         django_get_or_create = ["email"]
         skip_postgeneration_save = True
 
-    email = Sequence(lambda n: f"user{n}.{_RUN_TAG}@example.com")
+    email = Sequence(lambda n: f"user{n}@example.com")
     # FuzzyChoice draws from factory.random's reseedable generator -
     # seed_db's --seed calls factory.random.reseed_random for determinism.
     language = FuzzyChoice(LANGUAGE_WEIGHTS)

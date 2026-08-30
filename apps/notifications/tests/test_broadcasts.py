@@ -43,10 +43,10 @@ def _small_pages(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(autouse=True)
 def _exclusive_audience(db: Any) -> None:
-    """Deactivate every pre-existing user (committed leftovers under
-    --reuse-db) so the audience is exactly what the test creates - including
-    each BroadcastFactory's created_by. The UPDATE rolls back with the test
-    transaction."""
+    """Deactivate every pre-existing user (the session fixtures commit
+    users outside the test transaction) so the audience is exactly what the
+    test creates - including each BroadcastFactory's created_by. The UPDATE
+    rolls back with the test transaction."""
     from apps.users.models import User
 
     User.objects.update(is_active=False)

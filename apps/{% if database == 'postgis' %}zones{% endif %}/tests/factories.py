@@ -26,8 +26,8 @@ class ZoneFactory(DjangoModelFactory[Zone]):
 
     Names come from fake.city per language (literal "ar"/"en": importing
     apps.users.constants from here would breach the app-independence
-    contract). Codes walk a sequence so create_batch(n) yields n rows and a
-    --reuse-db re-run hits the same ones (django_get_or_create on code).
+    contract). Codes walk a sequence so create_batch(n) yields n rows;
+    django_get_or_create on code makes repeated calls for one code idempotent.
     """
 
     class Meta:

@@ -2,7 +2,7 @@
 
 Copier already wrote every identity value (`.copier-answers.yml`: `app_name`
 = `{{ app_name }}` prefixes every AWS resource and stack, `github_repo`,
-`domain`, the admin colour, emails, the deployed `ADMIN_URL`). Everything
+`domain`, emails). Everything
 below is still a deliberate per-project decision; the rest of the repo is
 meant to be used as-is. Account-level values (AWS account, VPC, subnets,
 hosted zone, OIDC provider, DB security group) stay exactly as they are for
@@ -15,7 +15,17 @@ values as defaults) rather than editing the rendered sites by hand - the
 same command pulls template improvements, and the answers file is what makes
 that merge clean.
 
-## 2. Languages
+## 2. Branding and admin path
+
+- `config/branding.py`: `BRAND_COLOR` (one of the `PALETTES` keys - the
+  admin and every HTML email derive from it) and `SITE_SYMBOL` (a Material
+  Symbol name from https://fonts.google.com/icons, shown next to the admin
+  header). `apps/common/tests/test_branding.py` checks both.
+- `ADMIN_URL` is an env value like any other: `admin/` in the local `.env`,
+  an unguessable path (`manage-3f9a1c/`, trailing slash) in each deployed
+  environment's `<env>/<app>` secret (`just infra-secret-skeleton` lists it).
+
+## 3. Languages
 
 The template is Arabic-first (`LANGUAGE_CODE = "ar"`, `LANGUAGES = ar/en`,
 `MODELTRANSLATION_DEFAULT_LANGUAGE = "ar"`), ships a compiled `locale/ar`
@@ -25,7 +35,7 @@ change the language set: edit those three settings, `apps/users/constants.py`
 every member), `apps/common/tests/fake.py` (mimesis locales), the Dockerfile
 `compilemessages` check, and `just messages`.
 
-## 3. Optional modules
+## 4. Optional modules
 
 `apps/users` + `apps/common` are the core. The two domain apps are complete
 reference implementations of one product's stack — keep, trim, or delete:
@@ -62,7 +72,7 @@ reference implementations of one product's stack — keep, trim, or delete:
 `infra/tests/test_env_coverage.py` and `just infra-test` all fail loudly on
 anything left half-removed.
 
-## 4. GitHub
+## 5. GitHub
 
 Repo variables/secrets: `AWS_ECR_REPOSITORY=eram/{{ app_name }}`,
 `AWS_OIDC_ROLE_ARN` (`<name>-Shared` output), `AWS_REGION`; the Apidog trio
@@ -72,7 +82,7 @@ ruleset on `main` as described in the README. Then follow the
 docs/DEPLOYMENT.md bootstrap in order — do not push to `main` before the
 `dev` GitHub environment holds every `ECS_*`/`EXPRESS_*` variable.
 
-## 5. Housekeeping
+## 6. Housekeeping
 
 - `PLAN.md` / `TODO.json` are the template's own design log and backlog and
   are not generated; start the project's own or drop the mention in

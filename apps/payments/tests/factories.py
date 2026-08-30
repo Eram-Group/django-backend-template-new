@@ -1,6 +1,5 @@
 """Payment factories - factory_boy structure, mimesis values."""
 
-import uuid
 from decimal import Decimal
 
 from factory.declarations import LazyAttribute
@@ -34,12 +33,6 @@ class PaymentFactory(DjangoModelFactory[Payment]):
     gateway = GatewayName.TAP
 
 
-# Sequences restart at 0 per process, but --reuse-db keeps rows committed by
-# session fixtures in earlier runs - the tag keeps (gateway, token) unique
-# (DeviceFactory precedent).
-_RUN_TAG = uuid.uuid4().hex[:6]
-
-
 class SavedCardFactory(DjangoModelFactory[SavedCard]):
     class Meta:
         model = SavedCard
@@ -49,10 +42,10 @@ class SavedCardFactory(DjangoModelFactory[SavedCard]):
     gateway = GatewayName.TAP
     # Opaque provider ids are not human values, so no mimesis here
     # (PaymentFactory precedent).
-    token = Sequence(lambda n: f"fake_card_{_RUN_TAG}_{n}")
-    gateway_customer_id = Sequence(lambda n: f"fake_cus_{_RUN_TAG}_{n}")
-    gateway_agreement_id = Sequence(lambda n: f"fake_agr_{_RUN_TAG}_{n}")
-    fingerprint = Sequence(lambda n: f"fake_fp_{_RUN_TAG}_{n}")
+    token = Sequence(lambda n: f"fake_card_{n}")
+    gateway_customer_id = Sequence(lambda n: f"fake_cus_{n}")
+    gateway_agreement_id = Sequence(lambda n: f"fake_agr_{n}")
+    fingerprint = Sequence(lambda n: f"fake_fp_{n}")
     brand = "VISA"
     last4 = "4242"
     exp_month = 12

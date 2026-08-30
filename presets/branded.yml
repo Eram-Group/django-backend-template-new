@@ -1,13 +1,10 @@
-# Template CI preset: every identity/branding answer off its default, so a
+# Template CI preset: every identity answer off its default, so a
 # substitution that only works for the defaults is caught.
 project_name: Eram Rides
 app_name: rides
 github_repo: Eram-Group/rides-backend
 domain: rides.eramapps.com
 database: postgres
-brand_color: blue
-site_symbol: local_taxi
 default_from_email: hello@eramapps.com
 superuser_email: ops@eramapps.com
 timezone: Africa/Cairo
-admin_url: ops-9f8e7d/

@@ -30,10 +30,10 @@ def _catalog_seed_config(request: pytest.FixtureRequest) -> None:
     """Every DB test starts from every kind's row in its catalog starting
     state (as if an operator had saved each card once).
 
-    --reuse-db keeps edits committed by earlier runs, so each test restores
-    the exact state. Tests that WANT different channels or copy (or no row)
-    edit after this ran. Client-only tests (no django_db marker) skip the
-    queries entirely.
+    Session fixtures and earlier tests may have committed edits, so each
+    test restores the exact state. Tests that WANT different channels or
+    copy (or no row) edit after this ran. Client-only tests (no django_db
+    marker) skip the queries entirely.
     """
     if request.node.get_closest_marker("django_db") is None:
         return

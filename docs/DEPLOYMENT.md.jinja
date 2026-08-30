@@ -145,8 +145,9 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    (`npx cdk import <app>-Shared`) or delete it.
 5. Create the app secret with every key present (empty = unset):
    `aws secretsmanager create-secret --name dev/<app> --secret-string "$(just infra-secret-skeleton dev)"`
-   then fill the values in the console (`SECRET_KEY`, `DATABASE_URL` for
-   shared-DB envs, gateway keys…). Production gets its `DATABASE_URL` from
+   then fill the values in the console (`SECRET_KEY`, `ADMIN_URL` - an
+   unguessable path such as `manage-3f9a1c/`, trailing slash - `DATABASE_URL`
+   for shared-DB envs, gateway keys…). Production gets its `DATABASE_URL` from
    CDK — leave that key out (`infra-secret-skeleton production` already does).
 6. Dev database on the shared instance — once per app, with `psql` as the
    master user (`psql "host=<endpoint> user=postgres dbname=postgres sslmode=require"`):

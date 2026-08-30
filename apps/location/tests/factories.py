@@ -2,9 +2,9 @@
 
 No fake values: a country's code, names, dial code and currency are real
 reference data, so they come from apps.location.iso (not fake.py). Codes
-walk the ISO list in order, so ``create_batch(n)`` yields n distinct rows
-and a re-run on a --reuse-db database re-hits the same ones
-(django_get_or_create on ``code``).
+walk the ISO list in order, so ``create_batch(n)`` yields n distinct rows,
+and ``django_get_or_create`` on ``code`` makes repeated calls for one code
+idempotent within a session.
 """
 
 import base64

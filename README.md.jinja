@@ -77,7 +77,9 @@ Run `just` for the full list. The ones you'll use daily:
 
 ## Testing & quality gates
 
-`just test` runs pytest with `--reuse-db`; CI adds `--cov` with a hard
+`just test` runs pytest on a fresh test database every time (no
+`--reuse-db`: a kept database drifts from the models and accumulates
+session-seeded rows); CI adds `--cov` with a hard
 **80% coverage floor** (`[tool.coverage.report] fail_under`). Two cross-app
 gates in `apps/common/tests/` keep the codebase honest as it grows:
 

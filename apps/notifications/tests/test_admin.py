@@ -7,8 +7,8 @@ announcement only failed later inside the worker.
 
 Every assertion is scoped by the marker message rather than
 ``Broadcast.objects.get()``: the admin basics gate seeds rows for every
-registered factory and ``--reuse-db`` keeps them committed between runs, so
-the table is never empty (same reason the app conftest clears channel
+registered factory outside the test transaction, so the table is never
+empty (same reason the app conftest clears channel
 overrides).
 """
 

@@ -17,8 +17,7 @@ from apps.users.tests.factories import UserFactory
 @pytest.fixture(scope="session")
 def django_db_setup(django_db_setup: None, django_db_blocker: Any) -> None:
     """Every kind's NotificationKindConfig row exists from the start, as if
-    an operator had saved each card once (idempotent on a --reuse-db
-    database)."""
+    an operator had saved each card once."""
     with django_db_blocker.unblock():
         seed_kind_configs()
 

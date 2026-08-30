@@ -19,7 +19,6 @@ _exclude:
   - .DS_Store
   # Template-only material (README.md is the template's; README.md.jinja the project's)
   - README.md
-  - _includes
   - presets
   - build
   - .github/workflows/template.yml
@@ -51,6 +50,7 @@ _message_after_copy: |
     cd {{ _copier_conf.dst_path }}
     git init -b main && git add -A && git commit -m "chore: generate from backend-template"
     just bootstrap        # deps, .env, git hooks, postgres + mailpit, migrate
+    $EDITOR config/branding.py   # BRAND_COLOR + SITE_SYMBOL (admin + emails)
     just gates            # every CI gate, locally
 
   Then work through docs/NEW_PROJECT.md (GitHub variables, optional modules,
@@ -101,28 +101,7 @@ database:
     PostgreSQL: postgres
     PostGIS: postgis
 
-# --- Branding -------------------------------------------------------------------
-
-brand_color:
-  type: str
-  help: Primary colour ramp (Tailwind palette) for the admin and the email layouts
-  default: green
-  choices:
-    - green
-    - emerald
-    - teal
-    - sky
-    - blue
-    - indigo
-    - violet
-    - rose
-    - orange
-    - amber
-
-site_symbol:
-  type: str
-  help: Material Symbol shown next to the admin header (fonts.google.com/icons)
-  default: hub
+# --- Defaults ------------------------------------------------------------------
 
 default_from_email:
   type: str
@@ -146,12 +125,3 @@ timezone:
   type: str
   help: Team timezone for Dependabot's update window
   default: Asia/Riyadh
-
-admin_url:
-  type: str
-  help: Deployed admin path (random by default - keep it unguessable; the local .env uses admin/)
-  default: "manage-{{ '%06x' % (16777216 | ans_random) }}/"
-  validator: >-
-    {% if not (admin_url | regex_search('^[a-z0-9-]+/$')) %}
-    Lowercase letters, digits and dashes, ending with a slash.
-    {% endif %}

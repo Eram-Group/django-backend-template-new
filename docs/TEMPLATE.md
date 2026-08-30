@@ -1,8 +1,9 @@
 # Working on the template
 
 This repository is a [Copier](https://copier.readthedocs.io) template, not a
-runnable project. `copier.yml` holds the questions; `_includes/` the shared
-Jinja macros (colour ramps); `presets/` the answer sets CI generates.
+runnable project. `copier.yml` holds the questions; `presets/` the answer
+sets CI generates. Branding is not a question: projects edit
+`config/branding.py` after generation.
 
 ```bash
 uvx copier copy gh:Eram-Group/backend-template my-app      # a new project
@@ -33,8 +34,8 @@ uvx copier update                                            # in a project: pul
 
 | File | Why |
 |---|---|
-| `infra/backend_infra/config.py` | app name, repo, domain, emails, ADMIN_URL; GDAL/GEOS keys |
-| `config/settings/base.py` | SITE_NAME, symbol, colour ramp; gis app, engine, zones app + sidebar |
+| `infra/backend_infra/config.py` | app name, repo, domain, emails; GDAL/GEOS keys |
+| `config/settings/base.py` | SITE_NAME; gis app, engine, zones app + sidebar |
 | `config/env.py`, `.env.example` | GDAL/GEOS keys |
 | `pyproject.toml` | zones in the import-linter contracts |
 | `apps/common/tests/factories_registry.py` | Zone factory |
@@ -53,10 +54,15 @@ its own app (as zones is), not a conditional.
    `git init && git add -A && cp .env.example .env`, then `just gates` and
    `just infra-gates` - exactly what `.github/workflows/template.yml` runs
    for every preset on every push.
+   Copier clones a git source at its HEAD commit, so uncommitted template
+   edits are NOT rendered from `.` - commit first, or generate from a plain
+   copy of the working tree (`rsync -a --exclude .git --exclude build . /tmp/tpl`
+   then `copier copy ... /tmp/tpl build/<preset>`).
 2. Make the change in the generated tree, watch the gates, then back-port it
    into the template source (`.jinja` or plain file). Never commit `build/`.
 3. Add a preset when a new answer combination needs its own proof; the
-   `branded` preset exists so every substitution is exercised off-default.
+   `branded` preset exists so every identity substitution is exercised
+   off-default.
 4. The template repo's own pre-commit config is hygiene only (`.jinja` files
    are skipped); the real lint runs on the generated output.
 
