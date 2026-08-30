@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: backend\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-08-29 20:02+0000\n"
+"POT-Creation-Date: 2026-08-30 06:26+0000\n"
 "PO-Revision-Date: 2026-08-29 00:00+0000\n"
 "Last-Translator: Eram dev team\n"
 "Language-Team: Arabic\n"
@@ -22,6 +22,259 @@ msgstr "اختر إجراءً"
 #, python-format
 msgid "Export selected %(verbose_name_plural)s"
 msgstr "تصدير %(verbose_name_plural)s المحددة"
+
+#: apps/location/admin/country/admin.py:63
+#: apps/location/admin/country/admin.py:84
+#: templates/admin/location/country/load.html:92
+msgid "Load countries"
+msgstr "تحميل الدول"
+
+#: apps/location/admin/country/admin.py:78
+#, python-format
+msgid "Loaded %(count)d countries."
+msgstr "تم تحميل %(count)d دولة."
+
+#: apps/location/admin/country/admin.py:93
+msgid "Fetch flags for selected countries"
+msgstr "جلب أعلام الدول المحددة"
+
+#: apps/location/admin/country/admin.py:98
+#, python-format
+msgid "Flag download queued for %(count)d countries."
+msgstr "تمت جدولة تنزيل الأعلام لعدد %(count)d دولة."
+
+#: apps/location/admin/country/list_view.py:10
+#: apps/location/models/country.py:35
+msgid "flag"
+msgstr "العلم"
+
+#: apps/location/admin/country/list_view.py:26
+msgid "Search by code or name (Arabic or English)."
+msgstr "ابحث بالرمز أو الاسم (بالعربية أو الإنجليزية)."
+
+#: apps/location/admin/country/load_form.py:12 config/settings/base.py:448
+msgid "Countries"
+msgstr "الدول"
+
+#: apps/location/admin/country/load_form.py:13
+msgid "Pick at least one country to load."
+msgstr "اختر دولة واحدة على الأقل للتحميل."
+
+#: apps/location/admin/zone/admin.py:70 apps/location/admin/zone/admin.py:104
+#: templates/admin/location/zone/load.html:45
+msgid "Load zones"
+msgstr "تحميل المناطق"
+
+#: apps/location/admin/zone/admin.py:92
+#, python-format
+msgid ""
+"Loaded %(created)d new and updated %(updated)d zones; %(unnamed)d need a "
+"name before activation."
+msgstr "تم تحميل %(created)d منطقة جديدة وتحديث %(updated)d منطقة؛ %(unnamed)d منطقة بحاجة إلى اسم قبل التفعيل."
+
+#: apps/location/admin/zone/admin.py:110
+msgid "Find overlaps for selected zones"
+msgstr "البحث عن التداخلات في المناطق المحددة"
+
+#: apps/location/admin/zone/admin.py:119
+msgid "No overlaps among the selected zones."
+msgstr "لا يوجد تداخل بين المناطق المحددة."
+
+#: apps/location/admin/zone/admin.py:126
+#, python-format
+msgid "%(count)d selected zones overlap another zone: %(codes)s"
+msgstr "%(count)d من المناطق المحددة تتداخل مع منطقة أخرى: %(codes)s"
+
+#: apps/location/admin/zone/admin.py:130
+msgid "Geometry"
+msgstr "الشكل الجغرافي"
+
+#: apps/location/admin/zone/admin.py:136
+#, python-format
+msgid "Polygons: %(count)d"
+msgstr "المضلعات: %(count)d"
+
+#: apps/location/admin/zone/admin.py:137
+#, python-format
+msgid "Vertices: %(count)d"
+msgstr "الرؤوس: %(count)d"
+
+#: apps/location/admin/zone/admin.py:138
+#, python-format
+msgid "Bounding box (lng, lat): %(box)s"
+msgstr "الإطار المحيط (خط الطول، خط العرض): %(box)s"
+
+#: apps/location/admin/zone/admin.py:140
+#, python-format
+msgid "Centroid (lat, lng): %(point)s"
+msgstr "المركز (خط العرض، خط الطول): %(point)s"
+
+#: apps/location/admin/zone/list_view.py:9
+msgid "Search by code, region or name (Arabic or English)."
+msgstr "ابحث بالرمز أو الإقليم أو الاسم (عربي أو إنجليزي)."
+
+#: apps/location/admin/zone/load_form.py:18
+msgid "Country"
+msgstr "الدولة"
+
+#: apps/location/admin/zone/load_form.py:19
+msgid "Every feature in the file must carry this country's code."
+msgstr "يجب أن يحمل كل معلم في الملف رمز هذه الدولة."
+
+#: apps/location/admin/zone/load_form.py:22
+msgid "GeoJSON file"
+msgstr "ملف GeoJSON"
+
+#: apps/location/admin/zone/load_form.py:24
+msgid ""
+"A FeatureCollection whose features carry name_en, name_ar, country_code, "
+"region_code and zone_code, with Polygon or MultiPolygon geometries (WGS84)."
+msgstr "مجموعة معالم (FeatureCollection) تحمل معالمها الحقول name_en وname_ar وcountry_code وregion_code وzone_code، بأشكال Polygon أو MultiPolygon (WGS84)."
+
+#: apps/location/admin/zone/load_form.py:41 apps/location/geojson.py:108
+#, python-format
+msgid "The file is larger than %(limit)d MB."
+msgstr "حجم الملف أكبر من %(limit)d ميغابايت."
+
+#: apps/location/geojson.py:52
+#, python-format
+msgid "Feature %(index)d is not an object."
+msgstr "المعلم %(index)d ليس كائنًا."
+
+#: apps/location/geojson.py:57
+#, python-format
+msgid "Feature %(index)d has no properties."
+msgstr "المعلم %(index)d بلا خصائص."
+
+#: apps/location/geojson.py:63
+#, python-format
+msgid ""
+"Feature %(index)d belongs to %(found)s, not %(country)s (%(code)s/"
+"%(alpha_3)s)."
+msgstr "المعلم %(index)d يتبع %(found)s وليس %(country)s (%(code)s/%(alpha_3)s)."
+
+#: apps/location/geojson.py:78
+#, python-format
+msgid "Feature %(index)d is missing region_code or zone_code."
+msgstr "المعلم %(index)d يفتقد region_code أو zone_code."
+
+#: apps/location/geojson.py:84
+#, python-format
+msgid "Features %(first)d and %(index)d both map to code %(code)s."
+msgstr "المعلمان %(first)d و%(index)d يؤديان إلى الرمز نفسه %(code)s."
+
+#: apps/location/geojson.py:114
+msgid "The file must be UTF-8 text."
+msgstr "يجب أن يكون الملف نصًا بترميز UTF-8."
+
+#: apps/location/geojson.py:116
+msgid "The file is not valid JSON."
+msgstr "الملف ليس بصيغة JSON صالحة."
+
+#: apps/location/geojson.py:118
+msgid "The file must be a GeoJSON FeatureCollection."
+msgstr "يجب أن يكون الملف مجموعة معالم GeoJSON (FeatureCollection)."
+
+#: apps/location/geojson.py:121
+msgid "The FeatureCollection has no features."
+msgstr "مجموعة المعالم لا تحتوي على أي معلم."
+
+#: apps/location/geojson.py:134
+#, python-format
+msgid "Feature %(index)d has no geometry."
+msgstr "المعلم %(index)d بلا شكل جغرافي."
+
+#: apps/location/geojson.py:139
+#, python-format
+msgid ""
+"Feature %(index)d: only Polygon and MultiPolygon geometries are accepted, "
+"got %(type)s."
+msgstr "المعلم %(index)d: يُقبل فقط النوعان Polygon وMultiPolygon، والنوع المرسل هو %(type)s."
+
+#: apps/location/geojson.py:151
+#, python-format
+msgid "Feature %(index)d has an unreadable geometry."
+msgstr "المعلم %(index)d يحمل شكلًا جغرافيًا لا يمكن قراءته."
+
+#: apps/location/geojson.py:155
+#, python-format
+msgid "Feature %(index)d has an empty geometry."
+msgstr "المعلم %(index)d يحمل شكلًا جغرافيًا فارغًا."
+
+#: apps/location/geojson.py:159
+#, python-format
+msgid "Feature %(index)d has an invalid geometry: %(reason)s"
+msgstr "المعلم %(index)d يحمل شكلًا جغرافيًا غير صالح: %(reason)s"
+
+#: apps/location/models/country.py:25 apps/location/models/zone.py:39
+msgid "code"
+msgstr "الرمز"
+
+#: apps/location/models/country.py:26
+msgid "alpha-3 code"
+msgstr "رمز Alpha-3"
+
+#: apps/location/models/country.py:27 apps/location/models/zone.py:41
+#: apps/users/models/user.py:77
+msgid "name"
+msgstr "الاسم"
+
+#: apps/location/models/country.py:28
+msgid "dial code"
+msgstr "رمز الاتصال"
+
+#: apps/location/models/country.py:29
+msgid "phone example"
+msgstr "مثال رقم الهاتف"
+
+#: apps/location/models/country.py:31
+msgid "max phone length"
+msgstr "الحد الأقصى لطول رقم الهاتف"
+
+#: apps/location/models/country.py:34 apps/payments/models/payment.py:40
+#: apps/payments/models/wallet.py:32
+msgid "currency"
+msgstr "العملة"
+
+#: apps/location/models/country.py:36 apps/location/models/zone.py:43
+msgid "active"
+msgstr "نشط"
+
+#: apps/location/models/country.py:45 apps/location/models/zone.py:33
+msgid "country"
+msgstr "الدولة"
+
+#: apps/location/models/country.py:46
+msgid "countries"
+msgstr "الدول"
+
+#: apps/location/models/zone.py:36
+msgid "region code"
+msgstr "رمز الإقليم"
+
+#: apps/location/models/zone.py:42
+msgid "geometry"
+msgstr "الشكل الجغرافي"
+
+#: apps/location/models/zone.py:54
+msgid "zone"
+msgstr "منطقة"
+
+#: apps/location/models/zone.py:55
+msgid "zones"
+msgstr "مناطق"
+
+#: apps/location/selectors/countries.py:24
+msgid "Country not found."
+msgstr "الدولة غير موجودة."
+
+#: apps/location/selectors/zones.py:23
+msgid "Zone not found."
+msgstr "المنطقة غير موجودة."
+
+#: apps/location/selectors/zones.py:31
+msgid "Coordinates are outside WGS84 bounds."
+msgstr "الإحداثيات خارج حدود WGS84."
 
 #: apps/notifications/admin/broadcast/admin.py:214
 msgid "Dispatch"
@@ -82,8 +335,8 @@ msgstr "كل من تنطبق عليه عوامل التصفية"
 msgid "Specific users"
 msgstr "مستخدمون محددون"
 
-#: apps/notifications/admin/broadcast/form.py:91 config/settings/base.py:320
-#: config/settings/base.py:323
+#: apps/notifications/admin/broadcast/form.py:91 config/settings/base.py:330
+#: config/settings/base.py:333
 msgid "Users"
 msgstr "المستخدمون"
 
@@ -178,12 +431,12 @@ msgid "Not available for this action."
 msgstr "غير متاح لهذا الإجراء."
 
 #: apps/notifications/admin/notificationkindconfig/form.py:128
-#: apps/users/constants.py:7 config/settings/base.py:204
+#: apps/users/constants.py:7 config/settings/base.py:214
 msgid "English"
 msgstr "الإنجليزية"
 
 #: apps/notifications/admin/notificationkindconfig/form.py:135
-#: apps/users/constants.py:6 config/settings/base.py:203
+#: apps/users/constants.py:6 config/settings/base.py:213
 msgid "Arabic"
 msgstr "العربية"
 
@@ -632,10 +885,6 @@ msgstr "الوصف"
 msgid "amount"
 msgstr "المبلغ"
 
-#: apps/payments/models/payment.py:40 apps/payments/models/wallet.py:32
-msgid "currency"
-msgstr "العملة"
-
 #: apps/payments/models/payment.py:47 apps/payments/models/saved_card.py:27
 msgid "gateway"
 msgstr "بوابة الدفع"
@@ -828,10 +1077,6 @@ msgstr "الجلسات الأخيرة"
 msgid "email address"
 msgstr "البريد الإلكتروني"
 
-#: apps/users/models/user.py:77
-msgid "name"
-msgstr "الاسم"
-
 #: apps/users/models/user.py:81
 msgid "phone number"
 msgstr "رقم الهاتف"
@@ -850,60 +1095,68 @@ msgstr "المستخدم غير موجود."
 msgid "This code expires in %(minutes)s minutes."
 msgstr "تنتهي صلاحية هذا الرمز خلال %(minutes)s دقائق."
 
-#: config/settings/base.py:297 config/settings/base.py:364
+#: config/settings/base.py:307 config/settings/base.py:374
 msgid "Broadcasts"
 msgstr "عمليات البث"
 
-#: config/settings/base.py:304 config/settings/base.py:359
+#: config/settings/base.py:314 config/settings/base.py:369
 msgid "Notifications"
 msgstr "الإشعارات"
 
-#: config/settings/base.py:331
+#: config/settings/base.py:341
 msgid "Email addresses"
 msgstr "عناوين البريد الإلكتروني"
 
-#: config/settings/base.py:339
+#: config/settings/base.py:349
 msgid "Sessions"
 msgstr "الجلسات"
 
-#: config/settings/base.py:349
+#: config/settings/base.py:359
 msgid "Groups"
 msgstr "المجموعات"
 
-#: config/settings/base.py:374
+#: config/settings/base.py:384
 msgid "Deliveries"
 msgstr "عمليات التسليم"
 
-#: config/settings/base.py:384
+#: config/settings/base.py:394
 msgid "Devices"
 msgstr "الأجهزة"
 
-#: config/settings/base.py:392
+#: config/settings/base.py:402
 #: templates/admin/notifications/notificationkindconfig/change_list.html:36
 msgid "Notification actions"
 msgstr "إجراءات الإشعارات"
 
-#: config/settings/base.py:404 config/settings/base.py:407
+#: config/settings/base.py:414 config/settings/base.py:417
 msgid "Payments"
 msgstr "المدفوعات"
 
-#: config/settings/base.py:415
+#: config/settings/base.py:425
 msgid "Wallets"
 msgstr "المحافظ"
 
-#: config/settings/base.py:423
+#: config/settings/base.py:433
 msgid "Wallet transactions"
 msgstr "معاملات المحافظ"
 
-#: config/settings/base.py:435
+#: config/settings/base.py:445
+msgid "Location"
+msgstr "الموقع"
+
+#: config/settings/base.py:456
+msgid "Zones"
+msgstr "المناطق"
+
+#: config/settings/base.py:466
 msgid "Operations"
 msgstr "العمليات"
 
-#: config/settings/base.py:438
+#: config/settings/base.py:469
 msgid "Task results"
 msgstr "نتائج المهام"
 
-#: config/settings/base.py:448
+#: config/settings/base.py:479
 msgid "Login attempts"
 msgstr "محاولات تسجيل الدخول"
 
@@ -964,6 +1217,66 @@ msgstr "إن كنت أنت من طلب ذلك، فأنشئ حسابًا أولً
 #: templates/account/email/unknown_account_message.html:10
 msgid "Create an account"
 msgstr "إنشاء حساب"
+
+#: templates/admin/location/country/load.html:94
+msgid "Already loaded:"
+msgstr "تم تحميلها بالفعل:"
+
+#: templates/admin/location/country/load.html:94
+msgid "Pick the countries to add."
+msgstr "اختر الدول المراد إضافتها."
+
+#: templates/admin/location/country/load.html:109
+msgid "Search by name or code"
+msgstr "ابحث بالاسم أو الرمز"
+
+#: templates/admin/location/country/load.html:110
+msgid "Search countries"
+msgstr "البحث في الدول"
+
+#: templates/admin/location/country/load.html:115
+msgid "Select all"
+msgstr "تحديد الكل"
+
+#: templates/admin/location/country/load.html:116
+msgid "Deselect all"
+msgstr "إلغاء تحديد الكل"
+
+#: templates/admin/location/country/load.html:134
+msgid "Loaded"
+msgstr "محمّلة"
+
+#: templates/admin/location/country/load.html:151
+msgid "No countries available to load."
+msgstr "لا توجد دول متاحة للتحميل."
+
+#: templates/admin/location/country/load.html:157
+msgid "selected"
+msgstr "محددة"
+
+#: templates/admin/location/country/load.html:158
+msgid "Nothing selected"
+msgstr "لم يتم تحديد شيء"
+
+#: templates/admin/location/country/load.html:160
+#: templates/admin/location/zone/load.html:69
+#: templates/admin/notifications/broadcast/compose.html:227
+msgid "Cancel"
+msgstr "إلغاء"
+
+#: templates/admin/location/country/load.html:162
+msgid "Load selected"
+msgstr "تحميل المحدد"
+
+#: templates/admin/location/zone/load.html:46
+msgid ""
+"One GeoJSON FeatureCollection per upload; zones already loaded (same code) "
+"are updated in place."
+msgstr "ملف GeoJSON واحد (FeatureCollection) لكل تحميل؛ المناطق المحمّلة سابقًا (بالرمز نفسه) تُحدَّث في مكانها."
+
+#: templates/admin/location/zone/load.html:70
+msgid "Load file"
+msgstr "تحميل الملف"
 
 #: templates/admin/notifications/broadcast/compose.html:25
 #: templates/admin/notifications/broadcast/compose.html:172
@@ -1111,10 +1424,6 @@ msgstr "إنشاء هذا البث؟"
 msgid "Creates a draft only. You dispatch it from the broadcast page."
 msgstr "يُنشئ مسودة فقط. تبثها من صفحة البث."
 
-#: templates/admin/notifications/broadcast/compose.html:227
-msgid "Cancel"
-msgstr "إلغاء"
-
 #: templates/admin/notifications/notificationkindconfig/change_list.html:24
 msgid "Saving…"
 msgstr "جارٍ الحفظ…"
@@ -1247,6 +1556,3 @@ msgstr "حسابك جاهز. يسعدنا انضمامك إلينا."
 
 #~ msgid "Insert a variable"
 #~ msgstr "إدراج متغير"
-
-#~ msgid "example"
-#~ msgstr "مثال"

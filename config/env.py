@@ -78,6 +78,10 @@ class Env(BaseSettings):
     DB_POOL_TIMEOUT: float
     DB_POOL_MAX_LIFETIME: float
     DB_POOL_MAX_IDLE: float
+    # GeoDjango native libraries - explicit paths only where the system
+    # loader cannot find them (macOS Homebrew); empty = ctypes lookup.
+    GDAL_LIBRARY_PATH: str | None = None
+    GEOS_LIBRARY_PATH: str | None = None
 
     # Superuser bootstrap (manage.py createsu)
     DJANGO_SUPERUSER_EMAIL: str

@@ -31,10 +31,12 @@ sequence lives in [TODO.json](TODO.json).
 ## Quickstart
 
 Prerequisites: [uv](https://docs.astral.sh/uv/), [just](https://just.systems),
-Docker (for Postgres + Mailpit).
+Docker (for PostGIS + Mailpit), and GDAL/GEOS on the host for GeoDjango
+(`just bootstrap` runs `brew install gdal geos` on macOS; on Linux install
+your distro's `libgdal`/`libgeos` packages).
 
 ```bash
-just bootstrap   # deps, .env, git hooks, postgres:18 + mailpit, migrate + cache table
+just bootstrap   # deps, gdal/geos, .env, git hooks, postgis 18 + mailpit, migrate + cache table
 just superuser   # admin@example.com / admin (from .env, idempotent)
 just seed        # ~300 realistic fake users (scale 0.3; see "Seed data" below)
 just run         # dev server on http://localhost:8000
@@ -159,7 +161,7 @@ to `main`.
 ### Pipelines
 
 - **PR / push** — `ci.yml`: lint (pre-commit) → mypy → lock check →
-  migrations check → pytest (coverage ≥ 80%, postgres:18 service), plus a
+  migrations check → pytest (coverage ≥ 80%, postgis 18 service), plus a
   parallel prod-image build + compose smoke (`/healthz`, `/readyz`, auth spec)
   and an `infra` job (CDK synth → template assertions → cfn-lint).
   TruffleHog secret scan; Dependabot (`.github/dependabot.yml`) keeps uv,

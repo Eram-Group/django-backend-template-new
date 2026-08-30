@@ -22,7 +22,7 @@ jobs:
       DJANGO_SETTINGS_MODULE: config.settings.local
     services:
       postgres:
-        image: postgres:18
+        image: imresamu/postgis:18-3.6
         env:
           POSTGRES_DB: backend
           POSTGRES_USER: postgres
@@ -45,6 +45,11 @@ jobs:
 
       - name: Install environment
         run: uv sync --locked
+
+      # GeoDjango loads GDAL/GEOS through ctypes on the runner host (pytest
+      # runs outside Docker here); the image job gets them from the Dockerfile.
+      - name: Install GDAL and GEOS
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgdal-dev libgeos-dev
 
       # Env has no code defaults by design - the example IS the CI config.
       - name: Bootstrap env file
@@ -114,7 +119,7 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-        image: postgres:18
+        image: imresamu/postgis:18-3.6
         env:
           POSTGRES_DB: backend
           POSTGRES_USER: postgres
@@ -156,6 +161,8 @@ jobs:
           AWS_SES_REGION=eu-central-1
           SENTRY_DSN=https://key@sentry.invalid/1
           SENTRY_RELEASE=${{ github.sha }}
+          GDAL_LIBRARY_PATH=
+          GEOS_LIBRARY_PATH=
           EOF
 
       - name: Release step (deploy checklist + migrate + cache table)

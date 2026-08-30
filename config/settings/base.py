@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.gis",  # PostGIS fields + lookups (apps.location zones)
     # Third-party
     "ninja",  # registers export_openapi_schema (the Apidog sync artifact)
     "corsheaders",
@@ -63,6 +64,7 @@ INSTALLED_APPS = [
     "apps.users",
     "apps.notifications",
     "apps.payments",
+    "apps.location",
 ]
 
 # --- Middleware (guid first, axes last - order is load-bearing) ----------
@@ -113,9 +115,17 @@ TEMPLATES = [
 DATABASES = {
     "default": {
         **dj_database_url.parse(env.DATABASE_URL),
+        # PostGIS backend regardless of the URL scheme: one DATABASE_URL shape
+        # everywhere (postgres://), the engine is a code decision.
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
         "ATOMIC_REQUESTS": True,
     },
 }
+# GeoDjango finds libgdal/libgeos via ctypes.util.find_library, which does not
+# search Homebrew's prefix on macOS - hosts set the explicit paths in .env;
+# the Docker image and CI runners leave them empty (system library path).
+GDAL_LIBRARY_PATH = env.GDAL_LIBRARY_PATH
+GEOS_LIBRARY_PATH = env.GEOS_LIBRARY_PATH
 
 # --- Cache / sessions / tasks (Postgres-only infrastructure) --------------
 # One shared cache: it also backs every rate limit (allauth's per-ip/per-key
@@ -427,6 +437,27 @@ UNFOLD = {
                         ),
                         "permission": lambda request: request.user.has_perm(
                             "payments.view_wallettransaction"
+                        ),
+                    },
+                ],
+            },
+            {
+                "title": _("Location"),
+                "items": [
+                    {
+                        "title": _("Countries"),
+                        "icon": "public",
+                        "link": reverse_lazy("admin:location_country_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "location.view_country"
+                        ),
+                    },
+                    {
+                        "title": _("Zones"),
+                        "icon": "map",
+                        "link": reverse_lazy("admin:location_zone_changelist"),
+                        "permission": lambda request: request.user.has_perm(
+                            "location.view_zone"
                         ),
                     },
                 ],

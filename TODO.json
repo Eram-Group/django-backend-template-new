@@ -212,6 +212,18 @@
       "status": "pending"
     },
     {
+      "id": "users-country-fk",
+      "group": "G21",
+      "title": "Link users to a country",
+      "endGoal": "User carries a nullable FK to location.Country (PROTECT), set at signup/profile and exposed on the profile schema; SMS routing and wallet currency can read it instead of deriving from the phone number or language.",
+      "tips": [
+        "Split out of the countries work on 2026-08-29: apps/location ships the reference rows; this task adds users.User.country (nullable, on_delete=PROTECT, string ref 'location.Country') + a users -> location edge in pyproject import-linter (model layer, passive ownership only).",
+        "Decide: required at signup or optional; derived from the phone region (phonenumbers.region_code_for_number) as a default or always explicit. Record the decision here.",
+        "Consumers to migrate afterwards: apps/notifications/clients/sms/routing.py PROVIDER_REGISTRY keyed by alpha-2; apps/payments CURRENCY_BY_LANGUAGE -> country.currency (multi-country-multi-currency)."
+      ],
+      "status": "pending"
+    },
+    {
       "id": "multi-country-multi-currency",
       "group": "G21",
       "title": "Handle multi-country and multi-currency support",
@@ -219,7 +231,7 @@
       "tips": [
         "Requested by Omar 2026-07-18. Current state: Currency enum = SAR/EGP only (apps/payments/constants.py), one wallet per user fixed at signup via CURRENCY_BY_LANGUAGE (both languages -> SAR today), topups reject currency mismatch at initiate AND credit time.",
         "Known hardcoded spots from the 2026-07-18 payments review: MINOR_UNITS = 2 in gateways/base.py (SAR/EGP) - a 3-decimal (KWD/BHD) or 0-decimal currency needs a per-currency table; tap.py _format_amount hardcodes 2 decimals; PAYMENT_GATEWAYS needs an entry per currency (missing = clean 503).",
-        "Design decisions to make and record here: one wallet per user vs wallet-per-currency; where country lives (User field? phone-derived? request locale?); FX/conversion explicitly in or out of scope.",
+        "Design decisions to make and record here: one wallet per user vs wallet-per-currency; where country lives - DECIDED 2026-08-29: apps/location.Country (ISO reference rows loaded from the admin sheet, carrying the CLDR tender currency); linking User -> Country is the `users-country-fk` task; FX/conversion explicitly in or out of scope.",
         "Arabic-first rule already covers locale; check mimesis locales in apps/common/tests/fake.py if new locales ship."
       ],
       "status": "pending"
@@ -233,9 +245,12 @@
         "Requested by Omar 2026-07-18. Scope to clarify with Omar before building: what a zone is (geographic service/delivery area? pricing region? country subdivision?) and which app owns it (likely a new bounded-context app per the one-app-one-domain rule).",
         "Follow the house patterns: model inherits BaseModel (uuidv7 pk) + factory registered in factories_registry (coverage gate), admin package scaffolded via `manage.py generate_dashboard <app> Zone`, writes through a zone service, reads through selectors.",
         "Zone names are user-facing: per-app translation.py (django-modeltranslation) for Arabic-first naming.",
-        "If zones are geometric (polygons/radii) decide storage early: PostGIS/GeoDjango is a real infra dependency (RDS supports it) vs simple structured fields (city/district lists) - record the decision here."
+        "If zones are geometric (polygons/radii) decide storage early: PostGIS/GeoDjango is a real infra dependency (RDS supports it) vs simple structured fields (city/district lists) - record the decision here.",
+        "2026-08-29: apps/location now exists (Country loaded from the admin sheet); a Region/Zone model belongs in the same app, FK -> location.Country (PROTECT).",
+        "DONE 2026-08-30: Zone in apps/location - PostGIS MultiPolygonField (decided over JSONField+shapely against the real source data: ~1,900 zones, 7 countries, 19 MB), FK country PROTECT, region_code as a plain field, code = <country>-<region>-<zone_code>. Entry road is the admin 'Load zones' sheet (country + GeoJSON FeatureCollection -> services.zones_load upsert by code; empty names -> code as name + inactive). Reads: zone_for_point (ST_Contains, lowest code wins), zone_overlaps (ST_Intersects minus touches). No API yet.",
+        "Follow-ups: (a) map preview on the change form needs OpenLayers CDN + OSM tiles allowed in SECURE_CSP; (b) seed_db does not seed countries/zones (needs the seed_db -> apps.location import-linter ignore)."
       ],
-      "status": "pending"
+      "status": "done"
     },
     {
       "id": "claude-structure-audit",

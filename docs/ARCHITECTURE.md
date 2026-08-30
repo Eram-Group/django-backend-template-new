@@ -21,8 +21,8 @@ one envelope (below).
 
 ## App layout and layering
 
-Every domain app (`apps/users` is the reference, `apps/notifications` and
-`apps/payments` the built-out examples) is a set of packages, one module per
+Every domain app (`apps/users` is the reference, `apps/notifications`,
+`apps/payments` and `apps/location` the built-out examples) is a set of packages, one module per
 entity inside each:
 
 ```
@@ -293,6 +293,39 @@ narrow service edge users.services → notifications.services + payments.service
 `wallet_currency_for(language)`). One-way at the model layer; nothing
 imports payments' models.
 
+## Location (countries + zones)
+
+`apps/location` is reference data that operators load, never type:
+
+- **Country** rows come from the admin "Load countries" sheet: every column
+  is copied from pycountry/babel/phonenumbers (`iso.py`), flags arrive via a
+  task. Operators edit names, the flag and `is_active`; deletion is off
+  (zones PROTECT their country).
+- **Zone** rows come from the admin "Load zones" sheet: pick a country,
+  upload one GeoJSON FeatureCollection, `services.zones_load` upserts one
+  zone per feature. The file's `properties` supply everything - `code` is
+  `<country>-<region_code>-<zone_code>` (slug, unique, immutable), names are
+  the `name_ar`/`name_en` properties (empty ones become the code and the row
+  starts inactive), the geometry is a PostGIS `MultiPolygonField` (Polygons
+  are wrapped; other types, invalid rings, a wrong `country_code` or a
+  duplicate code reject the whole file, naming the feature). A re-upload
+  refreshes geometry and file names, keeps `is_active` and any operator
+  names. `apps/location/geojson.py` is the parser (no DB); the change form
+  edits names/region/`is_active` and shows a readonly geometry summary.
+- **Reads** are single PostGIS queries in `selectors/zones.py`:
+  `zone_for_point` (`geometry__contains`, boundary exclusive, lowest `code`
+  wins among overlapping active zones), `zone_overlaps` (`intersects` minus
+  `touches`). No public zone API yet - add a router when a consumer exists.
+- **Why PostGIS, not JSONField + shapely**: decided 2026-08-30 against the
+  real source data (~1,900 zones, 7 countries, 19 MB, polygons of up to 26k
+  vertices) - a per-request Python point-in-polygon would reload megabytes
+  of JSON, and the GiST index makes containment and overlap questions
+  milliseconds in SQL. Cost: GDAL/GEOS on every host (`just bootstrap`
+  brews them; `GDAL_LIBRARY_PATH`/`GEOS_LIBRARY_PATH` env for Homebrew), the
+  shared libraries in the image, and `CREATE EXTENSION postgis` by the RDS
+  master user for the shared dev database (not a trusted extension; the
+  runbook step in `docs/DEPLOYMENT.md`).
+
 ## i18n and translated content
 
 - Site default Arabic (`LANGUAGE_CODE = "ar"`, `LANGUAGES = ar/en`), UTC
@@ -393,7 +426,7 @@ per need.
 | Embedded mini-schemas | add the `Ref` tier per entity alongside Summary/Detail |
 | Edge rate limiting / bot control | AWS WAF on the Express ALB, in front of the app-level throttles |
 | Slow release-step collectstatic | collectfasta |
-| Geo (countries/regions/zones) | postgis image + libgdal in Dockerfile + `django.contrib.gis` |
+| Geo (countries/regions/zones) | Built 2026-08-30 - see *Location*: PostGIS via `django.contrib.gis`, `imresamu/postgis:18-3.6` in compose/CI, `libgdal32 libgeos-c1v5 libproj25` in the image, `CreateExtension("postgis")` in the migration. The map widget stays out until `SECURE_CSP` allows the OpenLayers CDN + OSM tiles. |
 | External-API fan-out | gunicorn gevent worker class for the web service |
 | Multi-persona users | one `User` + OneToOne profile models (Customer/Provider). Gate incomplete profiles at the API layer: `is_profile_completed` computed in a selector and exposed on the persona Detail schema, plus a ninja auth class raising an ApplicationError whose envelope carries `action_required: "complete_profile"`. Never path-prefix middleware — exempt lists rot and it bypasses the envelope. |
 | Admin dashboards (index KPIs/charts) | unfold insights components on the index (`DASHBOARD_CALLBACK`) + per-changelist KPI cards |

@@ -53,6 +53,15 @@ reference implementations of one product's stack — keep, trim, or delete:
   `apps/users/services/users.py` (`notify` on signup) plus the
   `templates/admin/notifications` + `static/` composer assets.
 
+- **`apps/location`** — `Country` reference rows (ISO codes, Arabic/English
+  names, dial code, currency, flag) loaded from the admin "Load countries"
+  sheet; `GET /api/v1/location/countries` is public. Deleting it means: the
+  Location sidebar section, the `/location` router line in `config/api/v1.py`,
+  the `apps.location` entries in the three `pyproject.toml` import-linter
+  contracts (+ the `apps.location.tests` / `apps.common.tests` ignore
+  lines), `INSTALLED_APPS`, the registry, `templates/admin/location/`, and
+  the `pycountry` / `babel` / `pillow` dependencies.
+
 `uv run lint-imports`, `apps/common/tests/test_env_contract.py`,
 `infra/tests/test_env_coverage.py` and `just infra-test` all fail loudly on
 anything left half-removed.

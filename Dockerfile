@@ -40,6 +40,12 @@ ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
     DJANGO_SETTINGS_MODULE=config.settings.production
 
+# GeoDjango (apps.location zones) binds libgdal/libgeos/libproj via ctypes -
+# shared libraries only, no Python bindings, no -dev headers.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgdal32 libgeos-c1v5 libproj25 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 
 WORKDIR /app

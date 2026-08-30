@@ -3,8 +3,9 @@
 ninja's ``AuthRateThrottle`` keys on ``str(request.auth)`` and pins one cache
 scope for every instance, so two of them (an API-wide ceiling and a tighter
 per-endpoint one) would share a single counter. This one keys on the
-principal's pk and takes its scope per instance. Anonymous requests never
-reach a throttle - ninja authenticates first.
+principal's pk and takes its scope per instance. Anonymous requests reach
+a throttle only on the few public routes (``auth=None``, e.g. the country
+list); there the key falls back to the client IP (``get_ident``).
 """
 
 from django.http import HttpRequest

@@ -154,6 +154,8 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    CREATE ROLE <app>_dev LOGIN PASSWORD '<choose one>';
    GRANT <app>_dev TO postgres;   -- RDS master is not a superuser: needed to hand over ownership
    CREATE DATABASE <app>_dev OWNER <app>_dev;
+   \c <app>_dev
+   CREATE EXTENSION IF NOT EXISTS postgis;  -- not an RDS trusted extension: only rds_superuser (the master) can create it
    ```
    then set `DATABASE_URL=postgres://<app>_dev:<password>@<endpoint>:5432/<app>_dev`
    in the `dev/<app>` secret.
@@ -176,6 +178,9 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
 10. `just infra-run-task dev python manage.py createsu` (first superuser) and
     `just infra-run-task dev python manage.py shell -c "1/0"` (Sentry smoke:
     the event must carry `environment=dev` and `release=<sha>`).
+    Then, in the admin, Location → Countries → **Load countries** and pick
+    the markets (the only way country rows come to exist; flags download in
+    the worker afterwards).
 11. Production: `just infra-deploy-first production <sha>` deploys
     `<app>-Db-production` first (RDS takes ~10 min; the instance and its
     secrets carry deletion protection and outlive the app stack), then

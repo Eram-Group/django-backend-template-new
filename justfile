@@ -18,6 +18,9 @@ default:
 # One-time setup: deps, .env, git hooks, services, release step.
 bootstrap:
     uv sync
+    # GeoDjango needs libgdal/libgeos on the host (Django runs outside Docker);
+    # Linux developers install their distro's libgdal/libgeos packages.
+    [ "$(uname)" != Darwin ] || brew list --versions gdal geos >/dev/null || brew install gdal geos
     [ -f .env ] || cp .env.example .env
     uv run pre-commit install --hook-type pre-commit --hook-type pre-push
     docker compose up -d --wait postgres mailpit
