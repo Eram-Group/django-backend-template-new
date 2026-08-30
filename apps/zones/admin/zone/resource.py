@@ -5,7 +5,7 @@ lossless, and the only way to get a shape back out of the database.
 """
 
 from apps.common.admin import BaseModelResource
-from apps.location.models import Zone
+from apps.zones.models import Zone
 
 
 class ZoneResource(BaseModelResource):

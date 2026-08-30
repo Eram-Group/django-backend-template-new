@@ -1,6 +1,7 @@
 from typing import Any
 
 import pytest
+from django.conf import settings
 from django.core.mail import EmailMessage
 from django.core.mail import EmailMultiAlternatives
 from django.test import Client
@@ -36,7 +37,7 @@ def test_login_code_email_is_branded_html_with_real_expiry(
     )
 
     message = mailoutbox[-1]
-    assert message.subject.startswith("[Backend] ")
+    assert message.subject.startswith(f"[{settings.SITE_NAME}] ")
     code_match = re.search(r"\b(\d{6})\b", str(message.body))
     assert code_match, message.body
     assert isinstance(message, EmailMultiAlternatives)

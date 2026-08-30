@@ -293,15 +293,20 @@ narrow service edge users.services → notifications.services + payments.service
 `wallet_currency_for(language)`). One-way at the model layer; nothing
 imports payments' models.
 
-## Location (countries + zones)
+## Location (countries) and Zones (PostGIS)
 
-`apps/location` is reference data that operators load, never type:
+`apps/location` and `apps/zones` are reference data that operators load,
+never type. They are two apps because zones are the only PostGIS consumer:
+a project generated without PostGIS simply has no `apps/zones`, and
+`location` never imports it (zones -> location is the recorded one-way edge:
+`Zone.country` is a string-ref PROTECT FK and the load sheet lists countries
+through location's selectors).
 
 - **Country** rows come from the admin "Load countries" sheet: every column
   is copied from pycountry/babel/phonenumbers (`iso.py`), flags arrive via a
   task. Operators edit names, the flag and `is_active`; deletion is off
   (zones PROTECT their country).
-- **Zone** rows come from the admin "Load zones" sheet: pick a country,
+- **Zone** rows (`apps/zones`) come from the admin "Load zones" sheet: pick a country,
   upload one GeoJSON FeatureCollection, `services.zones_load` upserts one
   zone per feature. The file's `properties` supply everything - `code` is
   `<country>-<region_code>-<zone_code>` (slug, unique, immutable), names are
@@ -310,7 +315,7 @@ imports payments' models.
   are wrapped; other types, invalid rings, a wrong `country_code` or a
   duplicate code reject the whole file, naming the feature). A re-upload
   refreshes geometry and file names, keeps `is_active` and any operator
-  names. `apps/location/geojson.py` is the parser (no DB); the change form
+  names. `apps/zones/geojson.py` is the parser (no DB); the change form
   edits names/region/`is_active` and shows a readonly geometry summary.
 - **Reads** are single PostGIS queries in `selectors/zones.py`:
   `zone_for_point` (`geometry__contains`, boundary exclusive, lowest `code`
@@ -426,7 +431,7 @@ per need.
 | Embedded mini-schemas | add the `Ref` tier per entity alongside Summary/Detail |
 | Edge rate limiting / bot control | AWS WAF on the Express ALB, in front of the app-level throttles |
 | Slow release-step collectstatic | collectfasta |
-| Geo (countries/regions/zones) | Built 2026-08-30 - see *Location*: PostGIS via `django.contrib.gis`, `imresamu/postgis:18-3.6` in compose/CI, `libgdal32 libgeos-c1v5 libproj25` in the image, `CreateExtension("postgis")` in the migration. The map widget stays out until `SECURE_CSP` allows the OpenLayers CDN + OSM tiles. |
+| Geo (countries/regions/zones) | Built 2026-08-30 - see *Location and Zones*: PostGIS via `django.contrib.gis`, `imresamu/postgis:18-3.6` in compose/CI, `libgdal32 libgeos-c1v5 libproj25` in the image, `CreateExtension("postgis")` in the migration. The map widget stays out until `SECURE_CSP` allows the OpenLayers CDN + OSM tiles. |
 | External-API fan-out | gunicorn gevent worker class for the web service |
 | Multi-persona users | one `User` + OneToOne profile models (Customer/Provider). Gate incomplete profiles at the API layer: `is_profile_completed` computed in a selector and exposed on the persona Detail schema, plus a ninja auth class raising an ApplicationError whose envelope carries `action_required: "complete_profile"`. Never path-prefix middleware — exempt lists rot and it bypasses the envelope. |
 | Admin dashboards (index KPIs/charts) | unfold insights components on the index (`DASHBOARD_CALLBACK`) + per-changelist KPI cards |

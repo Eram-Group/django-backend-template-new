@@ -20,6 +20,11 @@ from config.env import env
 
 BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 
+# --- Branding ---------------------------------------------------------------
+# One name everywhere: admin header + title, API title, email layouts, OTP
+# subject prefix. The Copier template sets it from `project_name`.
+SITE_NAME = "Backend"
+
 # --- Core ---------------------------------------------------------------
 # Surfaced as a setting (rather than read from env directly) so system checks
 # and tests can reason about the deployment environment via override_settings.
@@ -45,7 +50,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django.contrib.gis",  # PostGIS fields + lookups (apps.location zones)
+    "django.contrib.gis",  # PostGIS fields + lookups (apps.zones)
     # Third-party
     "ninja",  # registers export_openapi_schema (the Apidog sync artifact)
     "corsheaders",
@@ -65,6 +70,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.payments",
     "apps.location",
+    "apps.zones",
 ]
 
 # --- Middleware (guid first, axes last - order is load-bearing) ----------
@@ -192,7 +198,7 @@ ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_EMAIL_VERIFICATION_BY_CODE_ENABLED = True
 # Without contrib.sites allauth derives "[<request host>]" - brand the OTP
 # emails (the product's first touchpoint) deliberately instead.
-ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Backend] "  # SITE_NAME is defined below
+ACCOUNT_EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
 
 # API-only: no server-rendered account pages; browser + app clients are the
 # HEADLESS_CLIENTS default. The auth OpenAPI spec serves at /_allauth/openapi.json.
@@ -223,7 +229,6 @@ MODELTRANSLATION_DEFAULT_LANGUAGE = "ar"
 MODELTRANSLATION_FALLBACK_LANGUAGES = ()
 
 # --- Admin (unfold) ----------------------------------------------------------
-SITE_NAME = "Backend"  # admin header, email branding, OTP subject prefix
 
 
 def environment_callback(request: Any) -> list[str]:
@@ -455,9 +460,9 @@ UNFOLD = {
                     {
                         "title": _("Zones"),
                         "icon": "map",
-                        "link": reverse_lazy("admin:location_zone_changelist"),
+                        "link": reverse_lazy("admin:zones_zone_changelist"),
                         "permission": lambda request: request.user.has_perm(
-                            "location.view_zone"
+                            "zones.view_zone"
                         ),
                     },
                 ],

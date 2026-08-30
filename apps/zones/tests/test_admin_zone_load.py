@@ -6,18 +6,18 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client
 from django.urls import reverse
 
-from apps.location.models import Zone
 from apps.location.tests.factories import CountryFactory
-from apps.location.tests.factories import ZoneFactory
-from apps.location.tests.factories import square_multipolygon
-from apps.location.tests.geo import collection
-from apps.location.tests.geo import feature
 from apps.users.tests.factories import UserFactory
+from apps.zones.models import Zone
+from apps.zones.tests.factories import ZoneFactory
+from apps.zones.tests.factories import square_multipolygon
+from apps.zones.tests.geo import collection
+from apps.zones.tests.geo import feature
 
 pytestmark = pytest.mark.django_db
 
-LOAD_URL = reverse("admin:location_zone_load_zones")
-CHANGELIST_URL = reverse("admin:location_zone_changelist")
+LOAD_URL = reverse("admin:zones_zone_load_zones")
+CHANGELIST_URL = reverse("admin:zones_zone_changelist")
 
 
 @pytest.fixture
@@ -85,7 +85,7 @@ def test_load_needs_add_permission(client: Client) -> None:
 
 def test_change_form_shows_geometry_summary_and_saves(admin: Client) -> None:
     zone = ZoneFactory.create()
-    url = reverse("admin:location_zone_change", args=[zone.pk])
+    url = reverse("admin:zones_zone_change", args=[zone.pk])
     html = admin.get(url).content.decode()
     assert "Polygons: 1" in html
     assert "Vertices: 5" in html

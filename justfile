@@ -52,7 +52,16 @@ test *args:
 
 # Every static check, exactly as CI runs them (pre-commit is the one lint source).
 lint:
-    uv run pre-commit run --all-files
+    uv run pre-commit run --all-files --show-diff-on-failure
+
+# Every CI gate of the app in CI order - the ONE list ci.yml and the template's
+# CI run: lint, types, lockfile, migrations, tests (+ coverage floor), OpenAPI.
+gates: lint typecheck
+    uv lock --check
+    uv run manage.py makemigrations --check --dry-run
+    uv run pytest -n auto --cov
+    uv run manage.py export_openapi_schema --api config.api.v1.api --output openapi.json
+    uv run manage.py merge_auth_openapi --input openapi.json --server-url http://localhost:8000
 
 # Auto-fix + format.
 fmt:
@@ -115,7 +124,7 @@ infra-install:
 
 # Synthesize every stack without AWS credentials (image_tag=synth placeholder).
 infra-synth:
-    cd infra && npx cdk synth -c image_tag=synth -q
+    cd infra && npx cdk synth --all -c image_tag=synth -q
 
 # Template assertions for the CDK stacks.
 infra-test:
@@ -124,6 +133,9 @@ infra-test:
 # cfn-lint over the synthesized templates (run infra-synth first).
 infra-lint:
     cd infra && uv run cfn-lint --ignore-checks W3005 -- cdk.out/*.template.json
+
+# Every CI gate of the CDK app: synth, template assertions, cfn-lint.
+infra-gates: infra-synth infra-test infra-lint
 
 # Diff one environment against what is deployed, pinning the LIVE image tag.
 infra-diff env:

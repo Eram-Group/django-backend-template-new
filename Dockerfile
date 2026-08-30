@@ -1,8 +1,7 @@
 # syntax=docker/dockerfile:1
 # The single ECS artifact: web (this CMD) and worker (command: manage.py
 # db_worker) run the same image. The release step (migrate + createcachetable
-# + seed_notification_config + collectstatic) is a one-off ECS task - NEVER
-# the entrypoint, NEVER here.
+# + collectstatic) is a one-off ECS task - NEVER the entrypoint, NEVER here.
 
 # --- Build stage: resolve the locked, prod-only environment -------------------
 FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim AS builder

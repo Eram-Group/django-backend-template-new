@@ -13,6 +13,7 @@ their own per-ip/per-key limits (``ACCOUNT_RATE_LIMITS`` defaults, e.g.
 login-code requests 20/m per ip).
 """
 
+from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from ninja import NinjaAPI
 
@@ -21,7 +22,7 @@ from config.api.auth import api_auth
 from config.api.exception_handlers import register_exception_handlers
 
 api = NinjaAPI(
-    title="Backend API",
+    title=f"{settings.SITE_NAME} API",
     version="1",
     urls_namespace="api-v1",
     auth=api_auth,

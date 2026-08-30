@@ -5,9 +5,9 @@ from typing import Any
 
 from django.db import transaction
 
-from apps.location.geojson import zone_features
 from apps.location.models import Country
-from apps.location.models import Zone
+from apps.zones.geojson import zone_features
+from apps.zones.models import Zone
 
 ZONE_UPDATABLE_FIELDS = frozenset({"name_ar", "name_en", "region_code", "is_active"})
 

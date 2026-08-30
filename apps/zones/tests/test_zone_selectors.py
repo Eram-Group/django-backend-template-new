@@ -2,12 +2,12 @@ import pytest
 from django.contrib.gis.geos import MultiPolygon
 from django.contrib.gis.geos import Polygon
 
-from apps.location import selectors
-from apps.location.exceptions import InvalidCoordinatesError
-from apps.location.exceptions import ZoneNotFoundError
-from apps.location.tests.factories import ZoneFactory
-from apps.location.tests.geo import HOLE
-from apps.location.tests.geo import SQUARE
+from apps.zones import selectors
+from apps.zones.exceptions import InvalidCoordinatesError
+from apps.zones.exceptions import ZoneNotFoundError
+from apps.zones.tests.factories import ZoneFactory
+from apps.zones.tests.geo import HOLE
+from apps.zones.tests.geo import SQUARE
 
 pytestmark = pytest.mark.django_db
 

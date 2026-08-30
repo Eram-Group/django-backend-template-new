@@ -3,9 +3,9 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.db.models import ProtectedError
 
-from apps.location.models import Zone
 from apps.location.tests.factories import CountryFactory
-from apps.location.tests.factories import ZoneFactory
+from apps.zones.models import Zone
+from apps.zones.tests.factories import ZoneFactory
 
 pytestmark = pytest.mark.django_db
 

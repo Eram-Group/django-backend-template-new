@@ -81,9 +81,8 @@ docs/DEPLOYMENT.md bootstrap in order — do not push to `main` before the
 - `PLAN.md` and `TODO.json` are this template's own design log and backlog.
   Replace them with the new project's, or delete them and drop the two
   references in `CLAUDE.md` / `README.md`.
-- Migrations: the apps ship their full history, including data migrations
-  that will find no rows in a fresh database. They apply cleanly; squash
-  only before the first deploy (`notifications/0005` seeds the
-  `NotificationKindConfig` rows the catalog requires — keep that seed).
+- Migrations: the apps ship their full history. They apply cleanly; squash
+  only before the first deploy. `NotificationKindConfig` rows are not
+  seeded by a migration - operators save each card once in the admin.
 - Run every gate before the first commit: `just lint`, `just typecheck`,
   `just test`, `uv run lint-imports`, `just infra-test`.

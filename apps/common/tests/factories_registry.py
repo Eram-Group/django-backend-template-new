@@ -11,9 +11,7 @@ from django.db.models import Model
 from factory.django import DjangoModelFactory
 
 from apps.location.models import Country
-from apps.location.models import Zone
 from apps.location.tests.factories import CountryFactory
-from apps.location.tests.factories import ZoneFactory
 from apps.notifications.models import Broadcast
 from apps.notifications.models import Device
 from apps.notifications.models import Notification
@@ -34,11 +32,12 @@ from apps.payments.tests.factories import WalletFactory
 from apps.payments.tests.factories import WalletTransactionFactory
 from apps.users.models import User
 from apps.users.tests.factories import UserFactory
+from apps.zones.models import Zone
+from apps.zones.tests.factories import ZoneFactory
 
 FACTORIES: dict[type[Model], type[DjangoModelFactory[Any]]] = {
     User: UserFactory,
     Country: CountryFactory,
-    Zone: ZoneFactory,
     Broadcast: BroadcastFactory,
     Device: DeviceFactory,
     Notification: NotificationFactory,
@@ -48,6 +47,7 @@ FACTORIES: dict[type[Model], type[DjangoModelFactory[Any]]] = {
     SavedCard: SavedCardFactory,
     Wallet: WalletFactory,
     WalletTransaction: WalletTransactionFactory,
+    Zone: ZoneFactory,
 }
 
 

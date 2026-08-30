@@ -21,8 +21,8 @@ from django.contrib.gis.geos.error import GEOSException
 from django.utils.text import slugify
 from django.utils.translation import gettext as _
 
-from apps.location.exceptions import ZoneFileError
 from apps.location.models import Country
+from apps.zones.exceptions import ZoneFileError
 
 MAX_DOCUMENT_BYTES = 32 * 1024 * 1024
 

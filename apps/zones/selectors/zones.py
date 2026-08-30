@@ -4,9 +4,9 @@ from django.contrib.gis.geos import Point
 from django.db.models import QuerySet
 from django.utils.translation import gettext_lazy as _
 
-from apps.location.exceptions import InvalidCoordinatesError
-from apps.location.exceptions import ZoneNotFoundError
-from apps.location.models import Zone
+from apps.zones.exceptions import InvalidCoordinatesError
+from apps.zones.exceptions import ZoneNotFoundError
+from apps.zones.models import Zone
 
 MAX_LATITUDE = 90.0
 MAX_LONGITUDE = 180.0

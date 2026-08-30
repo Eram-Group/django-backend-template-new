@@ -16,15 +16,15 @@ from unfold.decorators import action
 from unfold.decorators import display
 
 from apps.common.admin import BaseModelAdmin
-from apps.location import selectors
-from apps.location import services
-from apps.location.admin.zone import change_view
-from apps.location.admin.zone import list_view
-from apps.location.admin.zone import permissions
-from apps.location.admin.zone.load_form import ZoneLoadForm
-from apps.location.admin.zone.resource import ZoneResource
-from apps.location.exceptions import ZoneFileError
-from apps.location.models import Zone
+from apps.zones import selectors
+from apps.zones import services
+from apps.zones.admin.zone import change_view
+from apps.zones.admin.zone import list_view
+from apps.zones.admin.zone import permissions
+from apps.zones.admin.zone.load_form import ZoneLoadForm
+from apps.zones.admin.zone.resource import ZoneResource
+from apps.zones.exceptions import ZoneFileError
+from apps.zones.models import Zone
 
 OVERLAP_REPORT_LIMIT = 20
 
@@ -64,7 +64,7 @@ class ZoneAdmin(BaseModelAdmin, TabbedTranslationAdmin[Zone]):
     actions = ["find_overlaps"]
 
     def has_load_permission(self, request: HttpRequest, object_id: Any = None) -> bool:
-        return request.user.has_perm("location.add_zone")
+        return request.user.has_perm("zones.add_zone")
 
     @action(
         description=_("Load zones"),
@@ -74,7 +74,7 @@ class ZoneAdmin(BaseModelAdmin, TabbedTranslationAdmin[Zone]):
     )
     def load_zones(self, request: HttpRequest) -> HttpResponse:
         """GET: the sheet. POST: upsert the file's features, back to the list."""
-        changelist_url = reverse("admin:location_zone_changelist")
+        changelist_url = reverse("admin:zones_zone_changelist")
         is_post = request.method == "POST"
         form = ZoneLoadForm(request.POST, request.FILES) if is_post else ZoneLoadForm()
         if is_post and form.is_valid():
@@ -105,7 +105,7 @@ class ZoneAdmin(BaseModelAdmin, TabbedTranslationAdmin[Zone]):
             "form": form,
             "changelist_url": changelist_url,
         }
-        return render(request, "admin/location/zone/load.html", context)
+        return render(request, "admin/zones/zone/load.html", context)
 
     @admin.action(description=_("Find overlaps for selected zones"))
     def find_overlaps(self, request: HttpRequest, queryset: QuerySet[Zone]) -> None:

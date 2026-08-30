@@ -6,7 +6,6 @@ from django.utils.translation import gettext_lazy as _
 from modeltranslation.manager import MultilingualManager
 
 from apps.common.models import BaseModel
-from apps.location.models.country import Country
 
 
 class Zone(BaseModel):
@@ -21,13 +20,14 @@ class Zone(BaseModel):
     yet.
 
     ``objects`` is declared as MultilingualManager up front for the
-    django-stubs plugin (see Country).
+    django-stubs plugin (see location's Country).
     """
 
     objects = MultilingualManager["Zone"]()
 
+    # Passive ownership only (docs/ARCHITECTURE.md): string ref, no import.
     country = models.ForeignKey(
-        Country,
+        "location.Country",
         on_delete=models.PROTECT,
         related_name="zones",
         verbose_name=_("country"),

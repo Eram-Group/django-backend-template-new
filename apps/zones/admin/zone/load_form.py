@@ -8,8 +8,8 @@ from django import forms
 from django.utils.translation import gettext_lazy as _
 
 from apps.location import selectors
-from apps.location.geojson import MAX_DOCUMENT_BYTES
 from apps.location.models import Country
+from apps.zones.geojson import MAX_DOCUMENT_BYTES
 
 
 class ZoneLoadForm(forms.Form):

@@ -6,14 +6,14 @@ from pathlib import Path
 import pytest
 from django.utils import translation
 
-from apps.location.exceptions import ZoneFileError
-from apps.location.geojson import zone_features
 from apps.location.tests.factories import CountryFactory
-from apps.location.tests.geo import BOWTIE
-from apps.location.tests.geo import HOLE
-from apps.location.tests.geo import SQUARE
-from apps.location.tests.geo import collection
-from apps.location.tests.geo import feature
+from apps.zones.exceptions import ZoneFileError
+from apps.zones.geojson import zone_features
+from apps.zones.tests.geo import BOWTIE
+from apps.zones.tests.geo import HOLE
+from apps.zones.tests.geo import SQUARE
+from apps.zones.tests.geo import collection
+from apps.zones.tests.geo import feature
 
 DATA = Path(__file__).parent / "data"
 
@@ -136,7 +136,7 @@ def test_feature_index_is_one_based(saudi) -> None:  # type: ignore[no-untyped-d
 
 
 def test_oversized_document_is_refused(saudi, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
-    monkeypatch.setattr("apps.location.geojson.MAX_DOCUMENT_BYTES", 10)
+    monkeypatch.setattr("apps.zones.geojson.MAX_DOCUMENT_BYTES", 10)
     with pytest.raises(ZoneFileError, match="larger than 0 MB"):
         zone_features(document=collection(feature()), country=saudi)
 

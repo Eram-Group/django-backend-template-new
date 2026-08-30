@@ -1,14 +1,14 @@
 import pytest
 from django.core.exceptions import ValidationError
 
-from apps.location import services
-from apps.location.exceptions import ZoneFileError
-from apps.location.models import Zone
 from apps.location.tests.factories import CountryFactory
-from apps.location.tests.factories import ZoneFactory
-from apps.location.tests.geo import SQUARE
-from apps.location.tests.geo import collection
-from apps.location.tests.geo import feature
+from apps.zones import services
+from apps.zones.exceptions import ZoneFileError
+from apps.zones.models import Zone
+from apps.zones.tests.factories import ZoneFactory
+from apps.zones.tests.geo import SQUARE
+from apps.zones.tests.geo import collection
+from apps.zones.tests.geo import feature
 
 pytestmark = pytest.mark.django_db
 

@@ -1,4 +1,4 @@
-"""Location factories - Country from ISO data, Zone from a synthetic grid.
+"""Location factories - Country from ISO data.
 
 No fake values: a country's code, names, dial code and currency are real
 reference data, so they come from apps.location.iso (not fake.py). Codes
@@ -9,20 +9,15 @@ and a re-run on a --reuse-db database re-hits the same ones
 
 import base64
 
-from django.contrib.gis.geos import MultiPolygon
-from django.contrib.gis.geos import Polygon
 from django.core.files.base import ContentFile
 from factory.declarations import LazyAttribute
 from factory.declarations import Sequence
-from factory.declarations import SubFactory
 from factory.declarations import Trait
 from factory.django import DjangoModelFactory
 
-from apps.common.tests import fake
 from apps.location.iso import CountryData
 from apps.location.iso import iso_countries
 from apps.location.models import Country
-from apps.location.models import Zone
 
 _CODES = [country.code for country in iso_countries()]
 
@@ -57,36 +52,4 @@ class CountryFactory(DjangoModelFactory[Country]):
     phone_example = LazyAttribute(lambda o: _iso(o.code).phone_example)
     max_phone_length = LazyAttribute(lambda o: _iso(o.code).max_phone_length)
     currency = LazyAttribute(lambda o: _iso(o.code).currency)
-    is_active = True
-
-
-def square_multipolygon(n: int) -> MultiPolygon:
-    """A 0.04° square on a 100-column grid over the Arabian peninsula: valid,
-    disjoint from every other n, deterministic, always inside WGS84."""
-    x = 40.0 + 0.05 * (n % 100)
-    y = 20.0 + 0.05 * (n // 100)
-    ring = ((x, y), (x + 0.04, y), (x + 0.04, y + 0.04), (x, y + 0.04), (x, y))
-    return MultiPolygon(Polygon(ring), srid=4326)
-
-
-class ZoneFactory(DjangoModelFactory[Zone]):
-    """Zones as the load sheet would create them from a well-formed file.
-
-    Names come from fake.city per language (literal "ar"/"en": importing
-    apps.users.constants from here would breach the app-independence
-    contract). Codes walk a sequence so create_batch(n) yields n rows and a
-    --reuse-db re-run hits the same ones (django_get_or_create on code).
-    """
-
-    class Meta:
-        model = Zone
-        django_get_or_create = ["code"]
-        skip_postgeneration_save = True
-
-    country = SubFactory(CountryFactory)
-    region_code = "TST"
-    code = Sequence(lambda n: f"zz-tst-{n:04d}")
-    name_ar = LazyAttribute(lambda o: fake.city("ar"))
-    name_en = LazyAttribute(lambda o: fake.city("en"))
-    geometry = Sequence(square_multipolygon)
     is_active = True
