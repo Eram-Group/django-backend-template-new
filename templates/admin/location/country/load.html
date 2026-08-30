@@ -1,0 +1,168 @@
+{% extends "admin/base_site.html" %}
+
+{% load i18n %}
+
+{% block breadcrumbs %}{% endblock breadcrumbs %}
+
+{% block content %}
+  {# CSS is inlined rather than shipped as a static file: production serves    #}
+  {# static from S3, so a new .css would 404 until the next collectstatic.     #}
+  {# Every colour below is an Unfold theme token, so the sheet follows the     #}
+  {# admin's own palette in both light and dark mode.                         #}
+  <style>
+    .cl {
+      --cl-raised: #fff;
+      --cl-line: var(--color-base-200, #e5e7eb);
+      --cl-line-soft: var(--color-base-100, #f3f4f6);
+      --cl-hover: var(--color-base-50, #f9fafb);
+      --cl-strong: var(--color-font-important-light, #111827);
+      --cl-body: var(--color-font-default-light, #4b5563);
+      --cl-muted: var(--color-font-subtle-light, #6b7280);
+      --cl-accent: var(--color-primary-600, #2563eb);
+      --cl-alert: #b91c1c;
+    }
+    .dark .cl {
+      --cl-raised: var(--color-base-800, #1f2937);
+      --cl-line: var(--color-base-700, #374151);
+      --cl-line-soft: var(--color-base-800, #1f2937);
+      --cl-hover: var(--color-base-700, #374151);
+      --cl-strong: var(--color-font-important-dark, #f3f4f6);
+      --cl-body: var(--color-font-default-dark, #d1d5db);
+      --cl-muted: var(--color-font-subtle-dark, #9ca3af);
+      --cl-accent: var(--color-primary-400, #60a5fa);
+      --cl-alert: #f87171;
+    }
+    .cl { max-width: 760px; margin: 0 auto; color: var(--cl-body); }
+    .cl-head h1 { font-size: 20px; font-weight: 650; margin: 0; color: var(--cl-strong); }
+    .cl-head p { font-size: 13px; color: var(--cl-muted); margin: 4px 0 20px; }
+    .cl-sheet { background: var(--cl-raised); border: 1px solid var(--cl-line); border-radius: var(--border-radius, 8px); overflow: hidden; }
+    .cl-search { display: flex; align-items: center; gap: 8px; padding: 14px 18px; border-bottom: 1px solid var(--cl-line); }
+    .cl-search input { flex: 1; background: transparent; border: 0; outline: 0; font-size: 14px; color: var(--cl-strong); }
+    .cl-search .material-symbols-outlined { color: var(--cl-muted); font-size: 20px; }
+    .cl-link { background: transparent; border: 0; padding: 0; font-size: 13px; font-weight: 550; color: var(--cl-accent); cursor: pointer; white-space: nowrap; }
+    .cl-link:disabled { opacity: .45; cursor: not-allowed; }
+    .cl-list { max-height: 60vh; overflow-y: auto; }
+    .cl-row { display: flex; align-items: center; gap: 12px; padding: 10px 18px; border-bottom: 1px solid var(--cl-line-soft); font-size: 14px; cursor: pointer; }
+    .cl-row:last-child { border-bottom: 0; }
+    .cl-row:hover { background: var(--cl-hover); }
+    .cl-row input { accent-color: var(--cl-accent); width: 16px; height: 16px; }
+    .cl-row.is-loaded { cursor: default; opacity: .55; }
+    .cl-row.is-loaded:hover { background: transparent; }
+    .cl-flag { font-size: 20px; line-height: 1; width: 24px; }
+    .cl-name { flex: 1; color: var(--cl-strong); }
+    .cl-name small { display: block; color: var(--cl-muted); font-size: 12px; }
+    .cl-meta { color: var(--cl-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .cl-badge { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--cl-muted); border: 1px solid var(--cl-line); border-radius: 999px; padding: 2px 8px; }
+    .cl-empty { padding: 28px 18px; text-align: center; color: var(--cl-muted); font-size: 13px; }
+    .cl-foot { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-top: 1px solid var(--cl-line); background: var(--cl-raised); }
+    .cl-count { flex: 1; font-size: 13px; color: var(--cl-muted); }
+    .cl-btn { border: 1px solid var(--cl-line); border-radius: var(--border-radius, 8px); padding: 8px 16px; font-size: 13px; font-weight: 550; color: var(--cl-body); background: transparent; cursor: pointer; }
+    .cl-btn-primary { background: var(--cl-accent); border-color: var(--cl-accent); color: #fff; }
+    .cl-btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+    .cl-error { color: var(--cl-alert); font-size: 13px; margin: 0 0 12px; }
+  </style>
+
+  {# The toggle works on what the search leaves visible, so filtering to "united" #}
+  {# and hitting select-all picks those rows, not all ~240 countries.            #}
+  <div class="cl"
+       x-data="{
+         query: '',
+         selected: [],
+         matches(text) {
+           const needle = this.query.trim().toLowerCase();
+           return needle === '' || text.includes(needle);
+         },
+         get visibleCodes() {
+           return [...this.$root.querySelectorAll('[data-code]')]
+             .filter(row => this.matches(row.dataset.search))
+             .map(row => row.dataset.code);
+         },
+         get allSelected() {
+           const codes = this.visibleCodes;
+           return codes.length > 0 && codes.every(code => this.selected.includes(code));
+         },
+         toggleAll() {
+           const codes = this.visibleCodes;
+           this.selected = this.allSelected
+             ? this.selected.filter(code => !codes.includes(code))
+             : [...new Set([...this.selected, ...codes])];
+         },
+       }">
+    <div class="cl-head">
+      <h1>{% translate "Load countries" %}</h1>
+      {# Plain string, no {% blocktranslate count %}: the locale gate does not parse plural msgids. #}
+      <p>{% translate "Already loaded:" %} {{ loaded_count }}. {% translate "Pick the countries to add." %}</p>
+    </div>
+
+    {% if form.errors %}
+      {% for error in form.errors.codes %}<p class="cl-error">{{ error }}</p>{% endfor %}
+    {% endif %}
+
+    <form method="post" action="">
+      {% csrf_token %}
+
+      <div class="cl-sheet">
+        <div class="cl-search">
+          <span class="material-symbols-outlined">search</span>
+          <input type="search"
+                 x-model="query"
+                 placeholder="{% translate 'Search by name or code' %}"
+                 aria-label="{% translate 'Search countries' %}" />
+          {# Labels ride on data attributes: a translation containing an apostrophe #}
+          {# would break a quoted JS string inside the attribute.                   #}
+          <button type="button"
+                  class="cl-link"
+                  data-select="{% translate 'Select all' %}"
+                  data-deselect="{% translate 'Deselect all' %}"
+                  x-text="allSelected ? $el.dataset.deselect : $el.dataset.select"
+                  :disabled="visibleCodes.length === 0"
+                  @click="toggleAll()"></button>
+        </div>
+
+        <div class="cl-list">
+          {% for country in countries %}
+            {% if country.code in loaded_codes %}
+              <div class="cl-row is-loaded"
+                   data-search="{{ country.name_en|lower }} {{ country.name_ar }} {{ country.code|lower }}"
+                   x-show="matches($el.dataset.search)">
+                <input type="checkbox" checked disabled />
+                <span class="cl-flag">{{ country.flag_emoji }}</span>
+                <span class="cl-name">
+                  {{ country.name_en }}
+                  <small>{{ country.name_ar }}</small>
+                </span>
+                <span class="cl-badge">{% translate "Loaded" %}</span>
+              </div>
+            {% else %}
+              <label class="cl-row"
+                     data-code="{{ country.code }}"
+                     data-search="{{ country.name_en|lower }} {{ country.name_ar }} {{ country.code|lower }}"
+                     x-show="matches($el.dataset.search)">
+                <input type="checkbox" name="codes" value="{{ country.code }}" x-model="selected" />
+                <span class="cl-flag">{{ country.flag_emoji }}</span>
+                <span class="cl-name">
+                  {{ country.name_en }}
+                  <small>{{ country.name_ar }}</small>
+                </span>
+                <span class="cl-meta">{{ country.dial_code }} · {{ country.currency }}</span>
+              </label>
+            {% endif %}
+          {% empty %}
+            <p class="cl-empty">{% translate "No countries available to load." %}</p>
+          {% endfor %}
+        </div>
+
+        <div class="cl-foot">
+          <span class="cl-count"
+                data-selected="{% translate 'selected' %}"
+                data-none="{% translate 'Nothing selected' %}"
+                x-text="selected.length ? selected.length + ' ' + $el.dataset.selected : $el.dataset.none"></span>
+          <a class="cl-btn" href="{{ changelist_url }}">{% translate "Cancel" %}</a>
+          <button type="submit" class="cl-btn cl-btn-primary" :disabled="selected.length === 0">
+            {% translate "Load selected" %}
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+{% endblock content %}

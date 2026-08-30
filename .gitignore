@@ -277,3 +277,6 @@ tags
 # CDK (infra/)
 infra/cdk.out/
 infra/.venv/
+
+# Local uploads (flags etc.); deployed media lives in S3
+media/
