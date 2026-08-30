@@ -239,7 +239,7 @@ requires-dist = [
     { name = "babel", specifier = ">=2.17" },
     { name = "dj-database-url", specifier = ">=3.1.2" },
     { name = "django", specifier = ">=6.1,<6.2" },
-    { name = "django-allauth", extras = ["headless-spec", "socialaccount"], specifier = ">=65.18" },
+    { name = "django-allauth", extras = ["headless-spec", "socialaccount"], specifier = ">=65.19.1" },
     { name = "django-anymail", extras = ["amazon-ses"], specifier = ">=15.0" },
     { name = "django-axes", specifier = ">=8.3.1" },
     { name = "django-cors-headers", specifier = ">=4.9" },
