@@ -6,7 +6,7 @@
 {% block content %}
   <h1 style="margin:0 0 16px; font-size:20px; color:#0f172a;">{% translate "Your sign-in code" %}</h1>
   <p style="margin:0 0 24px;">{% translate "Enter this code to continue signing in:" %}</p>
-  <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; padding:18px; text-align:center; font-size:32px; font-weight:700; letter-spacing:8px; color:#166534;" dir="ltr">{{ code }}</div>
+  <div style="background:{{ brand.background }}; border:1px solid {{ brand.border }}; border-radius:10px; padding:18px; text-align:center; font-size:32px; font-weight:700; letter-spacing:8px; color:{{ brand.text }};" dir="ltr">{{ code }}</div>
   <p style="margin:24px 0 0; color:#64748b; font-size:13px;">{% blocktranslate with minutes=code_ttl_minutes %}This code expires in {{ minutes }} minutes.{% endblocktranslate %}</p>
   <p style="margin:12px 0 0; color:#94a3b8; font-size:13px;">{% translate "This mail can be safely ignored if you did not initiate this action." %}</p>
 {% endblock content %}

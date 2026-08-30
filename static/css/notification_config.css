@@ -16,8 +16,8 @@
     --nc-strong: #111827;
     --nc-body: #4b5563;
     --nc-muted: #6b7280;
-    --nc-accent: #16a34a; /* matches the project's green primary ramp */
-    --nc-accent-quiet: rgb(22 163 74 / 0.08);
+    --nc-accent: var(--color-primary-600); /* unfold exposes UNFOLD["COLORS"] as CSS variables */
+    --nc-accent-quiet: color-mix(in srgb, var(--color-primary-600) 8%, transparent);
     --nc-alert: #b91c1c;
     --nc-amber: #b45309;
     --nc-amber-quiet: rgb(180 83 9 / 0.1);
@@ -37,8 +37,8 @@
     --nc-strong: #f3f4f6;
     --nc-body: #d1d5db;
     --nc-muted: #9ca3af;
-    --nc-accent: #4ade80;
-    --nc-accent-quiet: rgb(74 222 128 / 0.12);
+    --nc-accent: var(--color-primary-400);
+    --nc-accent-quiet: color-mix(in srgb, var(--color-primary-400) 12%, transparent);
     --nc-alert: #f87171;
     --nc-amber: #fbbf24;
     --nc-amber-quiet: rgb(251 191 36 / 0.12);
@@ -471,7 +471,7 @@
     font-size: 7px;
     font-weight: 700;
     color: #fff;
-    background: linear-gradient(135deg, #16a34a, #15803d);
+    background: linear-gradient(135deg, var(--color-primary-600), var(--color-primary-700));
     border-radius: 6px;
 }
 

@@ -25,9 +25,10 @@ def email_send(
     template_name: str,
     context: dict[str, Any],
 ) -> None:
-    # emails/base.html brands every message with the site name.
+    # emails/base.html brands every message with the site name and colours.
     html_body = render_to_string(
-        template_name, {**context, "site_name": settings.SITE_NAME}
+        template_name,
+        {**context, "site_name": settings.SITE_NAME, "brand": settings.EMAIL_BRAND},
     )
     text_body = _EXCESS_BLANK_LINES.sub(
         "\n\n", strip_tags(_STYLE_BLOCK.sub("", html_body))

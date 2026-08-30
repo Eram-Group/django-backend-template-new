@@ -23,7 +23,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "05:00"
-      timezone: "Asia/Riyadh"
+      timezone: "{{ timezone }}"
     open-pull-requests-limit: 10
     cooldown:
       default-days: 3
@@ -42,7 +42,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "05:00"
-      timezone: "Asia/Riyadh"
+      timezone: "{{ timezone }}"
     groups:
       github-actions:
         patterns: ["*"]
@@ -55,7 +55,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "05:00"
-      timezone: "Asia/Riyadh"
+      timezone: "{{ timezone }}"
     groups:
       docker-images:
         patterns: ["*"]
@@ -68,7 +68,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "05:00"
-      timezone: "Asia/Riyadh"
+      timezone: "{{ timezone }}"
     groups:
       compose-images:
         patterns: ["*"]
@@ -82,7 +82,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "05:00"
-      timezone: "Asia/Riyadh"
+      timezone: "{{ timezone }}"
     groups:
       pre-commit-hooks:
         patterns: ["*"]
@@ -96,7 +96,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "05:00"
-      timezone: "Asia/Riyadh"
+      timezone: "{{ timezone }}"
     cooldown:
       default-days: 3
       semver-major-days: 14
@@ -111,7 +111,7 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "05:00"
-      timezone: "Asia/Riyadh"
+      timezone: "{{ timezone }}"
     cooldown:
       default-days: 3
       semver-major-days: 14

@@ -292,6 +292,7 @@ narrow service edge users.services → notifications.services + payments.service
 (`user_create` writes the WELCOME inbox row and provisions the wallet in
 `wallet_currency_for(language)`). One-way at the model layer; nothing
 imports payments' models.
+{%- if database == "postgis" %}
 
 ## Location (countries) and Zones (PostGIS)
 
@@ -330,6 +331,16 @@ through location's selectors).
   shared libraries in the image, and `CREATE EXTENSION postgis` by the RDS
   master user for the shared dev database (not a trusted extension; the
   runbook step in `docs/DEPLOYMENT.md`).
+{%- else %}
+
+## Location (countries)
+
+`apps/location` is reference data that operators load, never type:
+
+- **Country** rows come from the admin "Load countries" sheet: every column
+  is copied from pycountry/babel/phonenumbers (`iso.py`), flags arrive via a
+  task. Operators edit names, the flag and `is_active`; deletion is off.
+{%- endif %}
 
 ## i18n and translated content
 
@@ -431,7 +442,11 @@ per need.
 | Embedded mini-schemas | add the `Ref` tier per entity alongside Summary/Detail |
 | Edge rate limiting / bot control | AWS WAF on the Express ALB, in front of the app-level throttles |
 | Slow release-step collectstatic | collectfasta |
+{%- if database == "postgis" %}
 | Geo (countries/regions/zones) | Built 2026-08-30 - see *Location and Zones*: PostGIS via `django.contrib.gis`, `imresamu/postgis:18-3.6` in compose/CI, `libgdal32 libgeos-c1v5 libproj25` in the image, `CreateExtension("postgis")` in the migration. The map widget stays out until `SECURE_CSP` allows the OpenLayers CDN + OSM tiles. |
+{%- else %}
+| Geo (regions/zones) | Generate with `database: postgis` (Copier) - PostGIS via `django.contrib.gis` and the `zones` app (service areas as MultiPolygons, admin GeoJSON load sheet). |
+{%- endif %}
 | External-API fan-out | gunicorn gevent worker class for the web service |
 | Multi-persona users | one `User` + OneToOne profile models (Customer/Provider). Gate incomplete profiles at the API layer: `is_profile_completed` computed in a selector and exposed on the persona Detail schema, plus a ninja auth class raising an ApplicationError whose envelope carries `action_required: "complete_profile"`. Never path-prefix middleware — exempt lists rot and it bypasses the envelope. |
 | Admin dashboards (index KPIs/charts) | unfold insights components on the index (`DASHBOARD_CALLBACK`) + per-changelist KPI cards |

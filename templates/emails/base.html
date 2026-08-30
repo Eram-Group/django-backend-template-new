@@ -13,20 +13,20 @@
     a[x-apple-data-detectors]{color:inherit!important;text-decoration:none!important}
   </style>
 </head>
-<body style="margin:0; padding:0; background:#f0fdf4; font-family:Arial,Helvetica,sans-serif;">
+<body style="margin:0; padding:0; background:{{ brand.background }}; font-family:Arial,Helvetica,sans-serif;">
 
   <div style="display:none; max-height:0; overflow:hidden; opacity:0; mso-hide:all;">{% block preheader %}{% endblock %}</div>
 
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f0fdf4;">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:{{ brand.background }};">
     <tr>
       <td align="center" style="padding:40px 16px;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="w-100"
-               style="max-width:600px; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 4px 16px rgba(22, 163, 74, 0.08);">
+               style="max-width:600px; background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 4px 16px {{ brand.shadow }};">
 
           <tr>
-            <td style="background:linear-gradient(135deg,#16a34a,#4ade80); padding:24px 40px;" class="px-24">
+            <td style="background:linear-gradient(135deg,{{ brand.gradient_start }},{{ brand.gradient_end }}); padding:24px 40px;" class="px-24">
               <div style="font-size:22px; font-weight:700; color:#ffffff; letter-spacing:1px;">{{ site_name }}</div>
-              <div style="font-size:11px; color:#dcfce7;">{% block tagline %}{% endblock %}</div>
+              <div style="font-size:11px; color:{{ brand.tagline }};">{% block tagline %}{% endblock %}</div>
             </td>
           </tr>
 

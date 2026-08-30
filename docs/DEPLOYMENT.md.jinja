@@ -154,8 +154,10 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    CREATE ROLE <app>_dev LOGIN PASSWORD '<choose one>';
    GRANT <app>_dev TO postgres;   -- RDS master is not a superuser: needed to hand over ownership
    CREATE DATABASE <app>_dev OWNER <app>_dev;
+{%- if database == "postgis" %}
    \c <app>_dev
    CREATE EXTENSION IF NOT EXISTS postgis;  -- not an RDS trusted extension: only rds_superuser (the master) can create it
+{%- endif %}
    ```
    then set `DATABASE_URL=postgres://<app>_dev:<password>@<endpoint>:5432/<app>_dev`
    in the `dev/<app>` secret.

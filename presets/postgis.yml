@@ -1,0 +1,12 @@
+# Template CI preset: everything on - PostGIS + zones, default branding.
+project_name: Geo Demo
+app_name: geo-demo
+github_repo: Eram-Group/geo-demo
+domain: geo-demo.eramapps.com
+database: postgis
+brand_color: green
+site_symbol: hub
+default_from_email: no-reply@eramapps.com
+superuser_email: admin@eramapps.com
+timezone: Asia/Riyadh
+admin_url: manage-a1b2c3/

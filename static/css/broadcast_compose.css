@@ -18,8 +18,8 @@
     --bc-strong: #111827;
     --bc-body: #4b5563;
     --bc-muted: #6b7280;
-    --bc-accent: #16a34a; /* matches the project's green primary ramp */
-    --bc-accent-quiet: rgb(22 163 74 / 0.08);
+    --bc-accent: var(--color-primary-600); /* unfold exposes UNFOLD["COLORS"] as CSS variables */
+    --bc-accent-quiet: color-mix(in srgb, var(--color-primary-600) 8%, transparent);
     --bc-alert: #b91c1c;
     --bc-alert-quiet: rgb(185 28 28 / 0.07);
 }
@@ -33,8 +33,8 @@
     --bc-strong: #f3f4f6;
     --bc-body: #d1d5db;
     --bc-muted: #9ca3af;
-    --bc-accent: #4ade80;
-    --bc-accent-quiet: rgb(74 222 128 / 0.12);
+    --bc-accent: var(--color-primary-400);
+    --bc-accent-quiet: color-mix(in srgb, var(--color-primary-400) 12%, transparent);
     --bc-alert: #f87171;
     --bc-alert-quiet: rgb(248 113 113 / 0.1);
 }

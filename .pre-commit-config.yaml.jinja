@@ -1,0 +1,91 @@
+# One lint source: CI runs exactly these hooks (pre-commit/action, G10).
+# Push-time gates (branch sync, migrations) live in the pre-push stage.
+
+exclude: '/migrations/'
+default_stages: [pre-commit]
+minimum_pre_commit_version: '3.2.0'
+
+default_language_version:
+  python: python3.14
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-json
+      - id: check-toml
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-case-conflict  # macOS dev -> Linux CI: case collisions corrupt checkouts
+      - id: check-builtin-literals
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: detect-private-key
+
+  - repo: https://github.com/adamchainz/django-upgrade
+    rev: '1.32.0'
+    hooks:
+      - id: django-upgrade
+        args: ['--target-version', '6.1']
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.4
+    hooks:
+      - id: ruff-check
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  # No `files:` filter on purpose - the hook's own `types: [shell]` matches by
+  # extension AND shebang, anywhere in the tree. The previous `^scripts/`
+  # restriction stopped matching when that folder went, and would have left
+  # any future script silently unlinted.
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1-1
+    hooks:
+      - id: shellcheck
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.12.5
+    hooks:
+      - id: uv-lock
+      - id: uv-lock
+        name: uv-lock (infra)
+        args: ["--project", "infra"]
+        files: ^infra/(pyproject\.toml|uv\.lock)$
+
+  # Deploy workflows are load-bearing (Express Mode rollout, release task);
+  # lint them where every other file is linted.
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.10
+    hooks:
+      - id: actionlint
+
+  - repo: local
+    hooks:
+      - id: lint-imports
+        name: import-linter architecture contracts
+        entry: uv run lint-imports
+        language: system
+        pass_filenames: false
+        types_or: [python, toml]
+
+      - id: makemigrations-check
+        name: model changes have migrations (pre-push)
+        entry: env DJANGO_SETTINGS_MODULE=config.settings.local uv run manage.py makemigrations --check --dry-run
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: branch-behind-main
+        name: branch not behind origin/main (pre-push)
+        entry: >
+          bash -c '
+          git fetch origin main --quiet
+          || { echo "Cannot reach origin to verify the branch is current."; exit 1; };
+          git merge-base --is-ancestor origin/main HEAD
+          || { echo "Branch is behind origin/main - rebase or merge first."; exit 1; }'
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

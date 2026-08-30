@@ -1,4 +1,4 @@
-# Daily-driver recipes. One dev road: Django runs on the host with the local
+{% raw %}# Daily-driver recipes. One dev road: Django runs on the host with the local
 # settings module (`just run` + `just worker`); postgres + mailpit run in
 # compose; the production image is built and smoke-tested in CI.
 
@@ -17,11 +17,13 @@ default:
 
 # One-time setup: deps, .env, git hooks, services, release step.
 bootstrap:
-    uv sync
+    uv sync{% endraw %}
+{%- if database == "postgis" %}
     # GeoDjango needs libgdal/libgeos on the host (Django runs outside Docker);
     # Linux developers install their distro's libgdal/libgeos packages.
     [ "$(uname)" != Darwin ] || brew list --versions gdal geos >/dev/null || brew install gdal geos
-    [ -f .env ] || cp .env.example .env
+{%- endif %}
+{% raw %}    [ -f .env ] || cp .env.example .env
     uv run pre-commit install --hook-type pre-commit --hook-type pre-push
     docker compose up -d --wait postgres mailpit
     just migrate
@@ -161,4 +163,4 @@ infra-secret-skeleton env:
 
 # One-off task on the worker family, e.g. `just infra-run-task dev python manage.py createsu`.
 infra-run-task env +cmd:
-    ./infra/scripts/run_task.sh {{ app_name }} {{ env }} {{ cmd }}
+    ./infra/scripts/run_task.sh {{ app_name }} {{ env }} {{ cmd }}{% endraw %}

@@ -6,9 +6,13 @@ volumes:
 
 services:
   postgres:
+{%- if database == "postgis" %}
     # PostGIS build of the pinned Postgres major (zones); imresamu publishes the
     # multi-arch build the official postgis/postgis image lacks (no arm64).
     image: imresamu/postgis:18-3.6
+{%- else %}
+    image: postgres:18
+{%- endif %}
     volumes:
       # PG18 image moved its data dir - mount the versioned path
       - postgres_data:/var/lib/postgresql/18/docker

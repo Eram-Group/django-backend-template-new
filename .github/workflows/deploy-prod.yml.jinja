@@ -1,4 +1,4 @@
-# Manual promotion: retag the main-built image (no rebuild), roll it out to
+{% raw %}# Manual promotion: retag the main-built image (no rebuild), roll it out to
 # production (release task -> web -> worker, see ecs-deploy.yml), then cut the
 # git tag + GitHub Release for the exact deployed sha.
 
@@ -146,4 +146,4 @@ jobs:
         run: |
           gh release create "${{ needs.version.outputs.version }}" \
             --target "${{ needs.version.outputs.sha }}" \
-            --generate-notes
+            --generate-notes{% endraw %}

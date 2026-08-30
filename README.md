@@ -1,219 +1,24 @@
-# Backend
+# backend-template
 
-API-only Django backend: [django-ninja](https://django-ninja.dev) REST API +
-Django admin (unfold), passwordless auth (allauth headless, 6-digit email
-codes), payments (Tap/Paymob gateways + wallet ledger),
-Postgres-only infrastructure (cache, sessions,
-task queue), one Docker image deployed as an ECS Express Mode web service +
-a Fargate worker (CDK in `infra/`). Arabic-first
-(ar/en).
-
-**Starting a new project from this repo?** Follow
-[docs/NEW_PROJECT.md](docs/NEW_PROJECT.md) first — it lists every value to
-change and every optional module to keep or drop.
-
-How the code is organized: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md);
-why the AWS shape is what it is: [docs/AWS_ARCHITECTURE.md](docs/AWS_ARCHITECTURE.md);
-how to operate it: [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md);
-how clients authenticate: [docs/AUTH_API.md](docs/AUTH_API.md); how the
-lint rule set is chosen: [docs/LINTING.md](docs/LINTING.md). The
-authoritative design document is [PLAN.md](PLAN.md); the remaining build
-sequence lives in [TODO.json](TODO.json).
-
-| | |
-|---|---|
-| Runtime | Python 3.14, Django 6.1, django-ninja (API at `/api/v1/`), allauth headless (`/_allauth/`) |
-| Data | PostgreSQL 18 (db-generated uuidv7 pks, DatabaseCache, db sessions, django.tasks db backend) |
-| Storage / email | S3 + CloudFront via django-storages; SES via Anymail (Mailpit locally) |
-| Quality | ruff, mypy --strict, pytest (coverage gate ≥ 80%), import-linter contracts, pre-commit |
-| Deploy | Single image → ECS Fargate (web + worker) via GitHub Actions OIDC; dev auto-deploys, production promotes |
-
-## Quickstart
-
-Prerequisites: [uv](https://docs.astral.sh/uv/), [just](https://just.systems),
-Docker (for PostGIS + Mailpit), and GDAL/GEOS on the host for GeoDjango
-(`just bootstrap` runs `brew install gdal geos` on macOS; on Linux install
-your distro's `libgdal`/`libgeos` packages).
+The company's Django backend starting point, packaged as a
+[Copier](https://copier.readthedocs.io) template. Generate a project:
 
 ```bash
-just bootstrap   # deps, gdal/geos, .env, git hooks, postgis 18 + mailpit, migrate + cache table
-just superuser   # admin@example.com / admin (from .env, idempotent)
-just seed        # ~300 realistic fake users (scale 0.3; see "Seed data" below)
-just run         # dev server on http://localhost:8000
+uvx copier copy gh:Eram-Group/backend-template my-app
 ```
 
-| URL | What |
-|---|---|
-| http://localhost:8000/api/v1/docs | API docs (Swagger; staff-only outside local) |
-| http://localhost:8000/admin/ | Admin (unfold) — `admin@example.com` / `admin` |
-| http://localhost:8000/_allauth/openapi.json | Auth API spec (allauth headless) |
-| http://localhost:8025 | Mailpit — every local email lands here |
-| http://localhost:8000/healthz, /readyz | Liveness / readiness |
+Copier asks for the product name, the AWS app slug, the GitHub repo, the
+domain under `eramapps.com`, **PostgreSQL or PostGIS** (PostGIS adds
+GeoDjango and the `zones` app), the brand colour and icon, the sender and
+superuser emails, the team timezone and a random admin path - then writes a
+project that passes every gate as-is (`just bootstrap`, `just gates`).
 
-Tasks always go through the Postgres queue: run `just worker` next to
-`just run`. The production image is built and booted (release step + probes)
-by the CI `image` job — there is no local container stack for the app.
+Projects keep `.copier-answers.yml`; `uvx copier update` pulls later
+template improvements (tags mark releases).
 
-## Commands
-
-Run `just` for the full list. The ones you'll use daily:
-
-| Recipe | Does |
-|---|---|
-| `just run` | runserver with the local settings module (debug toolbar on) |
-| `just test [args]` | pytest (append paths/flags as needed) |
-| `just lint` / `just fmt` / `just typecheck` | ruff check / ruff format / mypy --strict |
-| `just manage <cmd>` | any manage.py command |
-| `just migrate` / `just makemigrations` | migrations (+ cache table) |
-| `just seed [scale] [seed]` | fake data; scale 0..1 is logarithmic (0 = 10 users, 0.3 = ~300, 1 = 1,000,000), seed = RNG seed; defaults 0.3 / 0 |
-| `just worker` | drain the task queue (`manage.py db_worker`) |
-| `just shell` | Django shell |
-| `just db-reset` | destroy volumes + re-migrate (asks first) |
-
-## Testing & quality gates
-
-`just test` runs pytest with `--reuse-db`; CI adds `--cov` with a hard
-**80% coverage floor** (`[tool.coverage.report] fail_under`). Two cross-app
-gates in `apps/common/tests/` keep the codebase honest as it grows:
-
-- **Factory coverage** — every concrete model must have a factory registered
-  in `apps/common/tests/factories_registry.py` (explicit dict, no discovery
-  magic). Adding a model without one fails the suite.
-- **Admin basics** — every registered admin (current and future) is
-  exercised automatically: changelist/search/filters/sorting, permission-aware
-  object pages, an unchanged save round-trip, CSV export, sidebar permission
-  consistency, and a hidden-field tamper check. No per-admin tests are ever
-  written.
-
-Architecture boundaries are machine-checked by import-linter (layers:
-`apis|admin|management → services → tasks → selectors → models`; domain apps
-independent; `apps.common` imports no domain app).
-
-## Seed data
-
-`just seed [scale]` populates the local database through the factory
-registry — factory_boy for structure, mimesis for values (Arabic users get
-ar-sa names). Related rows fan out per parent with variance. Seeded rows
-carry the `@seed.example.com` email domain: `manage.py seed_db --wipe ...`
-removes exactly them, `--seed N` makes runs deterministic. Refuses to run
-unless `ENVIRONMENT=local`. Conventions: `CLAUDE.md` ("Factories & seed data").
-
-## Background tasks
-
-Django 6 native `django.tasks` with the Postgres-backed queue — no broker.
-
-- Locally the queue is the same Postgres table as deployed; drain it with
-  `just worker`.
-- Deployed, the **worker service** runs `manage.py db_worker` from the same
-  image. SIGTERM is graceful: the worker finishes its current task before
-  exiting — set the ECS `stopTimeout` (worker task definition) to at least
-  your longest task.
-- Results are rows: prune with `manage.py prune_db_task_results
-  --min-age-days 14` (scheduled below).
-
-## Outbound integrations (payments)
-
-Every external transport follows the email pattern: **real only when
-deployed, observable fakes locally, in-memory in tests** (details:
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) "Outbound clients").
-
-- **Payments** route by currency to the same gateways in every environment
-  (Tap SAR / Paymob EGP) — put the providers' TEST-mode keys in `.env` and
-  tunnel webhooks (`ngrok http 8000`, `BACKEND_BASE_URL` = the tunnel URL).
-  The test suite always runs against the test `FakeGateway`
-  (`apps/payments/tests/fake_gateway.py`, pinned in `test.py`).
-- All provider credentials are optional `X | None` env fields (see
-  `.env.example`): absent = that provider is simply not configured.
-
-## Configuration
-
-`config/env.py` is the only reader of `os.environ` — typed, and **every field
-is required with no code defaults**. [.env.example](.env.example) is the
-canonical reference; a missing key fails at boot listing every missing field.
-Empty value on the `X | None` fields = feature off (Sentry, OAuth, cookie
-domain). Deployed environments provide the same keys through ECS task
-definitions with secrets pulled from Secrets Manager.
-
-## Deployment (AWS)
-
-One image, three run modes: **web** (gunicorn, ECS Express Mode), **worker**
-(`db_worker`, Fargate), **release task** (`check --deploy` + `migrate` +
-`createcachetable` + `collectstatic`, run before
-each rollout from the exact revision being deployed). Infrastructure is code: [`infra/`](infra) (AWS CDK,
-Python — `just infra-*`; needs Node, `jq` and AWS credentials in the shell,
-e.g. `AWS_PROFILE=<profile> just infra-deploy dev`). The full runbook —
-architecture, cost, one-time bootstrap, deploy flow, schedules, operations —
-is [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-
-### GitHub variables / secrets
-
-Repo-level: `AWS_ECR_REPOSITORY`, `AWS_OIDC_ROLE_ARN`, `AWS_REGION`,
-`APIDOG_PROJECT_ID`, `APIDOG_SERVER_URL` (+ secret `APIDOG_ACCESS_TOKEN`).
-Per environment (`dev`, `production`, optionally `staging`), all printed as
-`<app>-App-<env>` stack outputs: `ECS_CLUSTER`, `ECS_FAMILY_WEB`,
-`ECS_FAMILY_WORKER`, `ECS_SERVICE_WORKER`, `EXPRESS_SERVICE_ARN`,
-`EXPRESS_SERVICE_NAME`, `ECS_SUBNETS`, `ECS_SECURITY_GROUPS`. The deploy
-workflows expect every variable to exist and fail the run on a missing one
-(`ci.yml` alone stays green without infrastructure) — provision the dev
-environment (docs/DEPLOYMENT.md, bootstrap steps 1–9) before the first push
-to `main`.
-
-### Pipelines
-
-- **PR / push** — `ci.yml`: lint (pre-commit) → mypy → lock check →
-  migrations check → pytest (coverage ≥ 80%, postgis 18 service), plus a
-  parallel prod-image build + compose smoke (`/healthz`, `/readyz`, auth spec)
-  and an `infra` job (CDK synth → template assertions → cfn-lint).
-  TruffleHog secret scan; Dependabot (`.github/dependabot.yml`) keeps uv,
-  actions, images and pre-commit hooks fresh — weekly, after a cooldown so a
-  yanked release never reaches a PR. It updates `uv.lock`, not the `>=` floors
-  in `pyproject.toml`; raising a floor stays a deliberate edit.
-- **Merge to main** — `deploy-dev.yml`: build + push `:sha` (arm64 runner,
-  OIDC, GHA layer cache) → **release task** on a fresh worker revision
-  (`SENTRY_RELEASE=sha`) → register the web revision and roll it through
-  **ECS Express Mode** (canary, auto-rollback) → roll worker → sync the
-  OpenAPI schema to Apidog. Deploys queue, never cancel mid-rollout.
-- **Production** — `deploy-prod.yml` (manual dispatch, choose
-  patch/minor/major): computes the next `v*` semver → **promotes the exact
-  dev image** by manifest retag (build once, no rebuild) → release task +
-  roll web/worker → git tag + GitHub Release last, so a tag only ever points
-  at a fully deployed sha.
-
-### Branch protection
-
-Add a ruleset on `main`: require a PR, require the `fast`, `image`, `infra`
-and `trufflehog` status checks, and tick **"Require branches to be up to date
-before merging"** (the server-side twin of the local `branch-behind-main`
-pre-push hook — `deploy-dev` deploys main as-is and relies on this gate).
-Migrations are append-only, enforced by `guard-migrations.yml`
-(`allow-migration-edit` label = deliberate squash escape hatch).
-
-### Operations notes
-
-- First superuser: `just infra-run-task <env> python manage.py createsu`
-  (idempotent — reads `DJANGO_SUPERUSER_*`).
-- Verify Sentry wiring after provisioning:
-  `just infra-run-task <env> python manage.py shell -c "1/0"` — the event
-  must arrive with the expected `environment` and `release` tags.
-- Logs are JSON (structlog) with a per-request `request_id`
-  (`Correlation-ID`) — grep one id in CloudWatch to follow a request.
-- `django-axes` locks a (username, ip) pair for 1h after 5 failed admin
-  logins: `manage.py axes_reset` clears lockouts.
-- Secret rotation: put the new `SECRET_KEY`, move the old one into
-  `SECRET_KEY_FALLBACKS`, drop it after sessions expire.
-- The admin lives at `ADMIN_URL` — randomize it outside local. Admin login is
-  password + django-axes; API users are passwordless.
-- Provider provisioning: **FCM** — create a Firebase service account, then
-  `base64 -i service-account.json` into `FIREBASE_CREDENTIALS_B64`.
-  **Tap** — dashboard secret key into `TAP_SECRET_KEY`; register the webhook
-  URL `…/api/v1/payments/webhooks/tap`. **Paymob** — secret/public keys +
-  the dashboard HMAC secret + the dashboard API key (`PAYMOB_API_KEY`, the
-  transaction-inquiry fallback authenticates with it) + checkout
-  integration ids (`PAYMOB_INTEGRATION_IDS`, comma-separated); webhook
-  `…/api/v1/payments/webhooks/paymob` — set it BOTH as each integration
-  id's "Transaction processed callback" in the dashboard and leave it as the
-  per-intention `notification_url` the code sends: Paymob's regional docs
-  disagree on which one receives the card-token callback, and the
-  per-intention URL only applies to card integrations. **SMS** — OurSMS API key + sender
-  name; SMSMisr username/password/sender (live mode activates only when
-  `ENVIRONMENT=production`).
+What the generated project is - architecture, layering, deploy shape - is
+documented inside it (`README.md`, `docs/ARCHITECTURE.md`,
+`docs/AWS_ARCHITECTURE.md`, `docs/DEPLOYMENT.md`, `docs/NEW_PROJECT.md`).
+How to work on the template itself: [docs/TEMPLATE.md](docs/TEMPLATE.md).
+CI (`.github/workflows/template.yml`) generates every preset in `presets/`
+and runs the generated project's gates on it.
