@@ -8,7 +8,6 @@ from django.utils import translation
 from apps.notifications.catalog import CATALOG
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import NotificationKindConfig
-from apps.notifications.selectors import notification_config_get
 from apps.notifications.selectors import notification_config_map
 from apps.notifications.selectors import notification_render
 
@@ -88,10 +87,3 @@ def test_missing_row_renders_the_kind_label() -> None:
 
     assert configs == {}
     assert (message.title, message.body) == ("Welcome", "Welcome")
-
-
-def test_config_get_is_loud_for_a_missing_row() -> None:
-    NotificationKindConfig.objects.all().delete()
-
-    with pytest.raises(LookupError, match="Notification actions"):
-        notification_config_get(kind=NotificationKind.WELCOME)

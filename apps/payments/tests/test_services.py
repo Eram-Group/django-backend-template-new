@@ -24,13 +24,13 @@ from apps.payments.exceptions import CustomerDetailsRequiredError
 from apps.payments.exceptions import InsufficientBalanceError
 from apps.payments.exceptions import PaymentEventMismatchError
 from apps.payments.exceptions import PaymentGatewayUnavailableError
+from apps.payments.exceptions import PaymentGatewayUnknownError
 from apps.payments.exceptions import PaymentNotFoundError
 from apps.payments.exceptions import PaymentNotRefundableError
 from apps.payments.exceptions import SavedCardGatewayMismatchError
 from apps.payments.exceptions import SavedCardNotFoundError
 from apps.payments.exceptions import WalletCurrencyMismatchError
 from apps.payments.exceptions import WalletNotFoundError
-from apps.payments.gateways import GATEWAY_CLASSES
 from apps.payments.gateways import gateway_by_name
 from apps.payments.gateways import gateway_for_currency
 from apps.payments.gateways.base import CardTokenEvent
@@ -77,8 +77,11 @@ class _VaultlessGateway:
 
 
 @pytest.fixture
-def vaultless_gateway(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setitem(GATEWAY_CLASSES, GATEWAY, _VaultlessGateway)
+def vaultless_gateway(settings: Any) -> None:
+    # The registry reads settings per call, so an override IS the swap.
+    settings.PAYMENT_GATEWAYS = dict.fromkeys(
+        settings.PAYMENT_GATEWAYS, f"{__name__}._VaultlessGateway"
+    )
 
 
 def _event(payment: Payment, **overrides: Any) -> PaymentEvent:
@@ -158,8 +161,10 @@ def test_unmapped_currency_raises_unavailable() -> None:
 
 
 def test_unknown_gateway_name_raises_unavailable() -> None:
-    with pytest.raises(PaymentGatewayUnavailableError):
+    with pytest.raises(PaymentGatewayUnknownError) as excinfo:
         gateway_by_name("nope")
+
+    assert excinfo.value.status_code == 404
 
 
 def test_mapped_currency_resolves_the_test_gateway() -> None:
@@ -298,7 +303,7 @@ def test_currency_by_language_covers_every_language() -> None:
 
 def test_wallet_currency_for_rejects_unknown_language() -> None:
     with pytest.raises(ValueError, match="not a valid Language"):
-        services.wallet_currency_for(language="fr")
+        services.wallet_currency_for(language=Language("fr"))
 
 
 def test_wallet_create_uses_the_given_currency() -> None:
@@ -1177,8 +1182,8 @@ def test_saved_card_store_from_event_unknown_email_returns_none() -> None:
     assert not SavedCard.objects.filter(token="fake_card_A").exists()
 
 
-def test_saved_card_delete_removes_row_and_detaches(
-    monkeypatch: pytest.MonkeyPatch,
+def test_saved_card_delete_removes_row_and_detaches_after_commit(
+    monkeypatch: pytest.MonkeyPatch, django_capture_on_commit_callbacks: Any
 ) -> None:
     detached: list[Any] = []
     monkeypatch.setattr(
@@ -1188,14 +1193,17 @@ def test_saved_card_delete_removes_row_and_detaches(
     )
     card = SavedCardFactory.create()
 
-    services.saved_card_delete(user=card.user, saved_card=card)
+    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+        services.saved_card_delete(user=card.user, saved_card=card)
+        assert not SavedCard.objects.filter(pk=card.pk).exists()
+        assert detached == []  # the provider call waits for the commit
 
-    assert not SavedCard.objects.filter(pk=card.pk).exists()
+    assert len(callbacks) == 1
     assert [ref.token for ref in detached] == [card.token]
 
 
 def test_saved_card_delete_survives_gateway_failure(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, django_capture_on_commit_callbacks: Any
 ) -> None:
     """The user's intent wins: a dangling provider-side card is inert."""
     card = SavedCardFactory.create()
@@ -1207,7 +1215,8 @@ def test_saved_card_delete_survives_gateway_failure(
 
     monkeypatch.setattr(FakeGateway, "delete_saved_card", failing_delete)
 
-    services.saved_card_delete(user=card.user, saved_card=card)
+    with django_capture_on_commit_callbacks(execute=True):
+        services.saved_card_delete(user=card.user, saved_card=card)
 
     assert not SavedCard.objects.filter(pk=card.pk).exists()
 

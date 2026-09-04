@@ -20,6 +20,7 @@ from ninja import Router
 
 from apps.payments import services
 from apps.payments.exceptions import PaymentGatewayUnavailableError
+from apps.payments.exceptions import PaymentGatewayUnknownError
 from apps.payments.exceptions import PaymentNotFoundError
 from apps.payments.exceptions import WebhookRejectedError
 from apps.payments.gateways import gateway_by_name
@@ -46,13 +47,20 @@ def payment_webhook(request: HttpRequest, gateway_name: str) -> dict[str, bool]:
     # Reasons are fixed strings - never the posted signature or body.
     try:
         gateway = gateway_by_name(gateway_name)
-    except PaymentGatewayUnavailableError as exc:
+    except PaymentGatewayUnknownError as exc:
         logger.error(  # noqa: TRY400 - the reason string is the signal
-            "payment_webhook_rejected",
-            gateway=gateway_name,
-            reason="unknown or unconfigured gateway",
+            "payment_webhook_rejected", gateway=gateway_name, reason="unknown gateway"
         )
         raise WebhookRejectedError(str(_("Unknown payment gateway."))) from exc
+    except PaymentGatewayUnavailableError:
+        # Mapped but missing its settings (a fresh deployment): answer 503 so
+        # the provider keeps retrying - a 400 would tell it to give up.
+        logger.error(  # noqa: TRY400 - the reason string is the signal
+            "payment_webhook_deferred",
+            gateway=gateway_name,
+            reason="gateway not configured",
+        )
+        raise
     try:
         event = gateway.parse_webhook(
             headers=request.headers, params=request.GET, body=request.body

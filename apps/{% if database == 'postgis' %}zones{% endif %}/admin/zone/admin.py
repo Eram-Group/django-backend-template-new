@@ -1,8 +1,11 @@
 from typing import Any
+from typing import cast
 
 from django.contrib import admin
 from django.contrib import messages
+from django.db.models import Model
 from django.db.models import QuerySet
+from django.forms import ModelForm
 from django.http import HttpRequest
 from django.http import HttpResponse
 from django.shortcuts import redirect
@@ -18,9 +21,6 @@ from unfold.decorators import display
 from apps.common.admin import BaseModelAdmin
 from apps.zones import selectors
 from apps.zones import services
-from apps.zones.admin.zone import change_view
-from apps.zones.admin.zone import list_view
-from apps.zones.admin.zone import permissions
 from apps.zones.admin.zone.load_form import ZoneLoadForm
 from apps.zones.admin.zone.resource import ZoneResource
 from apps.zones.exceptions import ZoneFileError
@@ -42,29 +42,24 @@ class ZoneAdmin(BaseModelAdmin, TabbedTranslationAdmin[Zone]):
     not done here).
     """
 
-    can_add = permissions.CAN_ADD
-    can_change = permissions.CAN_CHANGE
-    can_delete = permissions.CAN_DELETE
-    field_permissions = permissions.FIELD_PERMISSIONS
     resource_classes = [ZoneResource]
-
-    list_display = list_view.LIST_DISPLAY
-    list_filter = list_view.LIST_FILTER
-    list_filter_submit = list_view.LIST_FILTER_SUBMIT
-    search_fields = list_view.SEARCH_FIELDS
-    search_help_text = list_view.SEARCH_HELP_TEXT
-    list_select_related = list_view.LIST_SELECT_RELATED
-    ordering = list_view.ORDERING
-    list_per_page = list_view.LIST_PER_PAGE
-
-    fieldsets = change_view.FIELDSETS
-    readonly_fields = change_view.READONLY_FIELDS
 
     actions_list = ["load_zones"]
     actions = ["find_overlaps"]
 
     def has_load_permission(self, request: HttpRequest, object_id: Any = None) -> bool:
         return request.user.has_perm("zones.add_zone")
+
+    def save_model(
+        self, request: HttpRequest, obj: Model, form: ModelForm[Any], change: bool
+    ) -> None:
+        """Operator edits go through ``services.zone_update`` (the allowlist +
+        full_clean gate), never ``obj.save()``; rows are only ever created by
+        the load sheet."""
+        services.zone_update(
+            zone=cast("Zone", obj),
+            data={field: form.cleaned_data[field] for field in form.changed_data},
+        )
 
     @action(
         description=_("Load zones"),

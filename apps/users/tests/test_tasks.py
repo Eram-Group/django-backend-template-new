@@ -19,6 +19,8 @@ def test_send_welcome_email_addresses_the_user_by_name(
     message = mailoutbox[0]
     assert message.to == [user.email]
     assert "Omar" in message.body
+    assert "&nbsp;" not in message.body  # entities are unescaped, not shipped
+    assert "&amp;" not in message.body
 
 
 def test_send_welcome_email_is_branded_multipart_html(

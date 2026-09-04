@@ -6,11 +6,11 @@ references them, so the many apps copied from this template never compete
 for their ownership.
 """
 
+from aws_cdk import ArnFormat
 from aws_cdk import CfnOutput
 from aws_cdk import Duration
 from aws_cdk import RemovalPolicy
 from aws_cdk import Stack
-from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_ecs as ecs
 from constructs import Construct
@@ -35,7 +35,10 @@ class SharedStack(Stack):
             "Repository",
             repository_name=f"eram/{app.name}",
             image_scan_on_push=True,
-            image_tag_mutability=ecr.TagMutability.MUTABLE,
+            # A tag names one digest forever: dev pushes :<sha> once, prod
+            # promotion ADDS :<version> (never overwrites). The registry now
+            # enforces what deploy-prod's preflight also checks.
+            image_tag_mutability=ecr.TagMutability.IMMUTABLE,
             removal_policy=RemovalPolicy.RETAIN,
             lifecycle_rules=[
                 ecr.LifecycleRule(
@@ -69,10 +72,18 @@ class SharedStack(Stack):
             github_repo=app.github_repo,
             ecr_repository_arn=self.repository.repository_arn,
             cluster_arn=self.cluster.cluster_arn,
+            task_definition_arn_pattern=self.format_arn(
+                service="ecs",
+                resource="task-definition",
+                resource_name=f"{app.name}-*",
+                arn_format=ArnFormat.SLASH_RESOURCE_NAME,
+            ),
             log_group_arns=[
-                (
-                    f"arn:aws:logs:{self.region}:{self.account}:log-group:"
-                    f"{naming.log_group_prefix(app)}*"
+                self.format_arn(
+                    service="logs",
+                    resource="log-group",
+                    resource_name=f"{naming.log_group_prefix(app)}*",
+                    arn_format=ArnFormat.COLON_RESOURCE_NAME,
                 )
             ],
             passable_role_arns=[
@@ -80,7 +91,13 @@ class SharedStack(Stack):
                 # Per-env execution + task roles are CDK-named after their
                 # stack, and the stack name starts with the app name - so this
                 # pattern cannot match another app's roles in the account.
-                f"arn:aws:iam::{self.account}:role/{naming.app_stack(app, '')}*",
+                self.format_arn(
+                    service="iam",
+                    region="",
+                    resource="role",
+                    resource_name=f"{naming.app_stack(app, '')}*",
+                    arn_format=ArnFormat.SLASH_RESOURCE_NAME,
+                ),
             ],
         )
 
@@ -88,7 +105,3 @@ class SharedStack(Stack):
         CfnOutput(self, "ClusterName", value=self.cluster.cluster_name)
         CfnOutput(self, "GithubDeployRoleArn", value=self.deploy_role.role_arn)
         CfnOutput(self, "PublicSubnets", value=",".join(public_subnets(app)))
-
-
-def vpc_of(stack: SharedStack) -> ec2.IVpc:
-    return stack.vpc

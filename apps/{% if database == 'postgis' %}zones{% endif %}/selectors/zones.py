@@ -5,7 +5,6 @@ from django.db.models import QuerySet
 from django.utils.translation import gettext_lazy as _
 
 from apps.zones.exceptions import InvalidCoordinatesError
-from apps.zones.exceptions import ZoneNotFoundError
 from apps.zones.models import Zone
 
 MAX_LATITUDE = 90.0
@@ -14,13 +13,6 @@ MAX_LONGITUDE = 180.0
 
 def zone_list_active() -> QuerySet[Zone]:
     return Zone.objects.filter(is_active=True).select_related("country")
-
-
-def zone_get(*, code: str) -> Zone:
-    try:
-        return Zone.objects.select_related("country").get(code=code.strip().lower())
-    except Zone.DoesNotExist as exc:
-        raise ZoneNotFoundError(str(_("Zone not found."))) from exc
 
 
 def zone_for_point(*, lat: float, lng: float) -> Zone | None:

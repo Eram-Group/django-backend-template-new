@@ -23,8 +23,7 @@ from apps.notifications.catalog import catalog_entry
 from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import NotificationKindConfig
-
-MESSAGE_FIELDS = ("title_ar", "title_en", "body_ar", "body_en")
+from apps.notifications.models.kind_config import MESSAGE_FIELDS
 
 # One realistic example per catalog context key: the editor's preview renders
 # the message with these instead of raw {placeholders}, and each insert chip
@@ -49,13 +48,7 @@ class KindConfigForm(forms.ModelForm[NotificationKindConfig]):
 
     class Meta:
         model = NotificationKindConfig
-        fields = (
-            "channels",
-            "title_ar",
-            "title_en",
-            "body_ar",
-            "body_en",
-        )
+        fields = ("channels", *MESSAGE_FIELDS)
         labels = {
             "title_ar": _("Title (Arabic)"),
             "title_en": _("Title (English)"),
@@ -143,7 +136,8 @@ class KindConfigForm(forms.ModelForm[NotificationKindConfig]):
     def starting_values(cls, kind: NotificationKind) -> dict[str, Any]:
         """The recommended row for a kind that has none: the catalog's
         starting copy (English in BOTH language columns - operators
-        localize) and channels. Written when the actions page is opened."""
+        localize) and channels. Prefilled on the actions page; the row is
+        written by the card's first save."""
         entry = catalog_entry(kind)
         with translation.override("en"):
             title, body = str(entry.title), str(entry.body)

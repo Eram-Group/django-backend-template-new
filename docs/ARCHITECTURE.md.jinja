@@ -11,7 +11,7 @@ client ──▶ config/urls.py
              ├─ /api/v1/…      ninja API (config/api/v1.py, auth = session cookie OR X-Session-Token)
              ├─ /_allauth/…    allauth headless auth endpoints (passwordless, 6-digit email codes)
              ├─ /<ADMIN_URL>   Django admin (unfold, apps.common.admin framework)
-             └─ /healthz /readyz   liveness (no DB) / readiness (DB+cache+storage checks)
+             └─ /healthz /readyz   liveness (no DB) / readiness (DB+cache; storage stays out)
 ```
 
 An API request hits a **thin router function** (`apps/<app>/apis/`), which
@@ -94,6 +94,12 @@ Every API error has ONE shape, produced in ONE place
   `DEBUG=False` ninja re-raises, so Django and Sentry own real 500s.
 - Unmatched `/api/*` URLs return the same envelope from the project-level
   `handler404` (`config/urls.py`).
+- **Transaction boundaries are the service's.** There is no
+  `ATOMIC_REQUESTS`: a service that writes more than one row (or writes and
+  enqueues) opens its own `transaction.atomic()`; single-row writes run in
+  autocommit. ninja's exception handlers answer *inside* the view, so
+  nothing above the service ever rolls a write back - and no request-wide
+  transaction holds row locks across outbound gateway HTTP.
 
 ## Schemas and pagination
 
@@ -378,6 +384,12 @@ docstrings; proven by the admin-basics gate):
   their own body. The same discipline applies to inlines
   (`BaseTabularInline`/`BaseStackedInline`); display-only child rows are the
   three flags set to False.
+- Per-entity packages (`admin/<entity>/`) keep the decisions as UPPER_CASE
+  constants in `permissions.py` / `list_view.py` / `change_view.py`; the
+  admin class receives each one as its lower-cased attribute automatically
+  (`apps/common/admin/package.py`). A constant with no matching attribute
+  is an import-time error, so nothing can be declared and then dropped; a
+  value set in the class body wins. `admin.py` holds behaviour only.
 - `FieldPermissions(readonly_when=…, hidden_when=…)` drives per-request
   field behavior through `AdminContext` (`ctx.is_add`, `ctx.is_change`,
   `ctx.user`, `ctx.is_superuser`) — one implementation (`FieldRuleLookups`)
@@ -429,6 +441,9 @@ docstrings; proven by the admin-basics gate):
   admin exercised generically — no per-admin tests, ever).
 - Coverage floor 80% (`[tool.coverage.report]`), enforced in CI. Warnings
   are errors (`filterwarnings = ["error"]`).
+- ImageField factories share one tiny in-memory PNG
+  (`apps/location/tests/factories.py::TINY_PNG`, the `with_flag` trait) -
+  never a generated image per row.
 
 ## Deferred paths (decided, not built)
 
@@ -454,4 +469,3 @@ per need.
 | Runtime-editable operational settings | django-constance with unfold widgets |
 | Public terms/privacy page | one server-rendered page; the only non-API HTML route |
 | Release notes discipline | commitizen + conventional-commit CI naming checks |
-| ImageField factories | session-shared tiny test image fixture (avoid generating per-row images) |

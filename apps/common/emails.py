@@ -6,6 +6,7 @@ Outside a request (task workers) wrap calls in
 ``translation.override(user.language)`` - there is no request locale there.
 """
 
+import html
 import re
 from typing import Any
 
@@ -30,8 +31,10 @@ def email_send(
         template_name,
         {**context, "site_name": settings.SITE_NAME, "brand": settings.EMAIL_BRAND},
     )
+    # strip_tags leaves entities (&amp;, &nbsp;) in place - unescape them so
+    # the plain-text part reads as text.
     text_body = _EXCESS_BLANK_LINES.sub(
-        "\n\n", strip_tags(_STYLE_BLOCK.sub("", html_body))
+        "\n\n", html.unescape(strip_tags(_STYLE_BLOCK.sub("", html_body)))
     ).strip()
     message = EmailMultiAlternatives(subject=subject, body=text_body, to=recipient_list)
     message.attach_alternative(html_body, "text/html")

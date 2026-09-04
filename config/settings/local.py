@@ -18,6 +18,5 @@ MIDDLEWARE.insert(
     "debug_toolbar.middleware.DebugToolbarMiddleware",
 )
 INTERNAL_IPS = ["127.0.0.1"]
-
-# The toolbar injects inline scripts; CSP is a deployed concern.
-SECURE_CSP = {}
+# SECURE_CSP stays as deployed: the toolbar nonces its scripts from
+# request.csp_nonce, so the admin is developed under the real policy.

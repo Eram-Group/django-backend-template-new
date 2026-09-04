@@ -13,12 +13,6 @@ USER_SEARCH_LIMIT = 20
 
 def broadcast_audience(*, broadcast: Broadcast) -> QuerySet[User]:
     queryset = User.objects.filter(is_active=True)
-    if broadcast.recipient_ids:
-        # Hand-picked users: exactly these (minus anyone since deactivated).
-        # The language/date filters do not apply; require_device still does.
-        queryset = queryset.filter(pk__in=broadcast.recipient_ids)
-    elif broadcast.language:
-        queryset = queryset.filter(language=broadcast.language)
     if broadcast.require_device:
         # A subquery, not `devices__isnull=False`: the join multiplies a user
         # by their device count, and the dispatcher pages this queryset with a
@@ -26,7 +20,11 @@ def broadcast_audience(*, broadcast: Broadcast) -> QuerySet[User]:
         # also dedupe but costs a sort on every 5k page.
         queryset = queryset.filter(pk__in=Device.objects.values("user_id"))
     if broadcast.recipient_ids:
-        return queryset
+        # Hand-picked users: exactly these (minus anyone since deactivated).
+        # The language/date filters do not apply; require_device still does.
+        return queryset.filter(pk__in=broadcast.recipient_ids)
+    if broadcast.language:
+        queryset = queryset.filter(language=broadcast.language)
     if broadcast.joined_after:
         queryset = queryset.filter(created_at__date__gte=broadcast.joined_after)
     if broadcast.joined_before:

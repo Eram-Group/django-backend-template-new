@@ -5,8 +5,6 @@ Also the settings django-stubs boots for mypy (pyproject django_settings_module)
 
 from config.settings.base import *
 
-DEBUG = False
-
 # Fast hashers - password strength is irrelevant in tests.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 

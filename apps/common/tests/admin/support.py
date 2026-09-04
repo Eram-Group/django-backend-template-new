@@ -13,11 +13,12 @@ from django.urls import reverse
 
 
 def registered_models() -> list[type[Model]]:
+    # No public iterator over the registry (get_model_admin is per model).
     return sorted(admin.site._registry, key=lambda m: str(m._meta.label))
 
 
 def admin_for(model: type[Model]) -> ModelAdmin[Any]:
-    return admin.site._registry[model]
+    return admin.site.get_model_admin(model)
 
 
 def is_local(model: type[Model]) -> bool:

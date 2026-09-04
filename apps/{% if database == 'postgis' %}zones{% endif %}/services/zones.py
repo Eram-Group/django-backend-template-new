@@ -4,8 +4,10 @@ from dataclasses import dataclass
 from typing import Any
 
 from django.db import transaction
+from django.utils.translation import gettext_lazy as _
 
 from apps.location.models import Country
+from apps.zones.exceptions import ZonesError
 from apps.zones.geojson import zone_features
 from apps.zones.models import Zone
 
@@ -32,42 +34,60 @@ def zones_load(*, country: Country, document: bytes) -> ZoneLoadResult:
     placeholder name.
     """
     features = zone_features(document=document, country=country)
-    created = updated = unnamed = 0
+    existing = set(
+        Zone.objects.filter(code__in=[f.code for f in features]).values_list(
+            "code", flat=True
+        )
+    )
+    rows = [
+        Zone(
+            country=country,
+            code=feature.code,
+            region_code=feature.region_code,
+            geometry=feature.geometry,
+            is_active=feature.named,
+            name_ar=feature.name_ar,
+            name_en=feature.name_en,
+        )
+        for feature in features
+    ]
+    for zone in rows:
+        zone.full_clean(exclude=["code"])  # unique(code) is what the upsert keys on
+    named = [
+        zone for zone, feature in zip(rows, features, strict=True) if feature.named
+    ]
+    unnamed = [
+        zone for zone, feature in zip(rows, features, strict=True) if not feature.named
+    ]
     with transaction.atomic():
-        existing = {
-            zone.code: zone
-            for zone in Zone.objects.filter(code__in=[f.code for f in features])
-        }
-        for feature in features:
-            zone = existing.get(feature.code)
-            if zone is None:
-                zone = Zone(
-                    country=country,
-                    code=feature.code,
-                    is_active=feature.named,
-                    name_ar=feature.name_ar,
-                    name_en=feature.name_en,
-                )
-                created += 1
-                unnamed += not feature.named
-            else:
-                updated += 1
-                if feature.named:
-                    zone.name_ar = feature.name_ar
-                    zone.name_en = feature.name_en
-            zone.region_code = feature.region_code
-            zone.geometry = feature.geometry
-            zone.full_clean()
-            zone.save()
-    return ZoneLoadResult(created=created, updated=updated, unnamed=unnamed)
+        # One INSERT ... ON CONFLICT (code) DO UPDATE per group: a named
+        # feature also refreshes the names, an unnamed one touches only
+        # region and geometry (the operator's names and is_active survive).
+        for group, update_fields in (
+            (named, ["region_code", "geometry", "name_ar", "name_en"]),
+            (unnamed, ["region_code", "geometry"]),
+        ):
+            Zone.objects.bulk_create(
+                group,
+                update_conflicts=True,
+                update_fields=update_fields,
+                unique_fields=["code"],
+            )
+    created = sum(zone.code not in existing for zone in rows)
+    return ZoneLoadResult(
+        created=created,
+        updated=len(rows) - created,
+        unnamed=sum(zone.code not in existing for zone in unnamed),
+    )
 
 
 def zone_update(*, zone: Zone, data: dict[str, Any]) -> Zone:
     """Apply an operator edit (names, region, active flag)."""
     for field, value in data.items():
         if field not in ZONE_UPDATABLE_FIELDS:
-            msg = f"Field not updatable: {field}"
-            raise ValueError(msg)
+            raise ZonesError(
+                str(_("Field not updatable: %(field)s") % {"field": field})
+            )
         setattr(zone, field, value)
     zone.full_clean()
     zone.save(update_fields=[*data.keys(), "updated_at"])

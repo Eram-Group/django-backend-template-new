@@ -15,8 +15,8 @@ Pinned allauth internals: allauth.headless.spec.internal.schema.get_schema
 (covered by tests, same pin style as config/api/auth.py's sessionkit).
 """
 
-import hashlib
 import json
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -46,10 +46,10 @@ def _accept_language_parameter() -> dict[str, Any]:
 
 
 def _operation_id(method: str, path: str) -> str:
-    digest = hashlib.md5(  # noqa: S324 - non-cryptographic, stable id
-        f"{method}:{path}".encode()
-    ).hexdigest()
-    return f"auth_{digest[:12]}"
+    """``auth_post_allauth_app_v1_auth_login`` - generators turn this into the
+    client method name, so it reads; ``{param}`` segments keep their name."""
+    slug = re.sub(r"[^a-z0-9]+", "_", f"{method} {path}".lower()).strip("_")
+    return f"auth_{slug}"
 
 
 def _operations(paths: dict[str, Any]) -> Iterator[tuple[str, str, dict[str, Any]]]:

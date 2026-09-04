@@ -2,6 +2,7 @@
 
 import re
 from typing import Any
+from typing import cast
 
 import pytest
 from django.conf import settings
@@ -58,11 +59,10 @@ def test_me_patch_empty_body_changes_nothing(client: Client) -> None:
     assert user.name == "Same"
 
 
-def test_me_patch_invalid_language_returns_422_envelope(client: Client) -> None:
-    user = UserFactory.create()
-    client.force_login(user)
-
-    response = client.patch(ME, {"language": "xx"}, content_type="application/json")
+def test_me_patch_invalid_language_returns_422_envelope(auth_client: Client) -> None:
+    response = auth_client.patch(
+        ME, {"language": "xx"}, content_type="application/json"
+    )
 
     assert response.status_code == 422
     body = response.json()
@@ -86,12 +86,11 @@ def test_me_patch_sets_phone_and_detail_echoes_it(client: Client) -> None:
     assert str(user.phone) == "+966501234567"
 
 
-def test_me_patch_invalid_phone_returns_400_envelope(client: Client) -> None:
-    user = UserFactory.create()
-    client.force_login(user)
-
+def test_me_patch_invalid_phone_returns_400_envelope(auth_client: Client) -> None:
     # No country code -> not parseable (no default region is configured).
-    response = client.patch(ME, {"phone": "12345"}, content_type="application/json")
+    response = auth_client.patch(
+        ME, {"phone": "12345"}, content_type="application/json"
+    )
 
     assert response.status_code == 400
     assert "phone" in response.json()["extra"]["fields"]
@@ -303,14 +302,25 @@ def test_login_code_requests_are_throttled_per_ip(
     assert len(mailoutbox) == 20
 
 
-def test_api_wide_throttle_is_per_principal(client: Client) -> None:
-    """The NinjaAPI-level AuthRateThrottle (600/m) closes at 601 for one user
-    and answers with the envelope; ninja checks it after auth, so it never
-    shadows the 401."""
-    client.force_login(UserFactory.create())
-    statuses = [client.get(ME).status_code for _ in range(601)]
+def test_api_wide_throttle_is_per_principal(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The API-wide ceiling (600/m) closes on the request past it for one
+    user and answers with the envelope; ninja checks it after auth, so it
+    never shadows the 401. The window is shrunk to 5 for the test - 601
+    real requests proved the same contract at 40x the cost."""
+    from ninja.throttling import SimpleRateThrottle
 
-    assert statuses[:600] == [200] * 600
-    assert statuses[600] == 429
+    from config.api.v1 import api
+
+    (throttle,) = cast("list[Any]", api.throttle)
+    assert isinstance(throttle, SimpleRateThrottle)
+    assert throttle.rate == "600/m"
+    monkeypatch.setattr(throttle, "num_requests", 5)
+    client.force_login(UserFactory.create())
+    statuses = [client.get(ME).status_code for _ in range(6)]
+
+    assert statuses[:5] == [200] * 5
+    assert statuses[5] == 429
     assert client.get(ME).json() == {"message": "Too many requests.", "extra": {}}
     assert Client().get(ME).status_code == 401

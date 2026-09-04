@@ -136,12 +136,19 @@ def test_kind_config_accepts_supported_channels_and_known_placeholders() -> None
     config.full_clean()  # does not raise
 
 
-def test_enum_columns_are_validated_without_choices() -> None:
-    """No ``choices=`` on kind/channel (a new kind must not need a
-    migration) - the validators still reject anything outside the enum."""
+def test_enum_columns_use_callable_choices() -> None:
+    """kind/channel carry ``choices=<callable>``: the migration state holds
+    the import path, not the members, so a new kind is never a migration -
+    while a value outside the enum still fails full_clean."""
+    from apps.notifications.constants import channel_choices
+    from apps.notifications.constants import notification_kind_choices
     from apps.notifications.models import NotificationDelivery
     from apps.notifications.models import NotificationKindConfig
 
+    kind = NotificationKindConfig._meta.get_field("kind")
+    assert kind.deconstruct()[3]["choices"] is notification_kind_choices
+    channel = NotificationDelivery._meta.get_field("channel")
+    assert channel.deconstruct()[3]["choices"] is channel_choices
     with pytest.raises(ValidationError, match="kind"):
         NotificationKindConfig(kind="carrier_pigeon").full_clean()
     with pytest.raises(ValidationError, match="channel"):

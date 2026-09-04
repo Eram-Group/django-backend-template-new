@@ -91,8 +91,8 @@
     {
       "id": "factories-review",
       "group": "G17",
-      "title": "USER REVIEW: factories topic (factory_boy + Faker)",
-      "endGoal": "Omar has investigated factory_boy (DjangoModelFactory, Sequence, django_get_or_create, skip_postgeneration_save, post_generation) and Faker providers against the implemented factories + registry, and signed off or requested changes (recorded here).",
+      "title": "USER REVIEW: factories topic (factory_boy + mimesis)",
+      "endGoal": "Omar has investigated factory_boy (DjangoModelFactory, Sequence, django_get_or_create, skip_postgeneration_save, post_generation) and the mimesis value helpers in apps/common/tests/fake.py against the implemented factories + registry, and signed off or requested changes (recorded here).",
       "tips": [
         "IMPLEMENTED 2026-07-11 (user-approved design): factory_boy structure + mimesis values (Locale.AR_SA / EN via apps/common/tests/fake.py - the only value source). Review targets: apps/users/tests/factories.py (UserFactory: Sequence email get-or-create, weighted ar/en language, locale-matched name, password='!', verified-EmailAddress post_generation, staff Trait), apps/common/tests/factories_registry.py (explicit dict, loud LookupError), apps/common/tests/test_factory_coverage.py (gate), apps/common/management/commands/seed_db.py (--scale 0..1 log curve to 1M, build_batch + chunked bulk_create, fan_out(per_parent) for child ratios, @seed.example.com marker, --wipe/--seed, local-only guard).",
         "Runtime evidence: 10k users + 10k verified EmailAddresses in 1.0s (~21k rows/s => scale 1.0 ~ 2min); seeded user code-login pends on login_by_code (not verify_email) with Arabic code email in Mailpit; wipe removed exactly the seeded rows. CLAUDE.md 'Factories & seed data' section is the standing rule."
@@ -204,10 +204,11 @@
       "id": "infra-typecheck-and-dx",
       "group": "G24",
       "title": "Type-check infra/ and close the small DX gaps",
-      "endGoal": "mypy runs over infra/ in CI (aws-cdk-lib ships stubs); README prerequisites list jq + AWS credentials for `just infra-*`; media is either documented as world-readable via CloudFront or gets a private-read path; `.gitignore` covers `.claude/settings.local.json` (done 2026-08-29).",
+      "endGoal": "mypy runs over infra/ in CI (aws-cdk-lib ships stubs); README prerequisites list jq + AWS credentials for `just infra-*`; a private-read media path (signed URLs) if a product needs one - today docs/AWS_ARCHITECTURE.md records media as public-by-URL (2026-09-05).",
       "tips": [
         "pyproject.toml used to claim infra was 'typed by its own gate' - it was not; the comment now says so.",
-        "CloudFront fronts the whole media prefix unsigned: every upload is public to anyone with the URL - a decision to record, not an accident to keep."
+        "CloudFront fronts the whole media prefix unsigned: every upload is public to anyone with the URL - a decision to record, not an accident to keep.",
+        "Done 2026-09-05: media documented as public-by-URL in docs/AWS_ARCHITECTURE.md; .gitignore covered .claude/settings.local.json on 2026-08-29."
       ],
       "status": "pending"
     },

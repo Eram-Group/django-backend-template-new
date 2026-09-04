@@ -32,7 +32,7 @@ scheduler ──▶ [ cron jobs ]      │
 | **cron jobs** | Management commands on a timer (clean sessions, reconcile payments, …). Each run is a short-lived task; nothing is always on. | EventBridge Scheduler |
 | **release task** | Runs before every deploy: deploy checks, migrations, static files. If it fails, nothing rolls out. | one-off ECS task |
 | **database** | One PostgreSQL 18. It is also the cache, the session store and the task queue — so there is no Redis. | RDS |
-| **files** | Uploads and static assets in a private bucket, served through a CDN. | S3 + CloudFront |
+| **files** | Uploads and static assets in a bucket only the CDN can read; anyone with a file's URL can fetch it (there is no signed-URL path yet - keep sensitive uploads out until it exists). | S3 + CloudFront |
 | **email** | Transactional email. | SES |
 | **secrets** | One secret per environment holding keys and passwords, injected into the tasks. | Secrets Manager |
 | **image registry** | Where the built image lives. | ECR |
@@ -59,7 +59,7 @@ balancer.
 
 - **dev** ≈ $23/month, **production** ≈ $55/month per app, plus a share of the
   two shared pieces (load balancer ≈ $34, dev database ≈ $30 — split across
-  all ~10 apps).
+  ~5 apps, the divisor docs/DEPLOYMENT.md uses).
 - Roughly **$91/month per app** for dev + production once those shares are
   counted (the per-environment detail is in docs/DEPLOYMENT.md), versus
   ≈ $105–120 on the previous App Runner setup.

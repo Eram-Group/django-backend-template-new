@@ -1,5 +1,11 @@
+from collections.abc import Sequence
+
 from django.db import models
 from django.utils.translation import gettext_lazy as _
+from django_stubs_ext import StrOrPromise
+
+#: FCM registration tokens are ~160 chars; the column and the API bound agree.
+REGISTRATION_ID_MAX_LENGTH = 512
 
 
 class NotificationKind(models.TextChoices):
@@ -9,6 +15,13 @@ class NotificationKind(models.TextChoices):
     ANNOUNCEMENT = "announcement", _("Announcement")
     PAYMENT_PAID = "payment_paid", _("Payment received")
     WALLET_CREDITED = "wallet_credited", _("Wallet credited")
+
+
+def notification_kind_choices() -> Sequence[tuple[str, StrOrPromise]]:
+    """``choices=`` for kind columns. A CALLABLE is serialized into migration
+    state by import path, so adding a kind is never a migration - the value
+    set is still enforced by ``full_clean`` and rendered by the admin."""
+    return NotificationKind.choices
 
 
 class NotificationCategory(models.TextChoices):
@@ -27,6 +40,11 @@ class Channel(models.TextChoices):
     PUSH = "push", _("App notification")
     SMS = "sms", _("SMS")
     WHATSAPP = "whatsapp", _("WhatsApp")
+
+
+def channel_choices() -> Sequence[tuple[str, StrOrPromise]]:
+    """``choices=`` for channel columns - see ``notification_kind_choices``."""
+    return Channel.choices
 
 
 class DeliveryStatus(models.TextChoices):

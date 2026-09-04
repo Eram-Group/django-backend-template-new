@@ -15,6 +15,24 @@ ARM64 = ecs.RuntimePlatform(
     operating_system_family=ecs.OperatingSystemFamily.LINUX,
 )
 
+# The worker has no port for the ALB to probe, so ECS never learned that a
+# task lost its database (rotated secret, security-group change) - it just
+# sat RUNNING with an empty queue. One Django boot + connection a minute is
+# the price of a real liveness signal on a 0.25 vCPU task.
+WORKER_HEALTH_CHECK = ecs.HealthCheck(
+    command=[
+        "CMD-SHELL",
+        (
+            "python -c 'import django; django.setup(); "
+            "from django.db import connection; connection.ensure_connection()'"
+        ),
+    ],
+    interval=Duration.seconds(60),
+    timeout=Duration.seconds(15),
+    retries=3,
+    start_period=Duration.seconds(90),
+)
+
 
 def fargate_task(
     scope: Construct,
@@ -34,11 +52,14 @@ def fargate_task(
     command: list[str] | None,
     web_port: int | None,
     stop_timeout: Duration,
+    health_check: ecs.HealthCheck | None,
 ) -> ecs.FargateTaskDefinition:
     """Register a Fargate task definition whose only container is ``Main``.
 
     ``web_port`` adds the single named TCP port mapping Express Mode requires;
-    ``command=None`` keeps the image CMD (gunicorn).
+    ``command=None`` keeps the image CMD (gunicorn). ``health_check`` is the
+    container-level probe: the web tier is probed by the ALB and passes None,
+    the worker (no port) gets ``WORKER_HEALTH_CHECK``.
     """
     task = ecs.FargateTaskDefinition(
         scope,
@@ -64,6 +85,7 @@ def fargate_task(
         secrets=secrets,
         essential=True,
         stop_timeout=stop_timeout,
+        health_check=health_check,
         linux_parameters=ecs.LinuxParameters(
             scope, f"{construct_id}Init", init_process_enabled=True
         ),

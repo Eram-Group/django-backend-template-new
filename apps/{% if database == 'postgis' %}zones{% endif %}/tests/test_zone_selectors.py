@@ -4,7 +4,6 @@ from django.contrib.gis.geos import Polygon
 
 from apps.zones import selectors
 from apps.zones.exceptions import InvalidCoordinatesError
-from apps.zones.exceptions import ZoneNotFoundError
 from apps.zones.tests.factories import ZoneFactory
 from apps.zones.tests.geo import HOLE
 from apps.zones.tests.geo import SQUARE
@@ -47,12 +46,9 @@ def test_overlaps_ignore_neighbours_that_only_touch() -> None:
     assert [z.code for z in selectors.zone_overlaps(zone=zone)] == ["sa-a-2"]
 
 
-def test_get_by_code_and_active_list() -> None:
+def test_active_list_skips_inactive_zones() -> None:
     ZoneFactory.create(code="sa-a-1", is_active=False)
     active = ZoneFactory.create(code="sa-a-2")
-    assert selectors.zone_get(code=" SA-A-2 ") == active
     assert list(selectors.zone_list_active().filter(code__startswith="sa-a-")) == [
         active
     ]
-    with pytest.raises(ZoneNotFoundError):
-        selectors.zone_get(code="sa-a-404")

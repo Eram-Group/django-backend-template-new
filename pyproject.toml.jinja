@@ -20,8 +20,6 @@ dependencies = [
   "django-anymail[amazon-ses]>=15.0",
   "django-axes>=8.3.1",
   "django-cors-headers>=4.9",
-  "django-guid>=3.6.1",
-  "django-health-check>=4.4.3",
   "django-phonenumber-field[phonenumbers]>=8.4",
   "django-import-export>=4.4.1",
   "django-modeltranslation>=0.20.3",
@@ -40,7 +38,6 @@ dependencies = [
   "stamina>=26.1",
   "pycountry>=24.6",
   "babel>=2.17",
-  "phonenumbers>=9.0",
   "pillow>=11.0",
 ]
 
@@ -50,8 +47,6 @@ dev = [
   "django-debug-toolbar>=7.0",
   "django-extensions>=4.1",
   "django-stubs[compatible-mypy]>=6.0.7",
-  "django-test-migrations>=1.5.0",
-  "django-upgrade>=1.31",
   "factory-boy>=3.3.3",
   "import-linter>=2.13",
   "ipdb>=0.13.13",
@@ -61,12 +56,12 @@ dev = [
   "pytest>=9.1",
   "pytest-cov>=7.1.0",
   "pytest-django>=4.12",
-  "pytest-mock>=3.15.1",
   "pytest-sugar>=1.1.1",
   "pytest-xdist>=3.8.0",
   "respx>=0.23",
-  "ruff>=0.15",
-  "werkzeug[watchdog]>=3.1.8",
+  # Pinned to the pre-commit hook rev (.pre-commit-config.yaml) so `just fmt`
+  # and `just lint` never disagree.
+  "ruff==0.16.4",
 ]
 
 # ==== ruff ====
@@ -163,7 +158,7 @@ overrides = [
   # Django migrations should not produce any errors:
   { module = "*.migrations.*", ignore_errors = true },
   # Third-party packages without type stubs / py.typed:
-  { module = [ "allauth.*", "axes.*", "health_check.*", "unfold.*", "import_export.*", "phonenumber_field.*", "firebase_admin.*" ], ignore_missing_imports = true },
+  { module = [ "allauth.*", "axes.*", "unfold.*", "import_export.*", "phonenumber_field.*", "firebase_admin.*" ], ignore_missing_imports = true },
   # The framework wraps unfold/import-export (untyped) once; per-entity
   # admins subclass OUR typed classes and need no exemption:
   { module = "apps.common.admin.*", disallow_subclassing_any = false },
@@ -173,7 +168,7 @@ overrides = [
   { module = [ "apps.*.adapters", "apps.*.admin.*" ], disallow_subclassing_any = false, disallow_untyped_decorators = false },
   # factory-boy declarations are typed but its callables/decorators are not
   # (factories themselves + test modules that call them):
-  { module = [ "apps.*.tests.*", "apps.*.tests.*.*" ], disallow_untyped_calls = false, disallow_untyped_decorators = false },
+  { module = [ "apps.*.tests.*" ], disallow_untyped_calls = false, disallow_untyped_decorators = false },
 ]
 
 [tool.django-stubs]
@@ -198,9 +193,6 @@ python_files = [
 filterwarnings = [
   # Warnings are errors - deprecations must be dealt with, not scrolled past.
   "error",
-  # Upstream django-guid still calls asyncio.iscoroutinefunction (removed in
-  # py3.16); drop this ignore once a fixed release ships.
-  "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:django_guid",
   # firebase-admin 7.x nudges Message.token toward Message.fid, but client
   # apps register FCM registration TOKENS (FirebaseMessaging.getToken()) -
   # fid targeting is a different identifier. Revisit when mobile SDKs move.
@@ -226,7 +218,7 @@ type = "layers"
 # services enqueue tasks (on_commit), so tasks sit BELOW services; task
 # bodies stay lean (models/selectors only) - business logic lives in services.
 layers = [
-  "apis | admin | management",
+  "apis | admin | (management)",
   "services",
   "tasks",
   "selectors",
@@ -236,7 +228,7 @@ containers = [ "apps.users", "apps.notifications", "apps.payments", "apps.locati
 ignore_imports = [
   # Recorded exception (2026-07-18): the refund executor task trampolines
   # into its own app's services (function-level import) - the provider call
-  # must run in the worker, outside ATOMIC_REQUESTS, while the money logic
+  # must run in the worker, outside any request, while the money logic
   # (wallet_apply, revert) stays in services.
   "apps.payments.tasks.refunds -> apps.payments.services.payments",
 ]

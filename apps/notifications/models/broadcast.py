@@ -4,7 +4,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.common.models import BaseModel
 from apps.notifications.constants import BroadcastStatus
-from apps.notifications.validators import validate_kind
+from apps.notifications.constants import notification_kind_choices
 from apps.users.constants import Language
 
 
@@ -20,7 +20,7 @@ class Broadcast(BaseModel):
     "refresh progress" action recounts to fix any drift.
     """
 
-    kind = models.CharField(_("kind"), max_length=50, validators=[validate_kind])
+    kind = models.CharField(_("kind"), max_length=50, choices=notification_kind_choices)
     context = models.JSONField(_("context"), default=dict, blank=True)
     status = models.CharField(
         _("status"),

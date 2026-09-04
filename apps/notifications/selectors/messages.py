@@ -50,17 +50,6 @@ def notification_config_map() -> dict[NotificationKind, NotificationKindConfig]:
     return configs
 
 
-def notification_config_get(*, kind: NotificationKind) -> NotificationKindConfig:
-    """One kind's row, one query - for callers that have no batch to map."""
-    try:
-        return NotificationKindConfig.objects.get(kind=kind)
-    except NotificationKindConfig.DoesNotExist:
-        msg = (
-            f"NotificationKindConfig row missing for {kind.name} ({_MISSING_ROW_HINT})."
-        )
-        raise LookupError(msg) from None
-
-
 @dataclass(frozen=True, slots=True)
 class RenderedMessage:
     title: str

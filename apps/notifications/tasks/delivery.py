@@ -24,7 +24,6 @@ worker) - never at creation time.
 
 import uuid
 from collections import defaultdict
-from collections.abc import Iterable
 from typing import Protocol
 
 import structlog
@@ -334,9 +333,3 @@ def maybe_complete_broadcast(*, broadcast_id: uuid.UUID | str) -> None:
     ).exclude(
         deliveries__status__in=[DeliveryStatus.PENDING, DeliveryStatus.PROCESSING]
     ).update(status=BroadcastStatus.COMPLETED, updated_at=timezone.now())
-
-
-def chunk_ids[T](ids: list[T], *, size: int) -> Iterable[list[T]]:
-    """Slice a pk list into enqueue-sized chunks (shared with resume/sweep)."""
-    for start in range(0, len(ids), size):
-        yield ids[start : start + size]

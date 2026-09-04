@@ -96,12 +96,9 @@ def test_checkout_without_customer_details_is_refused(client: Client) -> None:
     assert not Payment.objects.filter(user=user).exists()
 
 
-def test_payments_are_scoped_to_their_owner(client: Client) -> None:
+def test_payments_are_scoped_to_their_owner(auth_client: Client) -> None:
     other = PaymentFactory.create()
-    user = UserFactory.create()
-    client.force_login(user)
-
-    response = client.get(f"{PAYMENTS}/{other.pk}")
+    response = auth_client.get(f"{PAYMENTS}/{other.pk}")
 
     assert response.status_code == 404
 
@@ -189,7 +186,7 @@ def test_webhook_for_unknown_gateway_is_400_and_logged(client: Client) -> None:
     assert len(rejected) == 1
     assert rejected[0]["log_level"] == "error"
     assert rejected[0]["gateway"] == "nope"
-    assert rejected[0]["reason"] == "unknown or unconfigured gateway"
+    assert rejected[0]["reason"] == "unknown gateway"
 
 
 def test_webhook_for_unknown_payment_is_404_and_logged(client: Client) -> None:

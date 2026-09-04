@@ -14,6 +14,7 @@ races (a device deleted mid-flight).
 
 import uuid
 from functools import partial
+from itertools import batched
 from typing import Any
 
 import structlog
@@ -28,7 +29,6 @@ from apps.notifications.models import Broadcast
 from apps.notifications.models import Device
 from apps.notifications.models import Notification
 from apps.notifications.models import NotificationDelivery
-from apps.notifications.tasks.delivery import chunk_ids
 from apps.notifications.tasks.delivery import deliver_notifications
 from apps.notifications.tasks.delivery import maybe_complete_broadcast
 
@@ -80,11 +80,11 @@ def _dispatch_one_page(*, broadcast_id: str) -> bool:
             )
             for channel in channels:
                 ids = [str(d.pk) for d in deliveries if d.channel == channel]
-                for batch in chunk_ids(ids, size=DELIVERY_BATCH):
+                for batch in batched(ids, DELIVERY_BATCH, strict=False):
                     transaction.on_commit(
                         partial(
                             deliver_notifications.using(queue_name=BULK_QUEUE).enqueue,
-                            batch,
+                            list(batch),
                         )
                     )
         has_more = len(page) == DISPATCH_PAGE

@@ -16,9 +16,10 @@ class ApplicationError(Exception):
 
     Every subclass carries a stable machine-readable ``code`` - the
     snake_case class name (``UserNotFoundError`` -> ``user_not_found``),
-    emitted as extra["code"]. The name IS the code: there is no override.
-    Messages are localized (Arabic-first), so clients branch on the code -
-    never on the text.
+    emitted as extra["code"]. The name IS the code - never overridden on the
+    class; a raise site may still narrow it through ``extra={"code": ...}``,
+    which the handler lets win. Messages are localized (Arabic-first), so
+    clients branch on the code - never on the text.
     """
 
     status_code: int = 400

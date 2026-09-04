@@ -1,9 +1,10 @@
-# One lint source: CI runs exactly these hooks (pre-commit/action, G10).
-# Push-time gates (branch sync, migrations) live in the pre-push stage.
+# One style/lint source: `just lint` and CI run exactly these hooks (mypy is
+# the separate `just typecheck` gate). Push-time gates (branch sync,
+# migrations) live in the pre-push stage.
 
 exclude: '/migrations/'
 default_stages: [pre-commit]
-minimum_pre_commit_version: '3.2.0'
+minimum_pre_commit_version: '4.6.0'
 
 default_language_version:
   python: python3.14

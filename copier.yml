@@ -17,8 +17,12 @@ _exclude:
   - __pycache__
   - .git
   - .DS_Store
-  # Template-only material (README.md is the template's; README.md.jinja the project's)
-  - README.md
+  # Template-only material. Patterns match DESTINATION paths, so a template
+  # file may never share a name with a rendered one: the template's README
+  # lives in .github/ (GitHub renders it from there) and its own pre-commit
+  # config carries a distinct name.
+  - .github/README.md
+  - .pre-commit-config.template.yaml
   - presets
   - build
   - .github/workflows/template.yml

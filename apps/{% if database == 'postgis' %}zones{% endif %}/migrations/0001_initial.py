@@ -4,6 +4,7 @@ import django.contrib.gis.db.models.fields
 import django.db.models.deletion
 import django.db.models.functions.datetime
 from django.contrib.postgres.operations import CreateExtension
+import django.db.models.functions.uuid
 from django.db import migrations, models
 
 
@@ -23,7 +24,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Zone',
             fields=[
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
                 ('region_code', models.CharField(db_index=True, max_length=20, verbose_name='region code')),

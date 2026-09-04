@@ -49,6 +49,7 @@ from apps.payments.models import SavedCard
 from apps.payments.models import Wallet
 from apps.payments.selectors.saved_cards import saved_card_gateway_customer_id
 from apps.payments.selectors.wallets import wallet_get
+from apps.payments.services.saved_cards import saved_card_ref
 from apps.payments.services.saved_cards import saved_card_store
 from apps.payments.services.wallets import wallet_apply
 from apps.payments.tasks.refunds import process_payment_refund
@@ -63,14 +64,6 @@ _PROVIDER_REVERSALS = frozenset({"refund", "void", "refunded", "voided"})
 
 #: A full name has a first and a last part - both gateways bill them.
 _NAME_PARTS = 2
-
-
-def _card_ref(card: SavedCard) -> SavedCardRef:
-    return SavedCardRef(
-        token=card.token,
-        customer_id=card.gateway_customer_id,
-        agreement_id=card.gateway_agreement_id,
-    )
 
 
 def _customer_details(user: User) -> tuple[str, str]:
@@ -155,10 +148,10 @@ def payment_initiate(
     synchronously - the response is then already terminal with an empty
     checkout_url, or carries a 3DS-challenge URL to redirect to.
 
-    Accepted risk: under ATOMIC_REQUESTS the PENDING row becomes visible to
-    webhooks only when the request commits, so a webhook racing the commit
-    404s - the gateway's webhook retry, ``payment_verify``, and the
-    ``reconcile_payments`` sweep all pick it up.
+    The PENDING row commits before the gateway is contacted (no request-wide
+    transaction), so a webhook can never race its own row; a webhook that
+    still 404s (a replay for a purged row) is covered by the gateway's
+    retry, ``payment_verify``, and the ``reconcile_payments`` sweep.
     """
     customer_name, customer_phone = _customer_details(user)
     if kind == PaymentKind.WALLET_TOPUP:
@@ -187,7 +180,7 @@ def payment_initiate(
         gateway_name=gateway.name,
         customer_name=customer_name,
         customer_phone=customer_phone,
-        saved_card=_card_ref(saved_card) if saved_card is not None else None,
+        saved_card=saved_card_ref(saved_card) if saved_card is not None else None,
         # A new card is filed under the customer the user's other cards use,
         # so re-entering a card yields the same provider card, not a copy.
         customer_id=(
@@ -263,7 +256,7 @@ def payment_charge_saved(
         gateway_name=gateway.name,
         customer_name=customer_name,
         customer_phone=customer_phone,
-        saved_card=_card_ref(saved_card),
+        saved_card=saved_card_ref(saved_card),
         customer_id="",  # the stored card already carries its customer
     )
     try:
@@ -294,6 +287,25 @@ def payment_apply_gateway_event(*, gateway_name: str, event: PaymentEvent) -> Pa
     (``is_pending`` - still in flight, or a refund/void/capture child) is
     recorded on the row but never transitions it.
     """
+    payment = _apply_transition(gateway_name=gateway_name, event=event)
+    if event.saved_card is not None and payment.save_card_requested:
+        # Consent-gated card persistence, AFTER the row lock is released: the
+        # upsert reads the provider vault (HTTP) and must not hold the
+        # Payment row. It is idempotent, and a replay may be the FIRST
+        # carrier of the card payload when payment_verify settled the row
+        # before the webhook arrived - a crash between the two writes heals
+        # on that replay.
+        card = saved_card_store(
+            user=payment.user, gateway=gateway_name, data=event.saved_card
+        )
+        payment.saved_card = card
+        Payment.objects.filter(pk=payment.pk).update(
+            saved_card=card, updated_at=timezone.now()
+        )
+    return payment
+
+
+def _apply_transition(*, gateway_name: str, event: PaymentEvent) -> Payment:
     with transaction.atomic():
         try:
             payment = Payment.objects.select_for_update().get(
@@ -305,13 +317,6 @@ def payment_apply_gateway_event(*, gateway_name: str, event: PaymentEvent) -> Pa
         payment.gateway_callback = event.raw
         if event.transaction_id:  # "" = keep the settled id (child actions)
             payment.gateway_transaction_id = event.transaction_id
-        if event.saved_card is not None and payment.save_card_requested:
-            # Consent-gated card persistence; the upsert is idempotent, and a
-            # replay may be the FIRST carrier of the card payload when
-            # payment_verify settled the row before the webhook arrived.
-            payment.saved_card = saved_card_store(
-                user=payment.user, gateway=gateway_name, data=event.saved_card
-            )
         if payment.status in TERMINAL_STATUSES or event.is_pending:
             # Replay or informational event: record, never (re-)credit.
             if event.status in _PROVIDER_REVERSALS and (
@@ -327,7 +332,6 @@ def payment_apply_gateway_event(*, gateway_name: str, event: PaymentEvent) -> Pa
                 update_fields=[
                     "gateway_callback",
                     "gateway_transaction_id",
-                    "saved_card",
                     "updated_at",
                 ]
             )
@@ -344,7 +348,6 @@ def payment_apply_gateway_event(*, gateway_name: str, event: PaymentEvent) -> Pa
                 "paid_at",
                 "gateway_callback",
                 "gateway_transaction_id",
-                "saved_card",
                 "updated_at",
             ]
         )
@@ -474,12 +477,13 @@ def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
     InsufficientBalanceError before the provider is contacted), flips to
     REFUND_PENDING, and enqueues ``process_payment_refund`` on commit.
 
-    The provider call lives in the worker task on purpose: request handlers
-    run under ATOMIC_REQUESTS, which would turn the executor's transactions
-    into savepoints - holding the Payment+Wallet row locks across outbound
-    HTTP and rolling the interlock back to PAID on a crash even after the
-    provider refunded. Committing REFUND_PENDING with the request and doing
-    the rest in the worker closes both holes.
+    The provider call lives in the worker task on purpose: the executor's
+    phases must each commit on their own, and a request handler (an admin
+    action inside Django's own atomic change view) would turn them into
+    savepoints - holding the Payment+Wallet row locks across outbound HTTP
+    and rolling the interlock back to PAID on a crash even after the
+    provider refunded. Committing REFUND_PENDING here and doing the rest in
+    the worker closes both holes.
     """
     gateway_by_name(payment.gateway)  # an unconfigured gateway refuses up front
     with transaction.atomic():
@@ -516,8 +520,8 @@ def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
 
 def payment_refund_execute(*, payment_id: uuid.UUID, actor: User | None) -> Payment:
     """Refund phases 2+3: provider call + finalization. Worker/sweep only -
-    never call from a request handler (ATOMIC_REQUESTS would reopen the
-    crash window the start/execute split exists to close).
+    never call from inside an open transaction (a request handler's atomic
+    block would reopen the crash window the start/execute split closes).
 
     ``actor`` is the staff member who started the refund (the worker task
     carries it); the reconcile sweep passes None - nobody is behind a

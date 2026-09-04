@@ -74,23 +74,24 @@ class TestEditorPage:
         assert 'name="welcome-body_ar"' in body
         assert 'name="welcome-body_en"' in body
 
-    def test_opening_the_page_creates_missing_rows_with_recommended_values(
+    def test_a_missing_row_renders_unsaved_with_recommended_values(
         self, client: Client
     ) -> None:
-        """No seed step: entering the page is the setup. The new card is
-        flagged on that visit only."""
+        """No seed step: the page prefills a missing kind from the catalog and
+        flags it until its first save - opening the page never writes."""
         NotificationKindConfig.objects.filter(kind=NotificationKind.WELCOME).delete()
         admin_client = _superuser_client(client)
 
         body = admin_client.get(reverse(PAGE_URL)).content.decode()
 
-        created = NotificationKindConfig.objects.get(kind=NotificationKind.WELCOME)
-        assert created.channels == []  # WELCOME recommends inbox-only
-        assert created.title_en == created.title_ar == "Welcome!"
+        assert not NotificationKindConfig.objects.filter(
+            kind=NotificationKind.WELCOME
+        ).exists()
         assert 'data-kind="welcome" data-new="1"' in body
         assert 'data-kind="payment_paid" data-new="1"' not in body
+        assert 'name="welcome-title_en" value="Welcome!"' in body
         again = admin_client.get(reverse(PAGE_URL)).content.decode()
-        assert 'data-new="1"' not in again
+        assert 'data-kind="welcome" data-new="1"' in again
 
     def test_a_retired_kind_does_not_appear(self, client: Client) -> None:
         """Removing a kind from the enum needs no migration: its leftover row

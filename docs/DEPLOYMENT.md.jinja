@@ -11,7 +11,7 @@ flows. The reasoning behind the design is in
 ```
 GitHub Actions (OIDC, arm64 build) ──push :sha──▶ ECR eram/<app>
         │
-        ├─ 1. release  : ECS RunTask (worker family)  check --deploy, migrate, createcachetable, collectstatic
+        ├─ 1. release  : ECS RunTask (worker family)  manage.py release (check --deploy, migrate, createcachetable, collectstatic)
         ├─ 2. web      : update ECS Express Mode service   canary, auto-rollback on 5XX / unhealthy
         └─ 3. worker   : update ECS Fargate service        db_worker --queue-name default,bulk
 
@@ -72,7 +72,7 @@ them (see *Account prerequisites*).
 - `just infra-deploy <env>` reads the currently deployed tag from the ACTIVE
   worker revision (`infra/scripts/live_context.sh`) before running
   `cdk deploy`, so a config-only deploy never reverts the image. The first
-  deploy of an environment needs `-- -c image_tag=<sha>` explicitly.
+  deploy of an environment is `just infra-deploy-first <env> <sha>`.
 
 ## Cost (eu-central-1, on-demand list prices, 730 h/month)
 
@@ -137,9 +137,10 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
 1. `just infra-install` — Python deps + the pinned CDK CLI.
 2. `cd infra && npx cdk bootstrap aws://<account>/eu-central-1` (once per
    account/region).
-3. Edit `infra/backend_infra/config.py`: `APP.name` and `APP.github_repo`
-   (the account-level fields stay as they are for every app in the same
-   account); `ENVIRONMENTS`: sizes, domain, frontend origins.
+3. `infra/backend_infra/config.py` already carries `APP.name` and
+   `APP.github_repo` from the Copier answers (the account-level fields stay
+   as they are for every app in the same account); edit `ENVIRONMENTS`:
+   sizes, domain, frontend origins.
 4. `just infra-deploy-shared` — ECR, cluster, roles (stack `<app>-Shared`).
    If the ECR repository `eram/<app>` already exists, import it first
    (`npx cdk import <app>-Shared`) or delete it.
@@ -169,8 +170,8 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    on a missing one — it does not skip.
 8. `just infra-deploy-first dev <sha>` — first environment deploy
    (≈ 10 min; the Express service provisions the ALB). The stack's release
-   trigger runs `check --deploy`, `migrate`, `createcachetable` and
-   `collectstatic` on the worker task
+   trigger runs `manage.py release` (`check --deploy`, `migrate`,
+   `createcachetable`, `collectstatic`) on the worker task
    definition *before* the services are
    created, so `/readyz` is green on the first task.
 9. Create the GitHub environment `dev` and copy the `<app>-App-dev` outputs into
@@ -201,8 +202,8 @@ identity and change `AppConfig.ses_identity`).
 
 1. **release** — `amazon-ecs-deploy-task-definition` registers a worker
    revision with the new image and runs it once (on-demand Fargate) with the
-   command `check --deploy --fail-level WARNING && migrate && createcachetable
-   && collectstatic`. Any Django deploy warning
+   command `manage.py release` (`check --deploy --fail-level WARNING`,
+   `migrate`, `createcachetable`, `collectstatic`). Any Django deploy warning
    stops the rollout before the
    database is touched. Migrations must be expand/contract: web rolls before
    worker by design. (`cdk deploy` runs the same command through its release

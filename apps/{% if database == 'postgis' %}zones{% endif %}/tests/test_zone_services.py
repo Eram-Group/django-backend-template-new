@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from apps.location.tests.factories import CountryFactory
 from apps.zones import services
 from apps.zones.exceptions import ZoneFileError
+from apps.zones.exceptions import ZonesError
 from apps.zones.models import Zone
 from apps.zones.tests.factories import ZoneFactory
 from apps.zones.tests.geo import SQUARE
@@ -71,7 +72,7 @@ def test_load_is_all_or_nothing(saudi) -> None:  # type: ignore[no-untyped-def]
 
 def test_update_allowlist_and_validation() -> None:
     zone = ZoneFactory.create()
-    with pytest.raises(ValueError, match="not updatable: code"):
+    with pytest.raises(ZonesError, match="not updatable: code"):
         services.zone_update(zone=zone, data={"code": "other"})
     with pytest.raises(ValidationError):
         services.zone_update(zone=zone, data={"name_en": ""})

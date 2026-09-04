@@ -51,9 +51,10 @@ _META_STATUS_MAP = {
 def whatsapp_webhook_verify(request: HttpRequest) -> HttpResponse:
     """Meta subscribes by echoing hub.challenge back - iff the verify token
     matches ours; an unset token rejects (fail closed)."""
-    verify_token = settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN
-    if verify_token is None:
+    verify_secret = settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN
+    if verify_secret is None:
         raise _rejected(reason="verify token not configured")
+    verify_token = verify_secret.get_secret_value()
     try:
         received = request.GET["hub.verify_token"]
         challenge = request.GET["hub.challenge"]

@@ -2,12 +2,14 @@ from typing import Any
 
 from allauth.usersessions.models import UserSession
 from django.db import transaction
+from django.utils.translation import gettext_lazy as _
 
 from apps.notifications.constants import NotificationKind
 from apps.notifications.services import notification_send
 from apps.payments.services import wallet_create
 from apps.payments.services import wallet_currency_for
 from apps.users.constants import Language
+from apps.users.exceptions import UserError
 from apps.users.models import User
 from apps.users.tasks import send_welcome_email
 
@@ -29,17 +31,18 @@ def user_create(*, user: User, email: str, name: str, language: Language) -> Use
     by catalog default (devices register after login, so a push would have
     nowhere to go yet).
     """
-    user.email = User.objects.normalize_email(email)
-    user.name = name
-    user.language = language
-    user.set_unusable_password()
-    user.full_clean()
-    user.save()
-    wallet_create(user=user, currency=wallet_currency_for(language=language))
-    notification_send(
-        recipient=user, kind=NotificationKind.WELCOME, context={"name": name}
-    )
-    transaction.on_commit(lambda: send_welcome_email.enqueue(str(user.pk)))
+    with transaction.atomic():
+        user.email = User.objects.normalize_email(email)
+        user.name = name
+        user.language = language
+        user.set_unusable_password()
+        user.full_clean()
+        user.save()
+        wallet_create(user=user, currency=wallet_currency_for(language=language))
+        notification_send(
+            recipient=user, kind=NotificationKind.WELCOME, context={"name": name}
+        )
+        transaction.on_commit(lambda: send_welcome_email.enqueue(str(user.pk)))
     return user
 
 
@@ -48,8 +51,7 @@ def user_update(*, user: User, data: dict[str, Any]) -> User:
     (PatchDict in the API layer)."""
     for field, value in data.items():
         if field not in USER_UPDATABLE_FIELDS:
-            msg = f"Field not updatable: {field}"
-            raise ValueError(msg)
+            raise UserError(str(_("Field not updatable: %(field)s") % {"field": field}))
         setattr(user, field, value)
     user.full_clean()
     user.save(update_fields=[*data.keys(), "updated_at"])

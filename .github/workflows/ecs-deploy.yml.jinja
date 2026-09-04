@@ -63,11 +63,7 @@ jobs:
           run-task: true
           run-task-launch-type: FARGATE
           run-task-container-overrides: >
-            [{"name": "Main", "command": ["sh", "-c",
-            "python manage.py check --deploy --fail-level WARNING &&
-            python manage.py migrate --noinput &&
-            python manage.py createcachetable &&
-            python manage.py collectstatic --noinput"]}]
+            [{"name": "Main", "command": ["python", "manage.py", "release"]}]
           run-task-subnets: ${{ vars.ECS_SUBNETS }}
           run-task-security-groups: ${{ vars.ECS_SECURITY_GROUPS }}
           run-task-assign-public-IP: ENABLED

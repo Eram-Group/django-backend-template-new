@@ -25,11 +25,10 @@ from apps.users.constants import Language
 from apps.users.models import User
 
 
-def wallet_currency_for(*, language: str) -> Currency:
+def wallet_currency_for(*, language: Language) -> Currency:
     """The currency of the wallet a user in ``language`` gets at signup -
-    the one place that decision lives (constants.CURRENCY_BY_LANGUAGE). An
-    unknown language code raises ``ValueError``."""
-    return CURRENCY_BY_LANGUAGE[Language(language)]
+    the one place that decision lives (constants.CURRENCY_BY_LANGUAGE)."""
+    return CURRENCY_BY_LANGUAGE[language]
 
 
 def wallet_create(*, user: User, currency: Currency) -> Wallet:

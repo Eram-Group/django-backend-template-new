@@ -1,5 +1,7 @@
-# Hygiene for the TEMPLATE repo itself (this file is excluded from generated
-# projects; theirs is .pre-commit-config.yaml.jinja). The real gates - ruff,
+# Hygiene for the TEMPLATE repo itself - install with
+# `uv run pre-commit install -c .pre-commit-config.template.yaml` (the default
+# name would collide with the rendered .pre-commit-config.yaml.jinja, and
+# Copier excludes by destination path). The real gates - ruff,
 # mypy, pytest, import-linter, CDK - run on the generated presets in
 # .github/workflows/template.yml, because the rendered files only exist there.
 exclude: '/migrations/|\.jinja$'

@@ -9,8 +9,9 @@ implementing PaymentGateway + one mapping entry.
 The registry holds classes, not instances: a constructor reads the
 gateway's settings and refuses to build when one is missing, and that must
 surface on the request that needs the gateway (as a 503), not at import.
-Both resolvers raise ``PaymentGatewayUnavailableError`` - callers never see
-``None``.
+An unknown name is ``PaymentGatewayUnknownError`` (404); a mapped gateway
+that refuses to build, or an unmapped currency, is
+``PaymentGatewayUnavailableError`` (503) - callers never see ``None``.
 """
 
 from django.conf import settings
@@ -18,28 +19,30 @@ from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
 
 from apps.payments.exceptions import PaymentGatewayUnavailableError
+from apps.payments.exceptions import PaymentGatewayUnknownError
 from apps.payments.gateways.base import GatewayConfigurationError
 from apps.payments.gateways.base import PaymentGateway
 
-GATEWAY_CLASSES: dict[str, type[PaymentGateway]] = {
-    gateway_cls.name: gateway_cls
-    for gateway_cls in map(import_string, set(settings.PAYMENT_GATEWAYS.values()))
-}
-GATEWAY_NAME_BY_CURRENCY: dict[str, str] = {
-    currency: import_string(path).name
-    for currency, path in settings.PAYMENT_GATEWAYS.items()
-}
+
+def gateway_classes() -> dict[str, type[PaymentGateway]]:
+    """``name`` -> class, read from settings on every call (a module-level
+    registry would freeze the setting at import and ignore override_settings);
+    ``import_string`` is a sys.modules lookup once the module is loaded."""
+    return {
+        gateway_cls.name: gateway_cls
+        for gateway_cls in map(
+            import_string, dict.fromkeys(settings.PAYMENT_GATEWAYS.values())
+        )
+    }
 
 
 def gateway_by_name(name: str) -> PaymentGateway:
     """Resolve a configured gateway by its ``name`` (Payment.gateway, the
     webhook URL segment)."""
     try:
-        gateway_cls = GATEWAY_CLASSES[name]
+        gateway_cls = gateway_classes()[name]
     except KeyError as exc:
-        raise PaymentGatewayUnavailableError(
-            str(_("Unknown payment gateway."))
-        ) from exc
+        raise PaymentGatewayUnknownError(str(_("Unknown payment gateway."))) from exc
     try:
         return gateway_cls()
     except GatewayConfigurationError as exc:
@@ -50,9 +53,9 @@ def gateway_by_name(name: str) -> PaymentGateway:
 
 def gateway_for_currency(currency: str) -> PaymentGateway:
     try:
-        name = GATEWAY_NAME_BY_CURRENCY[currency]
+        path = settings.PAYMENT_GATEWAYS[currency]
     except KeyError as exc:
         raise PaymentGatewayUnavailableError(
             str(_("No payment gateway is configured for this currency."))
         ) from exc
-    return gateway_by_name(name)
+    return gateway_by_name(import_string(path).name)

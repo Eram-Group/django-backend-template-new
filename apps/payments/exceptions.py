@@ -9,7 +9,15 @@ class PaymentNotFoundError(PaymentError):
     status_code = 404
 
 
+class PaymentGatewayUnknownError(PaymentError):
+    """No gateway carries that name - a wrong URL segment, not an outage."""
+
+    status_code = 404
+
+
 class PaymentGatewayUnavailableError(PaymentError):
+    """A mapped gateway refused to build (missing settings) or is down."""
+
     status_code = 503
 
 

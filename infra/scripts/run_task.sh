@@ -16,7 +16,7 @@ output() {
 }
 subnets=$(output Subnets)
 sg=$(output SecurityGroup)
-family="${app}-${env}-worker"
+family=$(output WorkerFamily)  # naming.worker_family, exported by the stack
 
 overrides=$(jq -cn --args '{containerOverrides: [{name: "Main", command: $ARGS.positional}]}' -- "$@")
 task_arn=$(aws ecs run-task --cluster "$app" --task-definition "$family" \

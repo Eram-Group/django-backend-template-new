@@ -13,6 +13,7 @@ operator can fix the file; a file is accepted whole or not at all.
 import json
 from dataclasses import dataclass
 from typing import Any
+from typing import cast
 
 from django.contrib.gis.gdal.error import GDALException
 from django.contrib.gis.geos import GEOSGeometry
@@ -160,9 +161,8 @@ def _multipolygon(geometry: object, *, index: int) -> MultiPolygon:
             % {"index": index, "reason": geom.valid_reason}
         )
     if kind == "Polygon":
-        geom = MultiPolygon(geom, srid=4326)
-    assert isinstance(geom, MultiPolygon)  # noqa: S101 - narrowed by the type check above
-    return geom
+        return MultiPolygon(geom, srid=4326)
+    return cast("MultiPolygon", geom)  # kind is "MultiPolygon" past the check above
 
 
 def _two_d(coordinates: object) -> object:

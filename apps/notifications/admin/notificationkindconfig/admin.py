@@ -16,9 +16,6 @@ from apps.common.admin import BaseModelAdmin
 from apps.common.exceptions import ApplicationError
 from apps.notifications import selectors
 from apps.notifications import services
-from apps.notifications.admin.notificationkindconfig import change_view
-from apps.notifications.admin.notificationkindconfig import list_view
-from apps.notifications.admin.notificationkindconfig import permissions
 from apps.notifications.admin.notificationkindconfig.form import KindConfigForm
 from apps.notifications.admin.notificationkindconfig.resource import (
     NotificationKindConfigResource,
@@ -43,22 +40,7 @@ class NotificationKindConfigAdmin(
     ANNOUNCEMENT message lock holds on both tabs.
     """
 
-    can_add = permissions.CAN_ADD
-    can_change = permissions.CAN_CHANGE
-    can_delete = permissions.CAN_DELETE
-    field_permissions = permissions.FIELD_PERMISSIONS
     resource_classes = [NotificationKindConfigResource]
-
-    list_display = list_view.LIST_DISPLAY
-    list_filter = list_view.LIST_FILTER
-    list_filter_submit = list_view.LIST_FILTER_SUBMIT
-    search_fields = list_view.SEARCH_FIELDS
-    search_help_text = list_view.SEARCH_HELP_TEXT
-    ordering = list_view.ORDERING
-    list_per_page = list_view.LIST_PER_PAGE
-
-    fieldsets = change_view.FIELDSETS
-    readonly_fields = change_view.READONLY_FIELDS
 
     # Presentation only: the model list still renders through Django's
     # changelist_view (the sorting/filter gates keep exercising it) - the
@@ -100,19 +82,20 @@ class NotificationKindConfigAdmin(
                 # broadcast, so the row has nothing an operator sets here.
                 continue
             config = configs.get(kind)
-            created = config is None
-            if created:
-                # Opening the page is the setup step: a kind with no row gets
-                # one with the catalog's recommended values, flagged on this
-                # visit so the operator reviews it.
-                config = services.notification_config_update(
-                    kind=kind, **KindConfigForm.starting_values(kind)
-                )
-            form = KindConfigForm(instance=config, kind=kind, prefix=kind.value)
+            missing = config is None
+            # A kind with no row yet renders unsaved, prefilled with the
+            # catalog's recommended values and flagged so the operator reviews
+            # it; its first Save creates the row (a GET never writes).
+            form = KindConfigForm(
+                instance=config,
+                initial=KindConfigForm.starting_values(kind) if missing else None,
+                kind=kind,
+                prefix=kind.value,
+            )
             cards.append(
                 {
                     "kind": str(kind),
-                    "new": created,
+                    "new": missing,
                     "label": kind.label,
                     "vars": form.variables(),
                     "form": form,

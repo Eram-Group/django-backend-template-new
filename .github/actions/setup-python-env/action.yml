@@ -1,0 +1,23 @@
+# uv (exact pin) + a locked sync of one uv project. The pin lives here once:
+# astral-sh stopped publishing floating major tags after `v7`, so `@v10` is
+# unresolvable; Dependabot's github-actions ecosystem keeps this current.
+name: Python environment
+description: Install uv and sync the locked environment of a uv project.
+
+inputs:
+  working-directory:
+    description: Directory holding pyproject.toml + uv.lock.
+    required: false
+    default: "."
+
+runs:
+  using: composite
+  steps:
+    - uses: astral-sh/setup-uv@v10.0.1
+      with:
+        enable-cache: true
+
+    - name: Install environment
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: uv sync --locked

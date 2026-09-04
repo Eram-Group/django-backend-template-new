@@ -2,6 +2,7 @@
 
 import string
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
@@ -9,12 +10,21 @@ from modeltranslation.manager import MultilingualManager
 
 from apps.common.models import BaseModel
 from apps.notifications.constants import NotificationKind
-from apps.notifications.validators import validate_kind
+from apps.notifications.constants import notification_kind_choices
 
 
 def _placeholders(text: str) -> set[str]:
     """Field names a str.format call on ``text`` would look up."""
     return {name for _lit, name, _spec, _conv in string.Formatter().parse(text) if name}
+
+
+#: The modeltranslation shadow columns of the copy fields (``title_ar``, ...),
+#: derived from LANGUAGES so a third language cannot skip validation.
+MESSAGE_FIELDS: tuple[str, ...] = tuple(
+    f"{base}_{code.replace('-', '_')}"
+    for base in ("title", "body")
+    for code, _label in settings.LANGUAGES
+)
 
 
 class NotificationKindConfig(BaseModel):
@@ -39,7 +49,7 @@ class NotificationKindConfig(BaseModel):
     objects = MultilingualManager["NotificationKindConfig"]()
 
     kind = models.CharField(
-        _("action"), max_length=50, unique=True, validators=[validate_kind]
+        _("action"), max_length=50, unique=True, choices=notification_kind_choices
     )
     # JSON list of Channel values; subset-of-supported enforced in clean().
     channels = models.JSONField(_("channels"), default=list, blank=True)
@@ -94,7 +104,7 @@ class NotificationKindConfig(BaseModel):
                     "supported": ", ".join(sorted(supported)),
                 }
             )
-        for field in ("title_ar", "title_en", "body_ar", "body_en"):
+        for field in MESSAGE_FIELDS:
             value = getattr(self, field)
             if not value:
                 continue  # blank enforcement lives on the field (translation.py)

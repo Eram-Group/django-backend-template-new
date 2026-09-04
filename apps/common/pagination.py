@@ -1,10 +1,10 @@
 import base64
-import binascii
 import uuid
 from typing import Any
 
 from django.db.models import QuerySet
 from django.http import HttpRequest
+from django.utils.translation import gettext as _
 from ninja import Field
 from ninja import Schema
 from ninja.pagination import PaginationBase
@@ -14,6 +14,10 @@ from apps.common.exceptions import ApplicationError
 # Page size when the client sends no ``limit``, and the ceiling it can ask for.
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
+
+
+class InvalidCursorError(ApplicationError):
+    """The client sent a cursor this API never issued."""
 
 
 class CursorPagination(PaginationBase):
@@ -54,11 +58,13 @@ class CursorPagination(PaginationBase):
 
 
 def _encode_cursor(pk: uuid.UUID) -> str:
-    return base64.urlsafe_b64encode(pk.bytes).decode()
+    # 16 bytes always pad to "==" - drop it; the decoder restores it.
+    return base64.urlsafe_b64encode(pk.bytes).decode().rstrip("=")
 
 
 def _decode_cursor(cursor: str) -> uuid.UUID:
+    padded = cursor + "=" * (-len(cursor) % 4)
     try:
-        return uuid.UUID(bytes=base64.urlsafe_b64decode(cursor.encode()))
-    except (ValueError, binascii.Error) as exc:
-        raise ApplicationError("Invalid pagination cursor.") from exc
+        return uuid.UUID(bytes=base64.urlsafe_b64decode(padded.encode()))
+    except ValueError as exc:  # binascii.Error is a ValueError
+        raise InvalidCursorError(_("Invalid pagination cursor.")) from exc

@@ -100,33 +100,9 @@ jobs:
           cache-from: type=gha,scope=${{ matrix.preset }}
           cache-to: type=gha,mode=max,scope=${{ matrix.preset }}
 
-      # Same release step + probes the generated ci.yml runs on its image.
-      - name: Release step + smoke
+      # The same composite action the generated ci.yml runs on its image.
+      - uses: ./.github/actions/image-smoke
         if: matrix.image_smoke
-        working-directory: ${{ env.PROJECT }}
-        run: |
-          cp .env.example .env.image
-          cat >> .env.image <<EOF
-          ENVIRONMENT=dev
-          SECRET_KEY=ci-only-not-a-secret-nZfK3vQ8wLxT1pYbR6mJc9GhD4sE7uAiO2
-          DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/backend
-          ALLOWED_HOSTS=localhost
-          AWS_STORAGE_BUCKET_NAME=ci-unused
-          AWS_S3_REGION_NAME=eu-central-1
-          AWS_S3_CUSTOM_DOMAIN=ci-unused.cloudfront.net
-          AWS_SES_REGION=eu-central-1
-          SENTRY_DSN=https://key@sentry.invalid/1
-          SENTRY_RELEASE=${{ github.sha }}
-          GDAL_LIBRARY_PATH=
-          GEOS_LIBRARY_PATH=
-          EOF
-          docker run --rm --network host --env-file .env.image generated:local \
-            sh -c "python manage.py check --deploy --fail-level WARNING && python manage.py migrate --noinput && python manage.py createcachetable"
-          docker run -d --name web --network host --env-file .env.image generated:local
-          for _ in $(seq 1 30); do curl -fsS http://localhost:8000/healthz && break; sleep 2; done
-          curl -fsS http://localhost:8000/readyz
-          echo "smoke OK"
-
-      - name: Web logs
-        if: failure() && matrix.image_smoke
-        run: docker logs web || true
+        with:
+          image: generated:local
+          working-directory: ${{ env.PROJECT }}

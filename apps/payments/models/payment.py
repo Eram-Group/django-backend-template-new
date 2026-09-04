@@ -1,9 +1,9 @@
-import uuid
 from decimal import Decimal
 
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
+from django.db.models.functions import UUID7
 from django.utils.translation import gettext_lazy as _
 
 from apps.common.models import BaseModel
@@ -63,8 +63,10 @@ class Payment(BaseModel):
     # The reference WE plant at the gateway (Tap reference.transaction /
     # Paymob special_reference) - stable across create retries, and how
     # webhooks find their Payment row.
+    # Database-generated like the pk (RETURNING fills it on save): the one
+    # column a webhook resolves rows by must exist however the row was made.
     idempotency_key = models.UUIDField(
-        _("idempotency key"), default=uuid.uuid4, unique=True, editable=False
+        _("idempotency key"), db_default=UUID7(), unique=True, editable=False
     )
     # Checkout-time id (Tap charge id / Paymob intention id) ...
     gateway_charge_id = models.CharField(
@@ -97,6 +99,8 @@ class Payment(BaseModel):
         indexes = [
             models.Index(fields=["user", "status"]),
             models.Index(fields=["gateway_charge_id"]),
+            # The reconcile sweep's window: oldest in-flight rows first.
+            models.Index(fields=["status", "updated_at"]),
         ]
         constraints = [
             # DB backstop for the MinValueValidator - guards any write path

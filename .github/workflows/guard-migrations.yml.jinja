@@ -9,6 +9,10 @@ on:
   pull_request:
     types: [opened, synchronize, reopened, labeled, unlabeled]
 
+concurrency:
+  group: guard-migrations-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   # paths-filter resolves a PR's changed files through the GitHub API

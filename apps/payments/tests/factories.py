@@ -16,6 +16,7 @@ from apps.payments.models import SavedCard
 from apps.payments.models import Wallet
 from apps.payments.models import WalletTransaction
 from apps.payments.services import wallet_currency_for
+from apps.users.constants import Language
 from apps.users.tests.factories import UserFactory
 
 
@@ -61,7 +62,7 @@ class WalletFactory(DjangoModelFactory[Wallet]):
     user = SubFactory(UserFactory)
     # The same decision signup makes (user_create -> wallet_currency_for).
     currency = LazyAttribute(
-        lambda wallet: wallet_currency_for(language=wallet.user.language)
+        lambda wallet: wallet_currency_for(language=Language(wallet.user.language))
     )
 
 

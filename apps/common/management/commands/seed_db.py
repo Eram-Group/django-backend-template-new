@@ -153,7 +153,6 @@ class Command(BaseCommand):
         from apps.common.tests import fake
 
         rng = random.Random(seed)  # noqa: S311 - fake data, not crypto
-        random.seed(seed)
         fake.reseed(seed)
         # factory_boy's own RNG (FuzzyChoice); untyped upstream
         reseed_random(seed)  # type: ignore[no-untyped-call]
@@ -272,6 +271,7 @@ class Command(BaseCommand):
         from apps.payments.models import Wallet
         from apps.payments.models import WalletTransaction
         from apps.payments.services import wallet_currency_for
+        from apps.users.constants import Language
 
         now = timezone.now()
         # (payment-or-None, kind, signed amount, balance_after)
@@ -283,7 +283,7 @@ class Command(BaseCommand):
         for user in users:
             # Signup provisions the wallet in the language's currency; every
             # payment of a seeded user is in that currency.
-            currency = str(wallet_currency_for(language=user.language))
+            currency = str(wallet_currency_for(language=Language(user.language)))
             balance = Decimal(0)
             tx_specs: list[TxSpec] = []
             # Signup writes the WELCOME inbox row (user_create).

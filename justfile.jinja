@@ -7,9 +7,8 @@ set dotenv-load := true
 
 export DJANGO_SETTINGS_MODULE := "config.settings.local"
 
-# The app name from `APP = AppConfig(name="...")` - anchored on that line so a
-# `name=` elsewhere in config.py (a ScheduledJob, a Subnet) can never win.
-app_name := `grep -A1 '^APP = AppConfig(' infra/backend_infra/config.py | grep -o 'name="[^"]*"' | cut -d'"' -f2`
+# The app name - the same Copier answer infra/backend_infra/config.py renders.
+app_name := "{% endraw %}{{ app_name }}{% raw %}"
 
 # Default: list all recipes.
 default:

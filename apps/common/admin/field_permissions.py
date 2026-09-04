@@ -15,9 +15,9 @@ from django.http import HttpRequest
 from apps.common.admin.context import AdminContext
 from apps.common.models import BaseModel
 
-FieldRule = Callable[[AdminContext], bool]
+type FieldRule = Callable[[AdminContext], bool]
 
-Fieldsets = list[tuple[str | None, dict[str, Any]]]
+type Fieldsets = list[tuple[str | None, dict[str, Any]]]
 
 if TYPE_CHECKING:
     _RuleBase = DjangoBaseModelAdmin[Any]

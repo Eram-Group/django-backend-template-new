@@ -11,7 +11,7 @@ from collections.abc import Sequence
 from apps.notifications.clients.sms.base import SmsBackend
 from apps.notifications.clients.sms.routing import RoutingSmsBackend
 
-__all__ = ["sms_send", "sms_send_many"]
+__all__ = ["sms_send_many"]
 
 
 def _backend() -> SmsBackend:
@@ -21,8 +21,3 @@ def _backend() -> SmsBackend:
 def sms_send_many(*, to: Sequence[str], body: str) -> None:
     """Deliver ONE body to MANY E164 numbers; raises SmsError on failure."""
     _backend().send_many(to=to, body=body)
-
-
-def sms_send(*, to: str, body: str) -> None:
-    """Deliver one SMS to one E164 number; raises SmsError on failure."""
-    sms_send_many(to=[to], body=body)

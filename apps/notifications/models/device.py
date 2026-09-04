@@ -3,6 +3,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.common.models import BaseModel
+from apps.notifications.constants import REGISTRATION_ID_MAX_LENGTH
 from apps.notifications.constants import DevicePlatform
 
 
@@ -20,7 +21,12 @@ class Device(BaseModel):
         related_name="devices",
         verbose_name=_("user"),
     )
-    registration_id = models.TextField(_("registration id"), unique=True)
+    # FCM tokens are ~160 chars; a bounded column keeps the unique index well
+    # under Postgres's btree row limit (an unbounded text key can 500 on a
+    # malformed registration).
+    registration_id = models.CharField(
+        _("registration id"), max_length=REGISTRATION_ID_MAX_LENGTH, unique=True
+    )
     platform = models.CharField(_("platform"), max_length=10, choices=DevicePlatform)
 
     class Meta:

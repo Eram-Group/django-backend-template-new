@@ -27,8 +27,11 @@ TINY_PNG = base64.b64decode(
 )
 
 
+_BY_CODE: dict[str, CountryData] = {c.code: c for c in iso_countries()}
+
+
 def _iso(code: str) -> CountryData:
-    return next(c for c in iso_countries() if c.code == code.upper())
+    return _BY_CODE[code.upper()]
 
 
 class CountryFactory(DjangoModelFactory[Country]):

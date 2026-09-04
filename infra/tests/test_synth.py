@@ -3,42 +3,36 @@
 import aws_cdk as cdk
 import pytest
 from aws_cdk import assertions
-from backend_infra import naming
 from backend_infra.config import APP
 from backend_infra.config import ENVIRONMENTS
 from backend_infra.config import SCHEDULES
-from backend_infra.stacks.app_env import AppEnvStack
-from backend_infra.stacks.database import DatabaseStack
-from backend_infra.stacks.shared import SharedStack
+from backend_infra.synth import build_app
 
 
 @pytest.fixture(scope="module")
-def templates() -> dict[str, assertions.Template]:
-    app = cdk.App()
-    env = cdk.Environment(account=APP.account, region=APP.region)
-    shared = SharedStack(app, naming.shared_stack(APP), app=APP, env=env)
-    stacks = {"Shared": shared}
-    for name, cfg in ENVIRONMENTS.items():
-        database = None
-        if cfg.database == "dedicated":
-            stacks[f"Db-{name}"] = DatabaseStack(
-                app, naming.db_stack(APP, name), app=APP, env_config=cfg, env=env
-            )
-            database = stacks[f"Db-{name}"].database  # type: ignore[attr-defined]
-        stacks[f"App-{name}"] = AppEnvStack(
-            app,
-            naming.app_stack(APP, name),
-            app=APP,
-            env_config=cfg,
-            shared=shared,
-            database=database,
-            image_tag="synth",
-            sentry_release="synth",
-            env=env,
-        )
+def stacks() -> dict[str, cdk.Stack]:
+    """Exactly the graph app.py deploys, keyed by the stack-name suffix."""
+    app = build_app(image_tag="synth", sentry_release="synth")
+    prefix = f"{APP.name}-"
+    return {
+        child.stack_name.removeprefix(prefix): child
+        for child in app.node.children
+        if isinstance(child, cdk.Stack)
+    }
+
+
+@pytest.fixture(scope="module")
+def templates(stacks: dict[str, cdk.Stack]) -> dict[str, assertions.Template]:
     return {
         name: assertions.Template.from_stack(stack) for name, stack in stacks.items()
     }
+
+
+def test_stateful_and_production_stacks_are_termination_protected(
+    stacks: dict[str, cdk.Stack],
+) -> None:
+    protected = {name for name, stack in stacks.items() if stack.termination_protection}
+    assert protected == {"Shared", "Db-production", "App-production"}
 
 
 def test_shared_owns_cluster_repo_and_deploy_role(
@@ -189,16 +183,6 @@ def test_production_database_is_its_own_protected_stack(
     app.resource_count_is("AWS::Route53::RecordSet", 1)
 
 
-def test_stack_names_lead_with_the_app_name() -> None:
-    """Many apps share one account+region; bare Shared/App-<env> would collide."""
-    assert naming.shared_stack(APP) == f"{APP.name}-Shared"
-    assert naming.db_stack(APP, "production") == f"{APP.name}-Db-production"
-    assert naming.app_stack(APP, "dev") == f"{APP.name}-App-dev"
-    app = cdk.App()
-    stack = SharedStack(app, naming.shared_stack(APP), app=APP)
-    assert stack.stack_name == f"{APP.name}-Shared"
-
-
 def test_deploy_role_is_scoped_to_this_app(
     templates: dict[str, assertions.Template],
 ) -> None:
@@ -217,6 +201,8 @@ def test_deploy_role_is_scoped_to_this_app(
     for action in ("ecs:RunTask", "ecs:UpdateService", "ecs:DescribeServices"):
         (statement,) = by_action[action]
         assert "ecs:cluster" in statement["Condition"]["ArnEquals"], action  # type: ignore[index]
+    (tag,) = by_action["ecs:TagResource"]
+    assert "*" not in tag["Resource"]  # type: ignore[operator]
     (pass_role,) = by_action["iam:PassRole"]
     resources = pass_role["Resource"]
     assert isinstance(resources, list)
@@ -250,3 +236,36 @@ def test_logs_and_bucket_hardening(
             }
         },
     )
+
+
+def test_worker_task_has_a_liveness_probe(
+    templates: dict[str, assertions.Template],
+) -> None:
+    """The worker has no port for the ALB: ECS itself must notice a task
+    that can no longer reach the database."""
+    t = templates["App-dev"]
+    task_defs = t.find_resources("AWS::ECS::TaskDefinition")
+    by_family = {
+        r["Properties"]["Family"]: r["Properties"]["ContainerDefinitions"][0]
+        for r in task_defs.values()
+    }
+    worker = by_family[f"{APP.name}-dev-worker"]
+    assert "ensure_connection" in " ".join(worker["HealthCheck"]["Command"])
+    assert "HealthCheck" not in by_family[f"{APP.name}-dev-web"]
+
+
+def test_listener_rule_edit_is_scoped_to_the_rule(
+    templates: dict[str, assertions.Template],
+) -> None:
+    """The Express listener is shared by every app in the account: the
+    custom resource that adds our host header may edit only our rule."""
+    t = templates["App-production"]  # the env with a custom domain
+    statements = [
+        s
+        for p in t.find_resources("AWS::IAM::Policy").values()
+        for s in p["Properties"]["PolicyDocument"]["Statement"]
+        if "elasticloadbalancing:ModifyRule" in s["Action"]
+    ]
+    assert statements, "no ModifyRule statement"
+    for s in statements:
+        assert s["Resource"] != "*", s

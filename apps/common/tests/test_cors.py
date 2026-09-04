@@ -25,3 +25,17 @@ def test_allauth_responses_carry_cors_headers(client: Client) -> None:
 def test_admin_responses_never_carry_cors_headers(client: Client) -> None:
     response = client.get("/admin/login/", HTTP_ORIGIN=_origin())
     assert "Access-Control-Allow-Origin" not in response.headers
+
+
+def test_ssl_redirect_still_carries_cors_headers(
+    client: Client, settings: object
+) -> None:
+    """CorsMiddleware sits above SecurityMiddleware: the 301 a plain-http API
+    call gets in production must carry the CORS header, or the browser
+    fails the request instead of following the redirect."""
+    from django.test import override_settings
+
+    with override_settings(SECURE_SSL_REDIRECT=True):
+        response = client.get("/api/v1/docs", HTTP_ORIGIN=_origin())
+    assert response.status_code == 301
+    assert response.headers.get("Access-Control-Allow-Origin") == _origin()

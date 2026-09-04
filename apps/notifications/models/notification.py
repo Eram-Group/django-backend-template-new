@@ -3,7 +3,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.common.models import BaseModel
-from apps.notifications.validators import validate_kind
+from apps.notifications.constants import notification_kind_choices
 
 
 class Notification(BaseModel):
@@ -22,7 +22,7 @@ class Notification(BaseModel):
         related_name="notifications",
         verbose_name=_("recipient"),
     )
-    kind = models.CharField(_("kind"), max_length=50, validators=[validate_kind])
+    kind = models.CharField(_("kind"), max_length=50, choices=notification_kind_choices)
     context = models.JSONField(_("context"), default=dict, blank=True)
     read_at = models.DateTimeField(_("read at"), null=True, blank=True)
     broadcast = models.ForeignKey(

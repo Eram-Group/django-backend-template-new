@@ -34,7 +34,10 @@ TODO.json
 docs
 infra
 
-# Reference material (never ship)
+# Test suite (never ship; --no-dev leaves nothing that could import it)
+**/tests
+conftest.py
+config/settings/test.py
 
 # Local runtime artifacts (produced by release step / runserver)
 staticfiles

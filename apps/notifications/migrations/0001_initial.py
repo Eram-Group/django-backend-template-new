@@ -3,7 +3,7 @@
 import django.db.models.deletion
 import django.db.models.functions.datetime
 from django.conf import settings
-import apps.notifications.validators
+import django.db.models.functions.uuid
 from django.db import migrations, models
 
 
@@ -19,10 +19,10 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='NotificationKindConfig',
             fields=[
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
-                ('kind', models.CharField(max_length=50, unique=True, validators=[apps.notifications.validators.validate_kind], verbose_name='action')),
+                ('kind', models.CharField(max_length=50, unique=True, verbose_name='action')),
                 ('channels', models.JSONField(blank=True, default=list, verbose_name='channels')),
                 ('title', models.CharField(max_length=255, verbose_name='title')),
                 ('title_ar', models.CharField(max_length=255, null=True, verbose_name='title')),
@@ -40,10 +40,10 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Broadcast',
             fields=[
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
-                ('kind', models.CharField(max_length=50, validators=[apps.notifications.validators.validate_kind], verbose_name='kind')),
+                ('kind', models.CharField(max_length=50, verbose_name='kind')),
                 ('context', models.JSONField(blank=True, default=dict, verbose_name='context')),
                 ('status', models.CharField(choices=[('draft', 'Draft'), ('dispatching', 'Dispatching'), ('dispatched', 'Dispatched'), ('completed', 'Completed')], default='draft', max_length=20, verbose_name='status')),
                 ('language', models.CharField(blank=True, choices=[('ar', 'Arabic'), ('en', 'English')], max_length=2, verbose_name='language filter')),
@@ -67,7 +67,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Device',
             fields=[
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
                 ('registration_id', models.TextField(unique=True, verbose_name='registration id')),
@@ -82,10 +82,10 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Notification',
             fields=[
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
-                ('kind', models.CharField(max_length=50, validators=[apps.notifications.validators.validate_kind], verbose_name='kind')),
+                ('kind', models.CharField(max_length=50, verbose_name='kind')),
                 ('context', models.JSONField(blank=True, default=dict, verbose_name='context')),
                 ('read_at', models.DateTimeField(blank=True, null=True, verbose_name='read at')),
                 ('broadcast', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, related_name='notifications', to='notifications.broadcast', verbose_name='broadcast')),
@@ -99,10 +99,10 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='NotificationDelivery',
             fields=[
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
-                ('channel', models.CharField(max_length=20, validators=[apps.notifications.validators.validate_channel], verbose_name='channel')),
+                ('channel', models.CharField(max_length=20, verbose_name='channel')),
                 ('status', models.CharField(choices=[('pending', 'Pending'), ('processing', 'Processing'), ('sent', 'Sent'), ('delivered', 'Delivered'), ('read', 'Read'), ('failed', 'Failed'), ('skipped', 'Skipped')], default='pending', max_length=20, verbose_name='status')),
                 ('provider', models.CharField(blank=True, max_length=50, verbose_name='provider')),
                 ('provider_message_id', models.CharField(blank=True, max_length=255, verbose_name='provider message id')),

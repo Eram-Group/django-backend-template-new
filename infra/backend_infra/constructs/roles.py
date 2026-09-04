@@ -68,6 +68,7 @@ def github_deploy_role(
     github_repo: str,
     ecr_repository_arn: str,
     cluster_arn: str,
+    task_definition_arn_pattern: str,
     log_group_arns: list[str],
     passable_role_arns: list[str],
 ) -> iam.Role:
@@ -123,12 +124,16 @@ def github_deploy_role(
     # the PassRole allowlist below constrain.
     role.add_to_policy(
         iam.PolicyStatement(
-            actions=[
-                "ecs:DescribeTaskDefinition",
-                "ecs:RegisterTaskDefinition",
-                "ecs:TagResource",
-            ],
+            actions=["ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition"],
             resources=["*"],
+        )
+    )
+    # Tagging DOES take a resource ARN: only this app's task-definition
+    # families (tags ride along with RegisterTaskDefinition) and cluster.
+    role.add_to_policy(
+        iam.PolicyStatement(
+            actions=["ecs:TagResource"],
+            resources=[task_definition_arn_pattern, cluster_arn],
         )
     )
     # Service rollouts and one-off tasks: this app's cluster only.

@@ -25,6 +25,7 @@ test_catalog and test_config keep everything in lockstep.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from django.utils.translation import gettext_lazy as _
 from django_stubs_ext import StrOrPromise
@@ -141,3 +142,18 @@ def catalog_entry(kind: NotificationKind) -> MessageTemplate:
             "(test_catalog enforces the pairing)."
         )
         raise LookupError(msg) from exc
+
+
+def validate_context(
+    *, kind: NotificationKind, entry: MessageTemplate, context: dict[str, Any]
+) -> None:
+    provided = frozenset(context)
+    if provided != entry.context_keys:
+        missing = sorted(entry.context_keys - provided)
+        unexpected = sorted(provided - entry.context_keys)
+        msg = (
+            f"Context for NotificationKind.{kind.name} must have keys "
+            f"{sorted(entry.context_keys)} (missing={missing}, "
+            f"unexpected={unexpected})."
+        )
+        raise ValueError(msg)  # a wrong call site - programming error, no envelope

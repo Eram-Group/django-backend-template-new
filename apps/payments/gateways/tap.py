@@ -342,6 +342,11 @@ def _parse_charge(payload: Any) -> _Charge:
     if isinstance(amount, bool) or not isinstance(amount, int | float | str):
         msg = f"tap charge amount is not a number: {amount!r}"
         raise GatewayResponseError(msg)
+    try:
+        amount_minor = to_minor_units(amount=Decimal(str(amount)))
+    except ValueError as exc:
+        msg = f"tap charge amount is not a minor-unit amount: {amount!r}"
+        raise GatewayResponseError(msg) from exc
     transaction = payload.get("transaction")
     redirect_url: str | None = None
     if isinstance(transaction, dict) and transaction.get("url"):
@@ -349,7 +354,7 @@ def _parse_charge(payload: Any) -> _Charge:
     return _Charge(
         id=_str(payload, "id"),
         status=_str(payload, "status"),
-        amount_minor=to_minor_units(amount=Decimal(str(amount))),
+        amount_minor=amount_minor,
         currency=_str(payload, "currency"),
         redirect_url=redirect_url,
         saved_card=_extract_saved_card(payload),

@@ -3,10 +3,8 @@ from apps.notifications.selectors.broadcasts import broadcast_audience_summary
 from apps.notifications.selectors.broadcasts import broadcast_user_search
 from apps.notifications.selectors.config import effective_channels
 from apps.notifications.selectors.devices import device_tokens_by_user_id
-from apps.notifications.selectors.devices import device_tokens_for_user
 from apps.notifications.selectors.messages import ConfigMap
 from apps.notifications.selectors.messages import RenderedMessage
-from apps.notifications.selectors.messages import notification_config_get
 from apps.notifications.selectors.messages import notification_config_map
 from apps.notifications.selectors.messages import notification_render
 from apps.notifications.selectors.notifications import notification_get
@@ -20,9 +18,7 @@ __all__ = [
     "broadcast_audience_summary",
     "broadcast_user_search",
     "device_tokens_by_user_id",
-    "device_tokens_for_user",
     "effective_channels",
-    "notification_config_get",
     "notification_config_map",
     "notification_get",
     "notification_list",

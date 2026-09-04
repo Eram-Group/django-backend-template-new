@@ -21,13 +21,16 @@ def message_locked(context: AdminContext) -> bool:
     """authored_per_send kinds (the broadcast composer's ANNOUNCEMENT) keep
     their passthrough title/body - the message is written per broadcast.
 
-    Change view only (CAN_ADD is False, so ``context.obj`` is always a row),
-    and every row's kind is a catalog kind - the field is read-only and the
-    rows were born from the catalog.
+    A row is needed to know the kind (the add view has none - CAN_ADD is
+    False today, and the rule must not 500 if that ever flips); every row's
+    kind is a catalog kind - the field is read-only and the rows were born
+    from the catalog.
     """
     from apps.notifications.catalog import catalog_entry
     from apps.notifications.models import NotificationKindConfig
 
+    if context.obj is None:
+        return False
     config = cast("NotificationKindConfig", context.obj)
     return catalog_entry(NotificationKind(config.kind)).authored_per_send
 

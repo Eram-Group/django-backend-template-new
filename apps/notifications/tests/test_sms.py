@@ -9,7 +9,6 @@ import respx
 from pydantic import SecretStr
 
 from apps.common.http import OutboundTransportError
-from apps.notifications.clients.sms import sms_send
 from apps.notifications.clients.sms import sms_send_many
 from apps.notifications.clients.sms.base import SmsNotConfiguredError
 from apps.notifications.clients.sms.base import SmsProviderError
@@ -219,13 +218,6 @@ def test_sms_send_many_goes_through_the_swapped_seam() -> None:
 
     assert [entry.to for entry in sms_outbox] == ["+966501234567", "+201001234567"]
     assert all(entry.body == "hello" for entry in sms_outbox)
-
-
-def test_sms_send_single_wraps_send_many() -> None:
-    sms_send(to="+966501234567", body="hello")
-
-    assert len(sms_outbox) == 1
-    assert sms_outbox[0].to == "+966501234567"
 
 
 # --- partial progress is reported, never lost -----------------------------------

@@ -23,6 +23,7 @@ instead of reporting a clean run.
 from datetime import datetime
 from datetime import timedelta
 from typing import Any
+from typing import NamedTuple
 
 import structlog
 from django.core.management.base import BaseCommand
@@ -46,6 +47,18 @@ REFUNDING_MAX_AGE = timedelta(minutes=10)
 SWEEP_LIMIT = 500
 
 
+class PendingSweep(NamedTuple):
+    checked: int
+    expired: int
+    failures: int
+
+
+class RefundSweep(NamedTuple):
+    executed: int
+    needs_reconciliation: int
+    failures: int
+
+
 class Command(BaseCommand):
     help = "Recover payments stuck in PENDING or REFUND_PENDING."
 
@@ -67,7 +80,7 @@ class Command(BaseCommand):
             raise CommandError(msg)
         self.stdout.write(self.style.SUCCESS(f"reconcile_payments OK: {summary}"))
 
-    def _sweep_pending(self, *, cutoff: datetime) -> tuple[int, int, int]:
+    def _sweep_pending(self, *, cutoff: datetime) -> PendingSweep:
         checked = 0
         expired = 0
         failures = 0
@@ -93,9 +106,9 @@ class Command(BaseCommand):
                 verified = services.payment_expire(payment=verified)
                 if verified.status == PaymentStatus.FAILED:
                     expired += 1
-        return checked, expired, failures
+        return PendingSweep(checked, expired, failures)
 
-    def _sweep_refunding(self, *, cutoff: datetime) -> tuple[int, int, int]:
+    def _sweep_refunding(self, *, cutoff: datetime) -> RefundSweep:
         executed = 0
         failures = 0
         stale = Payment.objects.filter(
@@ -128,4 +141,4 @@ class Command(BaseCommand):
                 )
             else:
                 executed += 1
-        return executed, needs_reconciliation, failures
+        return RefundSweep(executed, needs_reconciliation, failures)

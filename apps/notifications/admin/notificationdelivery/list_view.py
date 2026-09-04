@@ -3,13 +3,9 @@
 from django.utils.translation import gettext_lazy as _
 from unfold.contrib.filters.admin import RangeDateFilter
 
-from apps.common.admin import enum_column
-from apps.common.admin import enum_filter
-from apps.notifications.constants import Channel
-
 LIST_DISPLAY = (
     "notification",
-    enum_column("channel", Channel, description=_("channel")),
+    "channel",
     "status",
     "provider",
     "attempts",
@@ -17,7 +13,7 @@ LIST_DISPLAY = (
     "created_at",
 )
 LIST_FILTER = (
-    enum_filter("channel", Channel, title=_("channel")),
+    "channel",
     "status",
     ("created_at", RangeDateFilter),
 )

@@ -108,12 +108,9 @@ def test_unread_count_and_read_flow(client: Client) -> None:
     assert second.read_at is not None  # read via read-all
 
 
-def test_reading_someone_elses_notification_is_404(client: Client) -> None:
+def test_reading_someone_elses_notification_is_404(auth_client: Client) -> None:
     other = NotificationFactory.create()
-    user = UserFactory.create()
-    client.force_login(user)
-
-    response = client.post(f"{LIST}/{other.pk}/read")
+    response = auth_client.post(f"{LIST}/{other.pk}/read")
 
     assert response.status_code == 404
     body = response.json()

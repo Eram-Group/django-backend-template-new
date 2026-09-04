@@ -6,6 +6,7 @@ import django.db.models.functions.datetime
 import uuid
 from decimal import Decimal
 from django.conf import settings
+import django.db.models.functions.uuid
 from django.db import migrations, models
 
 
@@ -21,7 +22,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='SavedCard',
             fields=[
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
                 ('gateway', models.CharField(choices=[('tap', 'Tap'), ('paymob', 'Paymob')], max_length=10, verbose_name='gateway')),
@@ -43,7 +44,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Payment',
             fields=[
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
                 ('kind', models.CharField(choices=[('wallet_topup', 'Wallet top-up'), ('other', 'Other')], max_length=20, verbose_name='kind')),
@@ -72,7 +73,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Wallet',
             fields=[
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
                 ('balance', models.DecimalField(decimal_places=2, default=Decimal('0'), max_digits=12, validators=[django.core.validators.MinValueValidator(Decimal('0'))], verbose_name='balance')),
@@ -87,7 +88,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='WalletTransaction',
             fields=[
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
                 ('kind', models.CharField(choices=[('topup', 'Top-up'), ('refund', 'Refund'), ('adjustment', 'Manual adjustment'), ('payment', 'Payment')], max_length=20, verbose_name='kind')),

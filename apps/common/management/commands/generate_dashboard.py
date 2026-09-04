@@ -1,7 +1,8 @@
 """Scaffold a per-entity admin package: manage.py generate_dashboard <app> <Model>.
 
 Emits admin/<entity>/{__init__,admin,list_view,change_view,permissions,
-resource}.py + CHECKLIST.md wired to the apps.common.admin framework. The
+resource}.py + CHECKLIST.md on the apps.common.admin framework (the admin
+class picks the sibling modules' constants up by name). The
 package is complete, real code with exactly one hole: the three capability
 flags are ``...`` so the admin fails at import until a human decides them.
 Existing files are never overwritten.
@@ -77,9 +78,6 @@ class {model}Resource(BaseModelResource):
 ''',
     "admin.py": """from django.contrib import admin
 
-from {app_name}.admin.{entity} import change_view
-from {app_name}.admin.{entity} import list_view
-from {app_name}.admin.{entity} import permissions
 from {app_name}.admin.{entity}.resource import {model}Resource
 from {app_name}.models import {model}
 from apps.common.admin import BaseModelAdmin
@@ -87,22 +85,9 @@ from apps.common.admin import BaseModelAdmin
 
 @admin.register({model})
 class {model}Admin(BaseModelAdmin):
-    can_add = permissions.CAN_ADD
-    can_change = permissions.CAN_CHANGE
-    can_delete = permissions.CAN_DELETE
-    field_permissions = permissions.FIELD_PERMISSIONS
+    # permissions.py / list_view.py / change_view.py constants land here by
+    # name (apps.common.admin.package); this body holds behaviour only.
     resource_classes = [{model}Resource]
-
-    list_display = list_view.LIST_DISPLAY
-    list_filter = list_view.LIST_FILTER
-    list_filter_submit = list_view.LIST_FILTER_SUBMIT
-    search_fields = list_view.SEARCH_FIELDS
-    search_help_text = list_view.SEARCH_HELP_TEXT
-    ordering = list_view.ORDERING
-    list_per_page = list_view.LIST_PER_PAGE
-
-    fieldsets = change_view.FIELDSETS
-    readonly_fields = change_view.READONLY_FIELDS
 """,
     "CHECKLIST.md": """# {model} admin checklist
 

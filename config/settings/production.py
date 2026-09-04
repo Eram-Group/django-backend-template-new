@@ -26,9 +26,8 @@ SESSION_COOKIE_NAME = "__Secure-sessionid"
 CSRF_COOKIE_NAME = "__Secure-csrftoken"
 
 # --- Database: psycopg native pool owns connection health ----------------------
-# CONN_MAX_AGE=0 is the required pairing; no CONN_HEALTH_CHECKS (that is for
-# persistent-connection setups).
-DATABASES["default"]["CONN_MAX_AGE"] = 0
+# CONN_MAX_AGE stays at Django's default 0 - the required pairing with the
+# pool; no CONN_HEALTH_CHECKS either (that is for persistent connections).
 DATABASES["default"]["OPTIONS"] = {
     "pool": {
         "min_size": env.DB_POOL_MIN_SIZE,
@@ -62,16 +61,14 @@ STORAGES = {
     },
 }
 
-# CloudFront is a separate origin: every fetch directive must allow it or the
-# admin loads bare.
-SECURE_CSP = {
-    directive: (
-        [*sources, f"https://{env.AWS_S3_CUSTOM_DOMAIN}"]
-        if directive in CSP_FETCH_DIRECTIVES
-        else sources
-    )
-    for directive, sources in SECURE_CSP.items()
-}
+# CloudFront is a separate origin: every FETCH directive must allow it or the
+# admin loads bare. The navigation/embedding directives (base-uri,
+# form-action, frame-ancestors, object-src) must NOT get it - a source list
+# that mixes 'none' with an origin is invalid and browsers drop the whole
+# directive.
+_CDN = f"https://{env.AWS_S3_CUSTOM_DOMAIN}"
+for _directive in ("default-src", "img-src", "font-src", "style-src", "script-src"):
+    SECURE_CSP[_directive] = [*SECURE_CSP[_directive], _CDN]
 
 # --- Email via SES (Anymail) -----------------------------------------------------
 MAILERS = {"default": {"BACKEND": "anymail.backends.amazon_ses.EmailBackend"}}

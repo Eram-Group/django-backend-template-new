@@ -11,11 +11,18 @@ from apps.notifications.models import Notification
 from apps.payments.services import wallet_currency_for
 from apps.users import services
 from apps.users.constants import Language
+from apps.users.exceptions import UserError
 from apps.users.models import User
 from apps.users.services.users import USER_UPDATABLE_FIELDS
 from apps.users.tests.factories import UserFactory
 
 pytestmark = pytest.mark.django_db
+
+
+def test_user_fixture_is_saved_verified_and_passwordless(user: User) -> None:
+    assert not user._state.adding  # pk is a DatabaseDefault sentinel until saved
+    assert not user.has_usable_password()
+    assert EmailAddress.objects.filter(user=user, verified=True, primary=True).exists()
 
 
 def test_user_update_applies_allowed_fields() -> None:
@@ -34,7 +41,7 @@ def test_user_update_applies_allowed_fields() -> None:
 
 def test_user_update_rejects_non_updatable_field() -> None:
     user = UserFactory.create()
-    with pytest.raises(ValueError, match="Field not updatable: email"):
+    with pytest.raises(UserError, match="Field not updatable: email"):
         services.user_update(user=user, data={"email": "evil@example.com"})
 
 

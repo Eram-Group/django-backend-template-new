@@ -13,6 +13,7 @@ from aws_cdk import aws_certificatemanager as acm
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecs as ecs
 from aws_cdk import aws_elasticloadbalancingv2 as elbv2
+from aws_cdk import aws_iam as iam
 from aws_cdk import aws_route53 as route53
 from aws_cdk import aws_route53_targets as targets
 from aws_cdk import custom_resources as cr
@@ -32,6 +33,7 @@ class ExpressWebService(Construct):
         subnet_ids: list[str],
         min_tasks: int,
         max_tasks: int,
+        cpu_target: int,
         tags: dict[str, str],
     ) -> None:
         super().__init__(scope, construct_id)
@@ -50,7 +52,7 @@ class ExpressWebService(Construct):
                 min_task_count=min_tasks,
                 max_task_count=max_tasks,
                 auto_scaling_metric="AVERAGE_CPU",
-                auto_scaling_target_value=60,
+                auto_scaling_target_value=cpu_target,
             ),
             tags=[CfnTag(key=k, value=v) for k, v in tags.items()],
         )
@@ -119,8 +121,17 @@ class ExpressWebService(Construct):
             ],
         )
 
-        sdk_policy = cr.AwsCustomResourcePolicy.from_sdk_calls(
+        # ELBv2 describe* calls take no resource ARN, so the two read-only
+        # lookups need "*"; the one mutating call is pinned to this rule.
+        describe_policy = cr.AwsCustomResourcePolicy.from_sdk_calls(
             resources=cr.AwsCustomResourcePolicy.ANY_RESOURCE
+        )
+        modify_policy = cr.AwsCustomResourcePolicy.from_statements(
+            [
+                iam.PolicyStatement(
+                    actions=["elasticloadbalancing:ModifyRule"], resources=[rule_arn]
+                )
+            ]
         )
         lb_info = cr.AwsCustomResource(
             self,
@@ -131,7 +142,7 @@ class ExpressWebService(Construct):
                 parameters={"LoadBalancerArns": [lb_arn]},
                 physical_resource_id=cr.PhysicalResourceId.of(lb_arn),
             ),
-            policy=sdk_policy,
+            policy=describe_policy,
             install_latest_aws_sdk=False,
         )
         rule_info = cr.AwsCustomResource(
@@ -143,7 +154,7 @@ class ExpressWebService(Construct):
                 parameters={"RuleArns": [rule_arn]},
                 physical_resource_id=cr.PhysicalResourceId.of(rule_arn),
             ),
-            policy=sdk_policy,
+            policy=describe_policy,
             install_latest_aws_sdk=False,
         )
         express_host = rule_info.get_response_field(
@@ -168,7 +179,22 @@ class ExpressWebService(Construct):
                     f"{rule_arn}/{domain_name}"
                 ),
             ),
-            policy=sdk_policy,
+            # Teardown restores the Express host alone; the rule belongs to the
+            # shared listener and outlives this stack.
+            on_delete=cr.AwsSdkCall(
+                service="ELBv2",
+                action="modifyRule",
+                parameters={
+                    "RuleArn": rule_arn,
+                    "Conditions": [
+                        {
+                            "Field": "host-header",
+                            "HostHeaderConfig": {"Values": [express_host]},
+                        }
+                    ],
+                },
+            ),
+            policy=modify_policy,
             install_latest_aws_sdk=False,
         )
         alb = elbv2.ApplicationLoadBalancer.from_application_load_balancer_attributes(

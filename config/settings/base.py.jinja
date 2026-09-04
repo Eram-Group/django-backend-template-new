@@ -67,7 +67,6 @@ INSTALLED_APPS = [
     "phonenumber_field",
     "django_tasks_db",
     "django_structlog",
-    "django_guid",
     "axes",
     # Local
     "apps.common",
@@ -80,15 +79,16 @@ INSTALLED_APPS = [
 {%- endif %}
 ]
 
-# --- Middleware (guid first, axes last - order is load-bearing) ----------
+# --- Middleware (probe first, axes last - order is load-bearing) ---------
 MIDDLEWARE = [
     # First on purpose: LB probes arrive as plain http with an IP Host header
     # and must never hit the SSL redirect or ALLOWED_HOSTS (see the module).
     "apps.common.middleware.HealthProbeMiddleware",
-    "django_guid.middleware.guid_middleware",
+    # Above everything that can answer on its own (the SSL redirect, the
+    # CSRF/host rejections): a browser reads CORS headers off those too.
+    "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.csp.ContentSecurityPolicyMiddleware",
-    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -124,7 +124,12 @@ TEMPLATES = [
     },
 ]
 
-# --- Database (pool OPTIONS + CONN_MAX_AGE=0 are production-only) ---------
+# --- Database (pool OPTIONS are production-only) ---------------------------
+# No ATOMIC_REQUESTS: transaction boundaries belong to services (explicit
+# ``transaction.atomic()`` around multi-row writes). A request-wide
+# transaction would hold row locks across outbound gateway HTTP, and ninja's
+# exception handlers answer INSIDE the view, so it committed partial writes
+# on an ApplicationError anyway.
 DATABASES = {
     "default": {
         **dj_database_url.parse(env.DATABASE_URL),
@@ -133,7 +138,6 @@ DATABASES = {
         # everywhere (postgres://), the engine is a code decision.
         "ENGINE": "django.contrib.gis.db.backends.postgis",
 {%- endif %}
-        "ATOMIC_REQUESTS": True,
     },
 }
 {%- if database == "postgis" %}
@@ -242,16 +246,14 @@ MODELTRANSLATION_FALLBACK_LANGUAGES = ()
 # --- Admin (unfold) ----------------------------------------------------------
 
 
-def environment_callback(request: Any) -> list[str]:
-    """Colored header badge - the wrong-environment guard. The Literal env
-    field keeps this mapping exhaustive.
-    """
-    return {
-        "production": ["PRODUCTION", "danger"],
-        "staging": ["STAGING", "warning"],
-        "dev": ["DEV", "warning"],
-        "local": ["LOCAL", "success"],
-    }[env.ENVIRONMENT]
+# Colored header badge - the wrong-environment guard. The Literal env field
+# keeps this mapping exhaustive; the value is fixed at boot.
+_ENVIRONMENT_BADGE = {
+    "production": ["PRODUCTION", "danger"],
+    "staging": ["STAGING", "warning"],
+    "dev": ["DEV", "warning"],
+    "local": ["LOCAL", "success"],
+}[env.ENVIRONMENT]
 
 
 # The one brand colour source (config/branding.py): unfold wants the ramp as
@@ -282,7 +284,7 @@ UNFOLD = {
     # ar/en switcher in the header (POSTs to the i18n/ urlconf in urls.py).
     "SHOW_LANGUAGES": True,
     "SHOW_BACK_BUTTON": True,
-    "ENVIRONMENT": environment_callback,
+    "ENVIRONMENT": lambda request: _ENVIRONMENT_BADGE,
     "ENVIRONMENT_TITLE_PREFIX": lambda request: f"[{env.ENVIRONMENT}] ",
     # Same layout in ar and en - admin.css pins direction to ltr (lambda so
     # the manifest hash resolves per-request after collectstatic).
@@ -584,6 +586,10 @@ PAYMOB_MOTO_INTEGRATION_ID = env.PAYMOB_MOTO_INTEGRATION_ID
 
 # --- Security ----------------------------------------------------------------
 X_FRAME_OPTIONS = "DENY"
+# Django's default (1000) is a parse-cost guard; the only form above it is the
+# admin's Group/User permission picker, which posts every granted permission
+# as a field - a few hundred apps' worth fits well under this ceiling.
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 5_000
 SECURE_CSP: dict[str, list[str]] = {
     "default-src": [CSP.SELF],
     "img-src": [CSP.SELF, "data:"],
@@ -597,16 +603,10 @@ SECURE_CSP: dict[str, list[str]] = {
     "frame-ancestors": [CSP.NONE],  # the CSP twin of X_FRAME_OPTIONS = DENY
     "object-src": [CSP.NONE],
 }
-# Fetch directives get the CloudFront origin appended in production.py; the
-# navigation/embedding directives above must not (a source list that mixes
-# 'none' with an origin is invalid and browsers drop the whole directive).
-CSP_FETCH_DIRECTIVES = ("default-src", "img-src", "font-src", "style-src", "script-src")
-
 
 # --- Cross-origin (browser SPA clients) ----------------------------------------
 CORS_ALLOWED_ORIGINS = env.FRONTEND_ALLOWED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
-DATA_UPLOAD_MAX_NUMBER_FIELDS = 100_000
 
 # Only the API surfaces are cross-origin; the admin (and anything else) must
 # never carry credentialed CORS headers for the frontend origins.

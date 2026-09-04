@@ -5,6 +5,12 @@ outside test transactions, so every parametrized test sees it), plus three
 known accounts: a superuser, a permissionless staff user (sidebar
 consistency), and a fully-permissioned non-superuser staff user (the
 privilege-escalation perspective for the tamper check).
+
+Because the rows are committed, EVERY test in the session sees them (in
+whichever xdist worker ran this gate first): tests elsewhere must scope
+their counts to rows they created and never assert on a global count -
+and a factory whose natural key is a fixed sequence (CountryFactory's ISO
+codes) may find its row already present.
 """
 
 from typing import Any
@@ -48,14 +54,14 @@ def permless_staff(db: None) -> User:
 
 @pytest.fixture
 def su_client(superuser: User) -> Client:
-    client = Client(raise_request_exception=True)
+    client = Client()
     client.force_login(superuser)
     return client
 
 
 @pytest.fixture
 def staff_client(permless_staff: User) -> Client:
-    client = Client(raise_request_exception=True)
+    client = Client()
     client.force_login(permless_staff)
     return client
 
@@ -67,6 +73,6 @@ def priv_staff(db: None) -> User:
 
 @pytest.fixture
 def priv_staff_client(priv_staff: User) -> Client:
-    client = Client(raise_request_exception=True)
+    client = Client()
     client.force_login(priv_staff)
     return client

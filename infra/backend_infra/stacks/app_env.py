@@ -4,6 +4,7 @@ Stateless by design - the dedicated production database lives in ``<app>-Db-<env
 (``stacks/database.py``) so this stack can be torn down without touching data.
 """
 
+from aws_cdk import ArnFormat
 from aws_cdk import CfnOutput
 from aws_cdk import Duration
 from aws_cdk import RemovalPolicy
@@ -21,6 +22,7 @@ from backend_infra.config import SCHEDULES
 from backend_infra.config import AppConfig
 from backend_infra.config import EnvConfig
 from backend_infra.constructs import roles
+from backend_infra.constructs.containers import WORKER_HEALTH_CHECK
 from backend_infra.constructs.containers import fargate_task
 from backend_infra.constructs.database import DedicatedDatabase
 from backend_infra.constructs.network import public_subnets
@@ -50,6 +52,7 @@ class AppEnvStack(Stack):
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
         cfg = env_config
+        self.env_config = cfg
         Tags.of(self).add("env", cfg.name)
         self._retain = cfg.name == "production"
         subnet_ids = public_subnets(app)
@@ -77,7 +80,12 @@ class AppEnvStack(Stack):
 
         # --- Roles --------------------------------------------------------------
         ses_arn = (
-            f"arn:aws:ses:{self.region}:{self.account}:identity/{app.ses_identity}"
+            self.format_arn(
+                service="ses",
+                resource="identity",
+                resource_name=app.ses_identity,
+                arn_format=ArnFormat.SLASH_RESOURCE_NAME,
+            )
             if app.ses_identity
             else None
         )
@@ -134,6 +142,7 @@ class AppEnvStack(Stack):
             command=None,  # image CMD = gunicorn
             web_port=8000,
             stop_timeout=Duration.seconds(30),
+            health_check=None,  # the ALB probes /readyz
             **common,  # type: ignore[arg-type]
         )
         self.worker_task = fargate_task(
@@ -147,6 +156,7 @@ class AppEnvStack(Stack):
             command=WORKER_COMMAND,
             web_port=None,
             stop_timeout=Duration.seconds(120),  # >= the longest task
+            health_check=WORKER_HEALTH_CHECK,
             **common,  # type: ignore[arg-type]
         )
 
@@ -167,8 +177,9 @@ class AppEnvStack(Stack):
             infrastructure_role_arn=shared.infrastructure_role.role_arn,
             task_definition=self.web_task,
             subnet_ids=subnet_ids,
-            min_tasks=1,
+            min_tasks=cfg.web_min_tasks,
             max_tasks=cfg.web_max_tasks,
+            cpu_target=cfg.web_cpu_target,
             tags={"app": app.name, "env": cfg.name},
         )
         if cfg.custom_domain:
@@ -230,7 +241,7 @@ class AppEnvStack(Stack):
             self,
             construct_id,
             log_group_name=name,
-            retention=logs.RetentionDays.ONE_MONTH,
+            retention=logs.RetentionDays[self.env_config.log_retention],
             # Production keeps its logs through stack deletion; dev/staging
             # must be recreatable after a rolled-back deploy.
             removal_policy=RemovalPolicy.RETAIN

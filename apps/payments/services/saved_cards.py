@@ -10,6 +10,7 @@ shape of a payload.
 """
 
 import structlog
+from django.db import IntegrityError
 from django.db import transaction
 from django.utils.translation import gettext_lazy as _
 
@@ -27,7 +28,8 @@ from apps.users.models import User
 logger = structlog.get_logger(__name__)
 
 
-def _card_ref(card: SavedCard) -> SavedCardRef:
+def saved_card_ref(card: SavedCard) -> SavedCardRef:
+    """The provider-side identifiers a gateway call takes for a stored row."""
     return SavedCardRef(
         token=card.token,
         customer_id=card.gateway_customer_id,
@@ -51,7 +53,38 @@ def saved_card_store(*, user: User, gateway: str, data: SavedCardData) -> SavedC
       gateway once this commits, so the provider vault does not fill with
       copies either.
     """
-    fingerprint = _fingerprint(gateway=gateway, data=data)
+    fingerprint = _fingerprint(gateway=gateway, data=data)  # vault HTTP, no lock held
+    try:
+        card, superseded = _upsert(
+            user=user, gateway=gateway, data=data, fingerprint=fingerprint
+        )
+    except IntegrityError:
+        # A row that does not exist cannot be locked: two callbacks vaulting
+        # the same card at once both reach the INSERT, and the unique
+        # constraints let exactly one through. The loser re-runs against the
+        # winner's committed row.
+        logger.info("saved_card_store_retried", gateway=gateway, token=data.token)
+        card, superseded = _upsert(
+            user=user, gateway=gateway, data=data, fingerprint=fingerprint
+        )
+    if superseded is not None:
+        logger.info(
+            "saved_card_superseded",
+            saved_card_id=str(card.pk),
+            gateway=gateway,
+            old_token=superseded.token,
+        )
+        transaction.on_commit(
+            lambda: _detach_at_gateway(gateway_name=gateway, saved_card=superseded)
+        )
+    return card
+
+
+def _upsert(
+    *, user: User, gateway: str, data: SavedCardData, fingerprint: str
+) -> tuple[SavedCard, SavedCardRef | None]:
+    """One locked read-modify-write; returns the row and the provider card it
+    superseded (None when it matched by token or was new)."""
     fields = {
         "user": user,
         "token": data.token,
@@ -79,22 +112,12 @@ def saved_card_store(*, user: User, gateway: str, data: SavedCardData) -> SavedC
         if card is None:
             card = SavedCard(gateway=gateway)
         elif card.token != data.token:
-            superseded = _card_ref(card)
+            superseded = saved_card_ref(card)
         for name, value in fields.items():
             setattr(card, name, value)
         card.full_clean()
         card.save()
-    if superseded is not None:
-        logger.info(
-            "saved_card_superseded",
-            saved_card_id=str(card.pk),
-            gateway=gateway,
-            old_token=superseded.token,
-        )
-        transaction.on_commit(
-            lambda: _detach_at_gateway(gateway_name=gateway, saved_card=superseded)
-        )
-    return card
+    return card, superseded
 
 
 def _fingerprint(*, gateway: str, data: SavedCardData) -> str:
@@ -169,14 +192,17 @@ def _mask_email(email: str) -> str:
 
 
 def saved_card_delete(*, user: User, saved_card: SavedCard) -> None:
-    """Delete the row; detach at the gateway first where it has a vault API.
+    """Delete the row; detach at the gateway once the delete commits, where it
+    has a vault API.
 
-    A gateway failure is non-fatal on purpose (see ``_detach_at_gateway``):
-    the user's intent wins immediately.
+    Local-first: the user's intent wins immediately, and the provider call
+    never runs inside the request's transaction. A gateway failure is
+    non-fatal on purpose (see ``_detach_at_gateway``).
     """
     if saved_card.user_id != user.pk:
         raise SavedCardNotFoundError(str(_("Saved card not found.")))
-    _detach_at_gateway(
-        gateway_name=saved_card.gateway, saved_card=_card_ref(saved_card)
-    )
+    gateway_name, ref = saved_card.gateway, saved_card_ref(saved_card)
     saved_card.delete()
+    transaction.on_commit(
+        lambda: _detach_at_gateway(gateway_name=gateway_name, saved_card=ref)
+    )

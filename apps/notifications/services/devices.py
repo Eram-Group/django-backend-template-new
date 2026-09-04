@@ -1,5 +1,7 @@
 """Writes for devices (push-token lifecycle)."""
 
+from django.db import transaction
+
 from apps.notifications.constants import DevicePlatform
 from apps.notifications.models import Device
 from apps.users.models import User
@@ -13,14 +15,14 @@ def device_register(
     A token that shows up under a new account is REASSIGNED (one device =
     one signed-in user); platform updates ride along.
     """
-    device, _created = Device.objects.update_or_create(
-        registration_id=registration_id,
-        defaults={"user": user, "platform": platform},
-    )
-    # update_or_create saves before validation can run; full_clean after
-    # still protects - the caller's transaction (ATOMIC_REQUESTS) discards
-    # the write when this raises.
-    device.full_clean()
+    with transaction.atomic():
+        device, _created = Device.objects.update_or_create(
+            registration_id=registration_id,
+            defaults={"user": user, "platform": platform},
+        )
+        # update_or_create saves before validation can run; full_clean after
+        # still protects - the atomic block discards the write when it raises.
+        device.full_clean()
     return device
 
 

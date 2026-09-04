@@ -1,4 +1,2 @@
-from apps.users.selectors.users import user_get
-from apps.users.selectors.users import user_list
-
-__all__ = ["user_get", "user_list"]
+"""Reads for users. The API serves the caller (``request.auth``) directly;
+add a selector here when a Detail/Summary schema needs one."""

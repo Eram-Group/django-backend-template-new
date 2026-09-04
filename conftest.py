@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 import stamina
 from django.core.cache import cache
+from django.test import Client
 from pytest_django import Settings
 
 from apps.notifications.tests.factories import seed_kind_configs
@@ -44,7 +45,8 @@ def _clear_cache() -> None:
 
 @pytest.fixture(autouse=True)
 def _tmp_media_root(settings: Settings, tmp_path: Path) -> None:
-    """Tests never write into the real media/ directory."""
+    """Tests never write into the real media/ directory; per test, because
+    the flag-download tests assert on the directory's exact contents."""
     settings.MEDIA_ROOT = tmp_path / "media"
 
 
@@ -56,3 +58,11 @@ def user(db: None) -> User:
     post_generation, unusable password) - single source of truth.
     """
     return UserFactory.create()
+
+
+@pytest.fixture
+def auth_client(user: User) -> Client:
+    """A test client logged in as ``user`` (session cookie, the browser road)."""
+    client = Client()
+    client.force_login(user)
+    return client

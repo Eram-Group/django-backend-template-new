@@ -4,9 +4,15 @@ The bulk path (build + bulk_create, wipe-by-domain, the local-only guard)
 never ran in CI before this - seeder regressions shipped green.
 """
 
+from decimal import Decimal
+
 import pytest
 from django.core.management import call_command
 from django.core.management.base import CommandError
+from django.db.models import F
+from django.db.models import OuterRef
+from django.db.models import Subquery
+from django.db.models.functions import Coalesce
 
 from apps.notifications.constants import BroadcastStatus
 from apps.notifications.models import Broadcast
@@ -41,24 +47,25 @@ def test_scale_zero_seeds_ten_users_and_reruns_start_from_a_wiped_domain() -> No
 
 
 def test_seeds_the_whole_domain_graph_with_a_consistent_ledger() -> None:
-    call_command("seed_db", scale=0.3, seed=42)  # ~316 users
+    call_command("seed_db", scale=0.1, seed=42)  # ~32 users, every fan-out
 
     seeded = User.objects.filter(email__endswith=SEED_SUFFIX)
     assert Wallet.objects.filter(user__in=seeded).count() == seeded.count()
     assert Payment.objects.filter(user__in=seeded).exists()
     assert seeded.exclude(name="").count() == seeded.count()
 
-    # Money invariant: every wallet's balance equals its last ledger
-    # balance_after (or zero with an empty ledger), never negative.
-    for wallet in Wallet.objects.filter(user__in=seeded):
-        assert wallet.balance >= 0
-        last = (
-            WalletTransaction.objects.filter(wallet=wallet)
-            .order_by("-pk")  # uuidv7 pks are insertion-ordered
-            .first()
-        )
-        expected = last.balance_after if last else 0
-        assert wallet.balance == expected
+    # Money invariant, in one query: every wallet's balance equals its last
+    # ledger balance_after (zero with an empty ledger), never negative.
+    last_balance = Subquery(
+        WalletTransaction.objects.filter(wallet=OuterRef("pk"))
+        .order_by("-pk")  # uuidv7 pks are insertion-ordered
+        .values("balance_after")[:1]
+    )
+    wallets = Wallet.objects.filter(user__in=seeded).annotate(
+        expected=Coalesce(last_balance, Decimal(0))
+    )
+    assert not wallets.filter(balance__lt=0).exists()
+    assert not wallets.exclude(balance=F("expected")).exists()
 
 
 def test_broadcasts_follow_the_curve_and_alternate_statuses() -> None:

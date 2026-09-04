@@ -7,7 +7,7 @@ values into columns (so search/filter/order/export work on plain fields).
 """
 
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 
 import phonenumbers
 import pycountry
@@ -47,7 +47,13 @@ def iso_country(code: str) -> CountryData | None:
     Antarctica (AQ) is the canonical gap: an ISO code with no tender currency
     and no dial plan. Half-populated rows are never offered.
     """
-    code = code.upper()
+    return _iso_country(code.upper())
+
+
+@cache
+def _iso_country(code: str) -> CountryData | None:
+    # Three library lookups per code; the load sheet asks for all ~250 and
+    # the factories ask per row - once per process is enough.
     country = pycountry.countries.get(alpha_2=code)
     if country is None:
         return None
@@ -75,7 +81,7 @@ def iso_country(code: str) -> CountryData | None:
     )
 
 
-@lru_cache(maxsize=1)
+@cache
 def iso_countries() -> tuple[CountryData, ...]:
     """Every country with complete data, sorted by English name."""
     complete = (iso_country(country.alpha_2) for country in pycountry.countries)

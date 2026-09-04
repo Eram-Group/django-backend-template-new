@@ -13,6 +13,7 @@ handler is deliberately NOT overridden: ninja re-raises when DEBUG=False so
 Django (and Sentry's got_request_exception hook) own real 500s.
 """
 
+import math
 from typing import Any
 
 from django.core.exceptions import NON_FIELD_ERRORS
@@ -20,8 +21,10 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.http import Http404
 from django.http import HttpRequest
 from django.http import HttpResponse
+from django.utils.translation import gettext as _
 from ninja import NinjaAPI
 from ninja.errors import HttpError
+from ninja.errors import Throttled
 from ninja.errors import ValidationError as RequestValidationError
 
 from apps.common.exceptions import ApplicationError
@@ -67,7 +70,10 @@ def register_exception_handlers(api: NinjaAPI) -> None:
         else:
             fields = {NON_FIELD_KEY: list(exc.messages)}
         return respond(
-            request, message="Validation error.", status=400, extra={"fields": fields}
+            request,
+            message=_("Validation error."),
+            status=400,
+            extra={"fields": fields},
         )
 
     @api.exception_handler(RequestValidationError)
@@ -79,15 +85,22 @@ def register_exception_handlers(api: NinjaAPI) -> None:
             field = ".".join(str(part) for part in error["loc"]) or NON_FIELD_KEY
             fields.setdefault(field, []).append(error["msg"])
         return respond(
-            request, message="Validation error.", status=422, extra={"fields": fields}
+            request,
+            message=_("Validation error."),
+            status=422,
+            extra={"fields": fields},
         )
 
     @api.exception_handler(HttpError)
     def http_error(request: HttpRequest, exc: HttpError) -> HttpResponse:
         # Also covers AuthenticationError (401), AuthorizationError (403),
         # and Throttled (429) - they subclass HttpError.
-        return respond(request, message=str(exc), status=exc.status_code, extra={})
+        response = respond(request, message=str(exc), status=exc.status_code, extra={})
+        if isinstance(exc, Throttled) and exc.wait:
+            # The backoff ninja computed from the rate, in whole seconds.
+            response["Retry-After"] = str(math.ceil(exc.wait))
+        return response
 
     @api.exception_handler(Http404)
     def not_found(request: HttpRequest, exc: Http404) -> HttpResponse:
-        return respond(request, message="Not found.", status=404, extra={})
+        return respond(request, message=_("Not found."), status=404, extra={})

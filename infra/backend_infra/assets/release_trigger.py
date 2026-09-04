@@ -46,8 +46,11 @@ def handler(event, context):
     deadline = time.monotonic() + DEADLINE_SECONDS
     while True:
         time.sleep(10)
-        described = ecs.describe_tasks(cluster=cluster, tasks=[task])["tasks"][0]
-        if described["lastStatus"] == "STOPPED":
+        # DescribeTasks is eventually consistent right after RunTask: an
+        # empty list (the ARN sits in "failures") means "not visible yet".
+        tasks = ecs.describe_tasks(cluster=cluster, tasks=[task])["tasks"]
+        if tasks and tasks[0]["lastStatus"] == "STOPPED":
+            described = tasks[0]
             break
         if time.monotonic() > deadline:
             msg = f"release task {task} still running after {DEADLINE_SECONDS}s"

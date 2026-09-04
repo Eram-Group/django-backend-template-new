@@ -23,7 +23,7 @@ SECRET = "app-secret"
 @pytest.fixture
 def _whatsapp_webhook_creds(settings: Any) -> None:
     settings.WHATSAPP_APP_SECRET = SecretStr(SECRET)
-    settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN = "verify-me"
+    settings.WHATSAPP_WEBHOOK_VERIFY_TOKEN = SecretStr("verify-me")
 
 
 def _signed(payload: dict[str, Any]) -> tuple[bytes, str]:

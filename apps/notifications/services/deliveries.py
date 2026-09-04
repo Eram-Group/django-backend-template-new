@@ -14,6 +14,7 @@ design; this is the explicit, idempotent re-enqueue.
 
 from datetime import timedelta
 from functools import partial
+from itertools import batched
 from typing import Any
 
 import structlog
@@ -30,7 +31,6 @@ from apps.notifications.tasks import deliver_notifications
 from apps.notifications.tasks import dispatch_broadcast
 from apps.notifications.tasks.broadcast import BULK_QUEUE
 from apps.notifications.tasks.broadcast import DELIVERY_BATCH
-from apps.notifications.tasks.delivery import chunk_ids
 from apps.notifications.tasks.delivery import maybe_complete_broadcast
 
 logger = structlog.get_logger(__name__)
@@ -106,40 +106,41 @@ def deliveries_resume(
     executor-sized batches. Over-enqueueing is harmless - the executor's
     claim makes an already-taken row a no-op.
     """
-    now = timezone.now()
-    cutoff = now - timedelta(minutes=STALE_PROCESSING_MINUTES)
-    summary: dict[str, int] = {}
-    if broadcast is None:
-        rows = NotificationDelivery.objects.filter(broadcast__isnull=True)
-        enqueue = deliver_notifications.enqueue
-    else:
-        if broadcast.status == BroadcastStatus.DRAFT:
-            raise BroadcastStateError(str(_("Broadcast has not been dispatched.")))
-        summary["dispatcher_reenqueued"] = 0
-        if broadcast.status == BroadcastStatus.DISPATCHING:
-            transaction.on_commit(
-                partial(dispatch_broadcast.enqueue, str(broadcast.pk))
+    with transaction.atomic():
+        now = timezone.now()
+        cutoff = now - timedelta(minutes=STALE_PROCESSING_MINUTES)
+        summary: dict[str, int] = {}
+        if broadcast is None:
+            rows = NotificationDelivery.objects.filter(broadcast__isnull=True)
+            enqueue = deliver_notifications.enqueue
+        else:
+            if broadcast.status == BroadcastStatus.DRAFT:
+                raise BroadcastStateError(str(_("Broadcast has not been dispatched.")))
+            summary["dispatcher_reenqueued"] = 0
+            if broadcast.status == BroadcastStatus.DISPATCHING:
+                transaction.on_commit(
+                    partial(dispatch_broadcast.enqueue, str(broadcast.pk))
+                )
+                summary["dispatcher_reenqueued"] = 1
+            rows = NotificationDelivery.objects.filter(broadcast=broadcast)
+            enqueue = deliver_notifications.using(queue_name=BULK_QUEUE).enqueue
+        summary["stale_reset"] = rows.filter(
+            status=DeliveryStatus.PROCESSING, updated_at__lt=cutoff
+        ).update(status=DeliveryStatus.PENDING, updated_at=now)
+        summary["failed_reset"] = 0
+        if include_failed:
+            summary["failed_reset"] = rows.filter(status=DeliveryStatus.FAILED).update(
+                status=DeliveryStatus.PENDING, detail="", updated_at=now
             )
-            summary["dispatcher_reenqueued"] = 1
-        rows = NotificationDelivery.objects.filter(broadcast=broadcast)
-        enqueue = deliver_notifications.using(queue_name=BULK_QUEUE).enqueue
-    summary["stale_reset"] = rows.filter(
-        status=DeliveryStatus.PROCESSING, updated_at__lt=cutoff
-    ).update(status=DeliveryStatus.PENDING, updated_at=now)
-    summary["failed_reset"] = 0
-    if include_failed:
-        summary["failed_reset"] = rows.filter(status=DeliveryStatus.FAILED).update(
-            status=DeliveryStatus.PENDING, detail="", updated_at=now
-        )
-    pending = [
-        str(pk)
-        for pk in rows.filter(status=DeliveryStatus.PENDING)
-        .order_by("channel", "pk")
-        .values_list("pk", flat=True)
-    ]
-    for batch in chunk_ids(pending, size=DELIVERY_BATCH):
-        transaction.on_commit(partial(enqueue, batch))
-    summary["re_enqueued"] = len(pending)
-    if broadcast is not None and not pending:
-        maybe_complete_broadcast(broadcast_id=broadcast.pk)
-    return summary
+        pending = [
+            str(pk)
+            for pk in rows.filter(status=DeliveryStatus.PENDING)
+            .order_by("channel", "pk")
+            .values_list("pk", flat=True)
+        ]
+        for batch in batched(pending, DELIVERY_BATCH, strict=False):
+            transaction.on_commit(partial(enqueue, list(batch)))
+        summary["re_enqueued"] = len(pending)
+        if broadcast is not None and not pending:
+            maybe_complete_broadcast(broadcast_id=broadcast.pk)
+        return summary

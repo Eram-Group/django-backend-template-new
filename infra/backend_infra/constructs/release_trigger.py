@@ -11,12 +11,9 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import triggers
 from constructs import Construct
 
-RELEASE_COMMAND = (
-    "python manage.py check --deploy --fail-level WARNING"
-    " && python manage.py migrate --noinput"
-    " && python manage.py createcachetable"
-    " && python manage.py collectstatic --noinput"
-)
+# check --deploy, migrate, createcachetable, collectstatic - in one command
+# (apps/common/management/commands/release.py) so CD and CI run the same step.
+RELEASE_COMMAND = "python manage.py release"
 HANDLER = Path(__file__).resolve().parents[1] / "assets" / "release_trigger.py"
 
 

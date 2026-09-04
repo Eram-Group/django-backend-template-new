@@ -64,7 +64,11 @@ its own app (as zones is), not a conditional.
    `branded` preset exists so every identity substitution is exercised
    off-default.
 4. The template repo's own pre-commit config is hygiene only (`.jinja` files
-   are skipped); the real lint runs on the generated output.
+   are skipped) and lives at `.pre-commit-config.template.yaml` - install it
+   with `uv run pre-commit install -c .pre-commit-config.template.yaml`. The
+   real lint runs on the generated output. `_exclude` matches destination
+   paths, so a template-only file may never share a name with a rendered
+   one (the template README is `.github/README.md` for the same reason).
 
 ## Releasing
 

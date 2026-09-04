@@ -16,6 +16,12 @@ from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
 from django.core.management.base import CommandParser
 
+from apps.payments import services
+from apps.payments.constants import Currency
+from apps.payments.constants import PaymentKind
+from apps.payments.exceptions import PaymentError
+from apps.payments.models import SavedCard
+
 
 class Command(BaseCommand):
     help = "Charge a saved card server-side (merchant-initiated)."
@@ -28,12 +34,6 @@ class Command(BaseCommand):
         parser.add_argument("--description", required=True, help="Payment description.")
 
     def handle(self, *args: Any, **options: Any) -> None:
-        from apps.payments import services
-        from apps.payments.constants import Currency
-        from apps.payments.constants import PaymentKind
-        from apps.payments.exceptions import PaymentError
-        from apps.payments.models import SavedCard
-
         try:
             card = SavedCard.objects.select_related("user").get(
                 pk=options["saved_card_pk"]

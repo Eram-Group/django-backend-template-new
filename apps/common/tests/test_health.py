@@ -36,3 +36,22 @@ def test_probe_paths_reject_other_methods(client: Client) -> None:
 def test_other_paths_keep_host_validation(client: Client) -> None:
     response = client.get("/", HTTP_HOST="10.0.0.1:8000")
     assert response.status_code == 400
+
+
+@pytest.mark.django_db
+def test_readyz_reports_the_failing_check_by_name_only(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """503 names the check, never the driver error (the probe answers before
+    host validation and without auth)."""
+    from apps.common import health
+
+    def broken() -> None:
+        msg = "password authentication failed for user postgres"
+        raise RuntimeError(msg)
+
+    monkeypatch.setitem(health._CHECKS, "database", broken)
+    response = client.get("/readyz")
+    assert response.status_code == 503
+    assert response.json() == {"status": "unavailable", "failed": ["database"]}
+    assert "postgres" not in response.content.decode()

@@ -3,13 +3,12 @@ from django.utils import translation
 from django.utils.translation import gettext as _
 
 from apps.common.emails import email_send
+from apps.users.models import User
 
 
 @task()
 def send_welcome_email(user_id: str) -> None:
     """Welcome email, rendered in the user's language (no request in a worker)."""
-    from apps.users.models import User
-
     user = User.objects.get(pk=user_id)
     with translation.override(user.language):
         email_send(

@@ -1,0 +1,64 @@
+# Boot a freshly built production image against a CI Postgres: the release
+# step, then the web process answering its probes. Used by the generated
+# project's ci.yml and by the template's own CI on every preset.
+#
+# The deployed-only fields point at nothing reachable: the release step skips
+# collectstatic (no object store) and the probes never touch S3/SES/Sentry.
+name: Image smoke
+description: Run the release step and the health probes against a built image.
+
+inputs:
+  image:
+    description: Local image tag to boot.
+    required: true
+  working-directory:
+    description: Project root (holds .env.example).
+    required: false
+    default: "."
+
+runs:
+  using: composite
+  steps:
+    - name: Image env file
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        cp .env.example .env.image
+        cat >> .env.image <<EOF
+        ENVIRONMENT=dev
+        SECRET_KEY=ci-only-not-a-secret-nZfK3vQ8wLxT1pYbR6mJc9GhD4sE7uAiO2
+        DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/backend
+        ALLOWED_HOSTS=localhost
+        AWS_STORAGE_BUCKET_NAME=ci-unused
+        AWS_S3_REGION_NAME=eu-central-1
+        AWS_S3_CUSTOM_DOMAIN=ci-unused.cloudfront.net
+        AWS_SES_REGION=eu-central-1
+        SENTRY_DSN=https://key@sentry.invalid/1
+        SENTRY_RELEASE=${{ github.sha }}
+        GDAL_LIBRARY_PATH=
+        GEOS_LIBRARY_PATH=
+        EOF
+
+    - name: Release step (deploy checklist + migrate + cache table)
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: >-
+        docker run --rm --network host --env-file .env.image ${{ inputs.image }}
+        python manage.py release --skip-static
+
+    - name: Boot web + smoke
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        docker run -d --name web --network host --env-file .env.image ${{ inputs.image }}
+        for _ in $(seq 1 30); do
+          curl -fsS http://localhost:8000/healthz && break
+          sleep 2
+        done
+        curl -fsS http://localhost:8000/readyz
+        echo "smoke OK"
+
+    - name: Web logs
+      if: failure()
+      shell: bash
+      run: docker logs web || true

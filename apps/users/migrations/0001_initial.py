@@ -4,6 +4,7 @@ import apps.users.models.user
 import django.db.models.functions.datetime
 import django.utils.timezone
 import phonenumber_field.modelfields
+import django.db.models.functions.uuid
 from django.db import migrations, models
 
 
@@ -25,7 +26,7 @@ class Migration(migrations.Migration):
                 ('is_staff', models.BooleanField(default=False, help_text='Designates whether the user can log into this admin site.', verbose_name='staff status')),
                 ('is_active', models.BooleanField(default=True, help_text='Designates whether this user should be treated as active. Unselect this instead of deleting accounts.', verbose_name='active')),
                 ('date_joined', models.DateTimeField(default=django.utils.timezone.now, verbose_name='date joined')),
-                ('id', models.UUIDField(db_default=models.Func(function='uuidv7'), editable=False, primary_key=True, serialize=False)),
+                ('id', models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False)),
                 ('created_at', models.DateTimeField(auto_now_add=True, db_default=django.db.models.functions.datetime.Now(), db_index=True)),
                 ('updated_at', models.DateTimeField(auto_now=True, db_default=django.db.models.functions.datetime.Now())),
                 ('email', models.EmailField(max_length=254, unique=True, verbose_name='email address')),

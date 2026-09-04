@@ -70,13 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # Exact pin - no floating major tag past `v7` upstream (see ci.yml).
-      - uses: astral-sh/setup-uv@v10.0.1
-        with:
-          enable-cache: true
-
-      - name: Install environment
-        run: uv sync --locked
+      - uses: ./.github/actions/setup-python-env
 
       # Env has no code defaults by design - the example IS the CI config.
       - name: Bootstrap env file
