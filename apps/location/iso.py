@@ -85,10 +85,11 @@ def _iso_country(code: str) -> CountryData | None:
 
 def _max_national_length(code: str) -> int:
     metadata = PhoneMetadata.metadata_for_region(code)
-    if metadata is None or not metadata.general_desc.possible_length:
+    general = metadata.general_desc if metadata is not None else None
+    if general is None or not general.possible_length:
         msg = f"phonenumbers has no dial plan for {code}"
         raise LookupError(msg)
-    return max(metadata.general_desc.possible_length)
+    return max(general.possible_length)
 
 
 @cache
