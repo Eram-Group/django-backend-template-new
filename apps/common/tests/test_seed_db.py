@@ -7,6 +7,7 @@ never ran in CI before this - seeder regressions shipped green.
 from decimal import Decimal
 
 import pytest
+from config.env import env
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db.models import F
@@ -21,7 +22,6 @@ from apps.payments.models import Wallet
 from apps.payments.models import WalletTransaction
 from apps.users.models import User
 from apps.users.tests.factories import UserFactory
-from config.env import env
 
 pytestmark = pytest.mark.django_db
 

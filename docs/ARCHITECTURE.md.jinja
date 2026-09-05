@@ -435,10 +435,14 @@ docstrings; proven by the admin-basics gate):
   `apps.common.admin.LimitedTableSection` (declares `ordering` + `limit`;
   see `apps/users/admin/user/sections.py`).
 - State transitions in the admin = unfold detail actions: `actions_detail`
-  + `@action(permissions=["…"])` + a `has_<name>_permission` hook for
-  state-conditional visibility. The action body **calls a service**, never
-  `obj.save()` — pair with `can_change = False` for triage-inbox admins
-  where the action is the only write path. Covered by the basics gate.
+  + `@action(permissions=["…"], dialog=confirm_dialog(...))` + a
+  `has_<name>_permission` hook for state-conditional visibility. The
+  dialog makes the body POST-only (GET renders the CSRF-protected
+  confirmation; the body receives the bound form) — a link prefetch or an
+  unfurl can never start a refund or a send. The action body **calls a
+  service**, never `obj.save()` — pair with `can_change = False` for
+  triage-inbox admins where the action is the only write path. Covered by
+  the basics gate.
 - Sidebar items live in `UNFOLD["SIDEBAR"]` with a permission callable per
   item (gate-enforced consistency). unfold also supports live `badge`
   callables (dotted path, `request -> str`, `""` hides) — use a selector

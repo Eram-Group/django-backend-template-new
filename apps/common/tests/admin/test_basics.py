@@ -205,7 +205,9 @@ def test_export_csv_has_rows(su_client: Client, model: type[Model]) -> None:
 
 def test_detail_actions_resolve(su_client: Client, superuser: Any) -> None:
     """Every actions_detail button a permitted user is offered must resolve
-    and respond - custom action URLs escape the standard page tests."""
+    and respond - custom action URLs escape the standard page tests. A GET
+    is what this sweep may send: state-changing actions confirm through a
+    dialog and run on POST only, so the sweep itself changes nothing."""
     targets = [
         (model, model_admin)
         for model in ALL_MODELS

@@ -317,9 +317,12 @@ class TestAudienceEstimate:
 
 # --- lifecycle actions are permission-gated, not just status-gated ------------
 #
-# The Dispatch/Resume buttons are plain GET URLs. Before the guard checked the
-# model permission, any is_staff account - with zero notifications
-# permissions - could fan out a draft to the whole user base by URL.
+# Before the guard checked the model permission, any is_staff account - with
+# zero notifications permissions - could fan out a draft to the whole user
+# base by URL. The actions confirm through a dialog: GET renders it, only the
+# confirming POST runs the body.
+
+CONFIRM = {"_form_submitted": "1"}
 
 
 def _dispatch_url(broadcast: Broadcast) -> str:
@@ -338,7 +341,7 @@ def test_staff_without_permission_cannot_dispatch(client: Client) -> None:
     broadcast = BroadcastFactory.create(status=BroadcastStatus.DRAFT)
     client.force_login(UserFactory.create(is_staff=True))
 
-    response = client.get(_dispatch_url(broadcast))
+    response = client.post(_dispatch_url(broadcast), CONFIRM)
 
     assert response.status_code == 403
     broadcast.refresh_from_db()
@@ -349,7 +352,7 @@ def test_staff_without_permission_cannot_resume(client: Client) -> None:
     broadcast = BroadcastFactory.create(status=BroadcastStatus.DISPATCHED)
     client.force_login(UserFactory.create(is_staff=True))
 
-    response = client.get(_resume_url(broadcast))
+    response = client.post(_resume_url(broadcast), CONFIRM)
 
     assert response.status_code == 403
 
@@ -360,7 +363,7 @@ def test_view_only_permission_cannot_dispatch(client: Client) -> None:
     viewer.user_permissions.add(Permission.objects.get(codename="view_broadcast"))
     client.force_login(viewer)
 
-    response = client.get(_dispatch_url(broadcast))
+    response = client.post(_dispatch_url(broadcast), CONFIRM)
 
     assert response.status_code == 403
 
@@ -371,8 +374,30 @@ def test_change_permission_dispatches(client: Client) -> None:
     operator.user_permissions.add(Permission.objects.get(codename="change_broadcast"))
     client.force_login(operator)
 
-    response = client.get(_dispatch_url(broadcast))
+    response = client.post(_dispatch_url(broadcast), CONFIRM)
 
     assert response.status_code == 302  # back to the change form, dispatched
     broadcast.refresh_from_db()
     assert broadcast.status != BroadcastStatus.DRAFT
+
+
+@pytest.mark.parametrize(
+    ("url_for", "status"),
+    [(_dispatch_url, BroadcastStatus.DRAFT), (_resume_url, BroadcastStatus.DISPATCHED)],
+)
+def test_action_get_only_renders_the_confirmation(
+    url_for: Any, status: BroadcastStatus
+) -> None:
+    """A GET (prefetch, unfurl, history restore) changes nothing; a POST
+    without the CSRF token is refused."""
+    broadcast = BroadcastFactory.create(status=status)
+    client = Client(enforce_csrf_checks=True)
+    client.force_login(UserFactory.create(is_staff=True, is_superuser=True))
+
+    response = client.get(url_for(broadcast))
+
+    assert response.status_code == 200
+    assert 'name="_form_submitted"' in response.content.decode()
+    assert client.post(url_for(broadcast), CONFIRM).status_code == 403
+    broadcast.refresh_from_db()
+    assert broadcast.status == status

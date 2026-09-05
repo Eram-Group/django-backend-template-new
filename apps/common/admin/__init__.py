@@ -1,4 +1,5 @@
 from apps.common.admin.context import AdminContext
+from apps.common.admin.dialogs import confirm_dialog
 from apps.common.admin.field_permissions import FieldPermissions
 from apps.common.admin.field_permissions import FieldRule
 from apps.common.admin.field_permissions import expand_translation_shadows
@@ -18,6 +19,7 @@ __all__ = [
     "FieldPermissions",
     "FieldRule",
     "LimitedTableSection",
+    "confirm_dialog",
     "expand_translation_shadows",
     "on_change",
 ]

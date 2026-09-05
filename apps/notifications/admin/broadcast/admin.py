@@ -15,8 +15,10 @@ from django.urls import path
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from unfold.decorators import action
+from unfold.forms import BaseDialogForm
 
 from apps.common.admin import BaseModelAdmin
+from apps.common.admin import confirm_dialog
 from apps.common.exceptions import ApplicationError
 from apps.notifications import selectors
 from apps.notifications import services
@@ -178,10 +180,11 @@ class BroadcastAdmin(BaseModelAdmin):
         # which the form left unsaved - point it at the row the service made.
         obj.pk = broadcast.pk
 
-    # Both lifecycle guards check the MODEL permission before the status: the
-    # action views are plain GET URLs (unfold enforces has_<action>_permission
-    # inside the view), so status alone must never authorize a send to the
-    # whole user base by any is_staff account.
+    # Both lifecycle guards check the MODEL permission before the status
+    # (unfold enforces has_<action>_permission inside the view), so status
+    # alone must never authorize a send to the whole user base by any
+    # is_staff account. The dialogs make the bodies POST-only: a GET on the
+    # action URL renders the confirmation and changes nothing.
 
     def has_dispatch_broadcast_permission(
         self, request: HttpRequest, object_id: str | None = None
@@ -198,8 +201,18 @@ class BroadcastAdmin(BaseModelAdmin):
         url_path="dispatch",
         permissions=["dispatch_broadcast"],
         icon="send",
+        dialog=confirm_dialog(
+            title=_("Dispatch this broadcast?"),
+            description=_(
+                "Every user in the audience gets it on the selected "
+                "channels. A dispatch cannot be recalled."
+            ),
+            submit=_("Dispatch"),
+        ),
     )
-    def dispatch_broadcast(self, request: HttpRequest, object_id: str) -> HttpResponse:
+    def dispatch_broadcast(
+        self, request: HttpRequest, form: BaseDialogForm, object_id: str
+    ) -> HttpResponse:
         broadcast = Broadcast.objects.get(pk=object_id)
         try:
             services.broadcast_dispatch(broadcast=broadcast)
@@ -231,8 +244,18 @@ class BroadcastAdmin(BaseModelAdmin):
         url_path="resume",
         permissions=["resume_broadcast"],
         icon="replay",
+        dialog=confirm_dialog(
+            title=_("Resume the incomplete deliveries?"),
+            description=_(
+                "Re-enqueues exactly the deliveries that never completed; "
+                "nothing already sent is sent again."
+            ),
+            submit=_("Resume"),
+        ),
     )
-    def resume_broadcast(self, request: HttpRequest, object_id: str) -> HttpResponse:
+    def resume_broadcast(
+        self, request: HttpRequest, form: BaseDialogForm, object_id: str
+    ) -> HttpResponse:
         broadcast = Broadcast.objects.get(pk=object_id)
         try:
             summary = services.deliveries_resume(

@@ -31,6 +31,7 @@ from collections.abc import Callable
 from decimal import Decimal
 from typing import Any
 
+from config.env import env
 from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
 from django.core.management.base import CommandParser
@@ -50,7 +51,6 @@ from apps.payments.constants import GatewayName
 from apps.payments.constants import PaymentKind
 from apps.payments.constants import PaymentStatus
 from apps.payments.constants import WalletTransactionKind
-from config.env import env
 
 SEED_DOMAIN = "seed.example.com"
 CHUNK = 10_000

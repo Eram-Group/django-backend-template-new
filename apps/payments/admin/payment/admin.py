@@ -9,8 +9,10 @@ from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from unfold.decorators import action
+from unfold.forms import BaseDialogForm
 
 from apps.common.admin import BaseModelAdmin
+from apps.common.admin import confirm_dialog
 from apps.common.exceptions import ApplicationError
 from apps.payments import services
 from apps.payments.admin.payment.resource import PaymentResource
@@ -42,8 +44,20 @@ class PaymentAdmin(BaseModelAdmin):
         url_path="refund",
         permissions=["refund_payment"],
         icon="currency_exchange",
+        # GET renders the confirmation; the body below runs on POST only.
+        dialog=confirm_dialog(
+            title=_("Refund this payment?"),
+            description=_(
+                "The full amount goes back to the customer through the "
+                "payment provider. A wallet top-up is debited first; "
+                "this cannot be undone."
+            ),
+            submit=_("Refund"),
+        ),
     )
-    def refund_payment(self, request: HttpRequest, object_id: str) -> HttpResponse:
+    def refund_payment(
+        self, request: HttpRequest, form: BaseDialogForm, object_id: str
+    ) -> HttpResponse:
         # Interlock only: the provider call runs in the worker task, never in
         # a request (see payment_refund_start).
         payment = Payment.objects.get(pk=object_id)
