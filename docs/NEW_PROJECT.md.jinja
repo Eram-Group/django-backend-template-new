@@ -41,20 +41,20 @@ every member), `apps/common/tests/fake.py` (mimesis locales), the Dockerfile
 reference implementations of one product's stack — keep, trim, or delete:
 
 - **`apps/payments`** — Tap (SAR) + Paymob (EGP) gateways, wallet ledger,
-  saved cards, refunds, `reconcile_payments` cron. Deleting it also means:
+  saved cards, refunds, the `reconcile_payments` sweep. Deleting it also means:
   `apps/users/services/users.py` (`wallet_create` at signup), the
   `PAYMENT_GATEWAYS`/`TAP_*`/`PAYMOB_*` settings in `config/settings/base.py`,
   the `TAP_*`/`PAYMOB_*`/`BACKEND_BASE_URL` fields in `config/env.py` and
   `.env.example` (`test_env_contract` keeps them in sync), the
   `_payment_keys_match_environment` validator, the Payments sidebar section in
-  `UNFOLD`, the `reconcile-payments` entry in `SCHEDULES`, the payments
+  `UNFOLD`, the payments
   `ignore_imports` lines in `pyproject.toml`, and `apps.payments` in
   `INSTALLED_APPS` / `apps/common/tests/factories_registry.py`.
 - **`apps/notifications`** — inbox, FCM push, OurSMS (SA) + SMSMisr (EG)
   routing, WhatsApp Cloud API (webhook only; the send connector is a stub),
-  broadcasts, `sweep_deliveries` cron. Same checklist shape: the
+  broadcasts, the `sweep_deliveries` sweep. Same checklist shape: the
   `OURSMS_*`/`SMSMISR_*`/`FIREBASE_*`/`WHATSAPP_*` env fields and settings,
-  the Notifications sidebar section, the `sweep-deliveries` schedule, the
+  the Notifications sidebar section, the
   notifications `ignore_imports` lines, `INSTALLED_APPS`, the registry, and
   `apps/users/services/users.py` (`notify` on signup) plus the
   the notifications admin forms (`apps/notifications/admin/forms.py`).

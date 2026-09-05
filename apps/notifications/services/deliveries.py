@@ -8,7 +8,7 @@ acks - telemetry, not money; a Meta retry storm must not build.
 
 ``deliveries_resume`` recovers incomplete deliveries - for one broadcast
 (the admin "Resume incomplete" action) or for the transactional orphans
-(the scheduled ``sweep_deliveries`` command). There is no auto-retry by
+(the ``sweep_deliveries`` command). There is no auto-retry by
 design; this is the explicit, idempotent re-enqueue.
 """
 

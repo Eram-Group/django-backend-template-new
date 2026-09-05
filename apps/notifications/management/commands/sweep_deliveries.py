@@ -1,4 +1,4 @@
-"""Scheduled recovery for transactional sends (no auto-retry exists).
+"""Recovery sweep for transactional sends (no auto-retry exists).
 
 Resets stale PROCESSING rows (worker died mid-batch) and re-enqueues every
 PENDING orphan; ``--include-failed`` also retries FAILED rows. Broadcasts

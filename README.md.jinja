@@ -116,7 +116,7 @@ Django 6 native `django.tasks` with the Postgres-backed queue — no broker.
   exiting — set the ECS `stopTimeout` (worker task definition) to at least
   your longest task.
 - Results are rows: prune with `manage.py prune_db_task_results
-  --min-age-days 14` (scheduled below).
+  --min-age-days 14` (run by hand; nothing is scheduled yet).
 
 ## Outbound integrations (payments)
 
@@ -149,7 +149,7 @@ One image, three run modes: **web** (gunicorn, ECS Express Mode), **worker**
 each rollout from the exact revision being deployed). Infrastructure is code: [`infra/`](infra) (AWS CDK,
 Python — `just infra-*`; needs Node, `jq` and AWS credentials in the shell,
 e.g. `AWS_PROFILE=<profile> just infra-deploy dev`). The full runbook —
-architecture, cost, one-time bootstrap, deploy flow, schedules, operations —
+architecture, cost, one-time bootstrap, deploy flow, operations —
 is [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ### GitHub variables / secrets

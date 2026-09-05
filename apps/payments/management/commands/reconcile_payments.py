@@ -1,8 +1,8 @@
-"""Scheduled sweep: recover payments stuck mid-flow.
+"""Sweep: recover payments stuck mid-flow.
 
 Webhooks are the source of truth but can be lost, and the refund executor
 task can die between its phases (django.tasks has no retries) - this command
-is the retry mechanism for both. Cron: EventBridge Scheduler -> ECS run-task.
+is the retry mechanism for both. Run it by hand (nothing schedules it yet).
 
 - PENDING rows older than ``PENDING_MAX_AGE`` are re-checked against the
   provider via ``payment_verify`` (the same idempotent transition a webhook
@@ -18,7 +18,7 @@ is the retry mechanism for both. Cron: EventBridge Scheduler -> ECS run-task.
   manual reconciliation against its dashboard.
 
 A provider call that fails is logged and the sweep moves on (the next run
-retries), but the command then exits non-zero so the scheduled task alerts
+retries), but the command then exits non-zero so the run alerts
 instead of reporting a clean run.
 """
 

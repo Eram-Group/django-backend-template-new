@@ -168,12 +168,11 @@ Conventions (see `apps/users/tasks/emails.py`):
   (`with run_enqueued_tasks() as records:` around the action) — the
   production worker's runner over the rows the block queued, tasks a task
   enqueues included.
-- Scheduled work = management commands triggered by EventBridge Scheduler →
-  ECS RunTask. The cadence is code: one `ScheduledJob` entry per command in
-  `infra/backend_infra/config.py::SCHEDULES` (`clearsessions`,
-  `prune_db_task_results`, `reconcile_payments`, `sweep_deliveries`, …);
-  commands are thin wrappers over services, safe to re-run. See
-  [DEPLOYMENT.md](DEPLOYMENT.md#scheduled-jobs).
+- Recurring work = idempotent management commands (`clearsessions`,
+  `prune_db_task_results`, `reconcile_payments`, `sweep_deliveries`), thin
+  wrappers over services, safe to re-run. Nothing schedules them yet - they
+  run by hand (`just infra-run-task`) until the scheduling decision (TODO
+  `scheduling-decision`). See [DEPLOYMENT.md](DEPLOYMENT.md#recurring-commands).
 
 ## Outbound clients (HTTP kernel, SMS, push, payments)
 
@@ -231,7 +230,7 @@ Per-area notes:
   THE idempotency record: executor tasks claim PENDING → PROCESSING under
   `select_for_update(skip_locked)`, outcomes persist per channel, no
   auto-retry (`deliveries_resume` - the admin resume action and the
-  `sweep_deliveries` cron - re-enqueues exactly the remainder). Mass sends = `Broadcast` rows fanned out on the `bulk` queue.
+  `sweep_deliveries` command - re-enqueues exactly the remainder). Mass sends = `Broadcast` rows fanned out on the `bulk` queue.
   WhatsApp status webhooks are HMAC-verified and never 5xx on input shape
   (`test_catalog` keeps `NotificationKind` ↔ `CATALOG` in lockstep).
 - **Payments** (Tap SAR / Paymob EGP): gateway Protocol + frozen DTOs in

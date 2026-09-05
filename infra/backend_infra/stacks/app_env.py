@@ -18,7 +18,6 @@ from constructs import Construct
 
 from backend_infra import naming
 from backend_infra.config import ENV_SECRET
-from backend_infra.config import SCHEDULES
 from backend_infra.config import AppConfig
 from backend_infra.config import EnvConfig
 from backend_infra.constructs import roles
@@ -27,7 +26,6 @@ from backend_infra.constructs.containers import fargate_task
 from backend_infra.constructs.database import DedicatedDatabase
 from backend_infra.constructs.network import public_subnets
 from backend_infra.constructs.release_trigger import release_trigger
-from backend_infra.constructs.schedules import scheduled_jobs
 from backend_infra.constructs.storage import MediaStorage
 from backend_infra.constructs.web_express import ExpressWebService
 from backend_infra.constructs.worker import worker_service
@@ -191,7 +189,7 @@ class AppEnvStack(Stack):
                 hosted_zone_name=app.hosted_zone_name,
             )
 
-        # --- Worker + scheduled jobs (egress-only SG) ----------------------------
+        # --- Worker (egress-only SG) ---------------------------------------------
         self.worker = worker_service(
             self,
             "Worker",
@@ -214,14 +212,6 @@ class AppEnvStack(Stack):
             image_tag=image_tag,
             execute_before=[self.web, self.worker],
         )
-        schedule_group = scheduled_jobs(
-            self,
-            group_name=f"{app.name}-{cfg.name}",
-            jobs=SCHEDULES,
-            cluster=shared.cluster,
-            task_definition=self.worker_task,
-            security_group=app_sg,
-        )
 
         # --- Outputs: exactly what the GitHub environment variables need ----------
         CfnOutput(self, "WebEndpoint", value=self.web.endpoint)
@@ -230,7 +220,6 @@ class AppEnvStack(Stack):
         CfnOutput(self, "WorkerServiceName", value=naming.worker_family(app, cfg))
         CfnOutput(self, "WebFamily", value=naming.web_family(app, cfg))
         CfnOutput(self, "WorkerFamily", value=naming.worker_family(app, cfg))
-        CfnOutput(self, "ScheduleGroupName", value=schedule_group.schedule_group_name)
         CfnOutput(self, "Subnets", value=",".join(subnet_ids))
         CfnOutput(self, "SecurityGroup", value=app_sg.security_group_id)
         CfnOutput(self, "Bucket", value=storage.bucket.bucket_name)

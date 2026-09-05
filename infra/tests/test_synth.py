@@ -5,7 +5,6 @@ import pytest
 from aws_cdk import assertions
 from backend_infra.config import APP
 from backend_infra.config import ENVIRONMENTS
-from backend_infra.config import SCHEDULES
 from backend_infra.synth import build_app
 
 
@@ -143,46 +142,14 @@ def test_worker_capacity_provider_matches_config(
 
 
 @pytest.mark.parametrize("env_name", list(ENVIRONMENTS))
-def test_schedules_cover_every_job(
+def test_no_scheduler_resources(
     templates: dict[str, assertions.Template], env_name: str
 ) -> None:
+    """Recurring commands are run by hand until scheduling is decided
+    (TODO scheduling-decision) - nothing in the stack starts tasks on a timer."""
     t = templates[f"App-{env_name}"]
-    schedules = t.find_resources("AWS::Scheduler::Schedule")
-    assert len(schedules) == len(SCHEDULES)
-    (worker_task_id,) = [
-        logical_id
-        for logical_id, r in t.find_resources("AWS::ECS::TaskDefinition").items()
-        if r["Properties"]["Family"].endswith("-worker")
-    ]
-    (jobs_role_id,) = [
-        logical_id
-        for logical_id, r in t.find_resources("AWS::IAM::Role").items()
-        if r["Properties"]["AssumeRolePolicyDocument"]["Statement"][0]["Principal"]
-        == {"Service": "scheduler.amazonaws.com"}
-    ]
-    for r in schedules.values():
-        assert r["Properties"]["State"] == "ENABLED"
-        assert r["Properties"]["FlexibleTimeWindow"] == {"Mode": "OFF"}
-        target = r["Properties"]["Target"]
-        assert '"name":"Main"' in target["Input"]
-        # Pinned to the worker revision CDK registers; the deploy workflow
-        # advances it (roll_schedules.sh) - the group name is its handle.
-        assert target["EcsParameters"]["TaskDefinitionArn"] == {"Ref": worker_task_id}
-        assert target["RoleArn"] == {"Fn::GetAtt": [jobs_role_id, "Arn"]}
-    t.has_output("ScheduleGroupName", {"Value": f"{APP.name}-{env_name}"})
-    # The shared execution role may run EVERY revision of the family, not
-    # just the one CDK bound - a repointed schedule must still start.
-    run_task = [
-        s
-        for p in t.find_resources("AWS::IAM::Policy").values()
-        if p["Properties"]["Roles"] == [{"Ref": jobs_role_id}]
-        for s in p["Properties"]["PolicyDocument"]["Statement"]
-        if s["Action"] == "ecs:RunTask"
-    ]
-    assert any(
-        f"task-definition/{APP.name}-{env_name}-worker:*" in str(s["Resource"])
-        for s in run_task
-    )
+    assert not t.find_resources("AWS::Scheduler::Schedule")
+    assert not t.find_resources("AWS::Scheduler::ScheduleGroup")
 
 
 def test_production_database_is_its_own_protected_stack(
@@ -238,13 +205,7 @@ def test_deploy_role_is_scoped_to_this_app(
     assert isinstance(resources, list)
     patterns = [r for r in resources if isinstance(r, str)]
     assert patterns == [f"arn:aws:iam::{APP.account}:role/{APP.name}-App-*"]
-    passed_to = pass_role["Condition"]["StringEquals"]["iam:PassedToService"]  # type: ignore[index]
-    assert "scheduler.amazonaws.com" in passed_to
-    # Repointing schedules after a rollout: this app's groups only.
-    (update_schedule,) = by_action["scheduler:UpdateSchedule"]
-    assert update_schedule["Resource"] == (
-        f"arn:aws:scheduler:{APP.region}:{APP.account}:schedule/{APP.name}-*/*"
-    )
+    assert not [a for a in by_action if a.startswith("scheduler:")]
     (logs_stmt,) = by_action["logs:GetLogEvents"]
     assert all(
         f":log-group:/aws/ecs/{APP.name}-" in r

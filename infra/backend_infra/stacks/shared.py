@@ -78,14 +78,6 @@ class SharedStack(Stack):
                 resource_name=f"{app.name}-*",
                 arn_format=ArnFormat.SLASH_RESOURCE_NAME,
             ),
-            # Schedule ARNs are schedule/<group>/<name>; groups are
-            # <app>-<env> (constructs/schedules.py).
-            schedule_arn_pattern=self.format_arn(
-                service="scheduler",
-                resource="schedule",
-                resource_name=f"{app.name}-*/*",
-                arn_format=ArnFormat.SLASH_RESOURCE_NAME,
-            ),
             log_group_arns=[
                 self.format_arn(
                     service="logs",

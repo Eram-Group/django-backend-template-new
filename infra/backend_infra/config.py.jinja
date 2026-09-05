@@ -77,15 +77,6 @@ class EnvConfig:
     plain_env: dict[str, str] = field(default_factory=dict)
 
 
-@dataclass(frozen=True)
-class ScheduledJob:
-    """A management command run on a cron by EventBridge Scheduler."""
-
-    name: str
-    cron: str  # minute hour day month weekday year - EventBridge 6-field cron (UTC)
-    command: tuple[str, ...]
-
-
 # --- Env-var ownership --------------------------------------------------------
 
 ENV_PLAIN: frozenset[str] = frozenset(
@@ -159,29 +150,6 @@ ENV_SECRET: frozenset[str] = frozenset(
 )
 
 ENV_FROM_CD: frozenset[str] = frozenset({"SENTRY_RELEASE"})
-
-# --- Scheduled jobs (cadence lives here, next to the commands it triggers) ------
-
-SCHEDULES: tuple[ScheduledJob, ...] = (
-    ScheduledJob(
-        "clearsessions", "0 3 * * ? *", ("python", "manage.py", "clearsessions")
-    ),
-    ScheduledJob(
-        "prune-task-results",
-        "30 3 * * ? *",
-        ("python", "manage.py", "prune_db_task_results", "--min-age-days", "14"),
-    ),
-    ScheduledJob(
-        "reconcile-payments",
-        "*/10 * * * ? *",
-        ("python", "manage.py", "reconcile_payments"),
-    ),
-    ScheduledJob(
-        "sweep-deliveries",
-        "*/15 * * * ? *",
-        ("python", "manage.py", "sweep_deliveries"),
-    ),
-)
 
 # --- This application ------------------------------------------------------------
 

@@ -28,12 +28,6 @@
       "checkpoint": "Factories review signed off; payment end-to-end flow demonstrated and evidence recorded in the task's tips; uv run pytest green including the factory-coverage and cross-app gates; coverage >= 80%; commit."
     },
     {
-      "id": "G18",
-      "title": "Cron & scheduled jobs",
-      "rationale": "django.tasks (Django 6.0) ships no worker, no retries, no delayed execution, no periodic tasks - the project must own each gap explicitly: deadline-as-data + idempotent sweeps for delay/retry, an external cadence trigger for recurrence, pruning for result rows.",
-      "checkpoint": "Sweep pattern demonstrated end-to-end locally (enqueue -> worker executes -> re-run is a no-op); every gap in the task tips has a named owner (code, worker, or scheduler); docs updated; gates green; commit."
-    },
-    {
       "id": "G20",
       "title": "Claude structure",
       "rationale": "CLAUDE.md digest, .claude/rules topic files, PLAN.md, and ARCHITECTURE.md must say the same thing - drift here silently misleads every future session.",
@@ -56,6 +50,12 @@
       "title": "Saved cards live verification",
       "rationale": "Card-on-file was built and unit/service-tested against respx + FakeGateway on 2026-07-18; both provider accounts have the features enabled. What code cannot prove locally: real 3DS on the token charge, the real TOKEN callback shape/HMAC, Card-on-File/MOTO integration id behavior, and Tap's card+agreement payload on a live save.",
       "checkpoint": "Saved-card save/one-click/MIT/delete demonstrated against Tap+Paymob TEST modes with evidence in the task tips; ruff+mypy+pytest+lint-imports green; commit."
+    },
+    {
+      "id": "G18",
+      "title": "Scheduling",
+      "rationale": "The EventBridge Scheduler integration was removed on 2026-09-05 (owner decision): a schedule pinned a task-definition revision that the deploy never advanced, and the fix added deploy-time plumbing the owner did not want yet. Until a decision is made, the recurring commands run by hand.",
+      "checkpoint": "A written decision on how recurring commands run in AWS, then its implementation with a test that ties the cadence to the released revision."
     }
   ],
   "tasks": [
@@ -117,21 +117,6 @@
       "status": "pending"
     },
     {
-      "id": "cron-jobs-check",
-      "group": "G18",
-      "title": "Verify the scheduled-jobs story against django.tasks gaps",
-      "endGoal": "The project has a demonstrated, documented pattern for recurring and delayed work: deadline-as-data (e.g. expires_at) + an idempotent sweep management command that goes through services; a cadence trigger per environment (local = manual/compose loop, prod = external scheduler); a cleanup command that prunes finished task-result rows.",
-      "tips": [
-        "django.tasks core (Django 6.0) provides API only - NO worker, NO retries, NO delayed execution (run_after absent from core), NO periodic tasks, NO delivery guarantees, NO monitoring dashboard. Each gap needs a named owner in this repo.",
-        "Worker = the django-tasks reference package's DB backend + db_worker (`just worker`); in prod it is a separate long-running service deployed in lockstep with web so task code never drifts.",
-        "Sweep pattern (decided 2026-07-18): never schedule one event per row - store the deadline on the model, filter reads on it so correctness never depends on the scheduler, and let a frequent idempotent sweep materialize the state. Side-effectful closes go row-by-row through the owning service, not bulk update().",
-        "Sweep commands live in apps/<app>/management/commands (layering: management -> services); recurring cadence changes are infrastructure-only edits, new jobs = new command + new schedule entry.",
-        "JSON-only task args (tuples become lists, no datetimes/models) - the existing pk-strings rule already complies; keep return values JSON-safe or return nothing.",
-        "No timeouts / rate limits / uniqueness in the framework: guard in the task body (select_for_update, status checks) where duplicate or hung execution would hurt."
-      ],
-      "status": "pending"
-    },
-    {
       "id": "live-stack-rename",
       "group": "G24",
       "title": "Recreate the live dev stacks under the app-prefixed names",
@@ -145,12 +130,11 @@
     {
       "id": "alarms-and-dlq",
       "group": "G24",
-      "title": "Alerting: SNS topic + RDS/ECS alarms + schedule DLQ",
-      "endGoal": "Synthesized templates contain an SNS topic with a subscribed alerts address, alarms for RDS (CPU credit balance on t4g, free storage, connections), ECS running-count < desired for web and worker, and a DLQ on every EventBridge schedule with retry_attempts > 0; a forced failure of one schedule lands in the DLQ and pages.",
+      "title": "Alerting: SNS topic + RDS/ECS alarms",
+      "endGoal": "Synthesized templates contain an SNS topic with a subscribed alerts address, alarms for RDS (CPU credit balance on t4g, free storage, connections) and ECS running-count < desired for web and worker.",
       "tips": [
         "Needs an `alerts_email` on AppConfig (decision: who receives) - never a code default.",
-        "Express Mode's own 5XX alarm only drives its canary rollback; it notifies nobody.",
-        "constructs/schedules.py currently sets retry_attempts=0 and max_event_age 5 min: a reconcile-payments launch failure is silently dropped today."
+        "Express Mode's own 5XX alarm only drives its canary rollback; it notifies nobody."
       ],
       "status": "pending"
     },
@@ -296,6 +280,18 @@
       "endGoal": "Wallet transactions can optionally expire.",
       "tips": [
         "Requested by Omar 2026-08-24."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "scheduling-decision",
+      "group": "G18",
+      "title": "Decide (later) how recurring commands get scheduled",
+      "endGoal": "reconcile_payments (every ~10 min), sweep_deliveries (~15 min), clearsessions and prune_db_task_results (daily) run on a cadence in every environment, always from the released image, with a failure that pages.",
+      "tips": [
+        "Not for now. Until decided, run them by hand: `just infra-run-task <env> python manage.py reconcile_payments` etc.",
+        "Candidates: EventBridge Scheduler -> ecs:RunTask (was implemented and removed; the trap is that a schedule pins a task-definition revision, so CD must repoint every schedule after the worker rolls - see git history 68647cd for a working version incl. the IAM); a `db_worker`-side periodic loop in the worker service (no infra, but couples cadence to the worker process); ECS scheduled tasks via EventBridge rules.",
+        "Whatever is chosen must run the SAME revision the release task validated, retry or page on launch failure, and keep the sweeps idempotent (they already are)."
       ],
       "status": "pending"
     }

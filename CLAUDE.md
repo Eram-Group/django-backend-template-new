@@ -35,9 +35,9 @@ tracker; neither is generated into projects.
   service (function-level import, recorded in `pyproject.toml`); the work
   is idempotent; services enqueue INSIDE their transaction (the queue is
   this database - the task row commits or rolls back with the write);
-  `transaction.on_commit` is only for external side effects. A scheduled
-  job = a management command + a `ScheduledJob` entry in
-  `infra/backend_infra/config.py::SCHEDULES` (EventBridge → RunTask).
+  `transaction.on_commit` is only for external side effects. Recurring work
+  is an idempotent management command; nothing schedules them yet (run by
+  hand - see TODO `scheduling-decision`).
 - Deploy: ECS Express Mode (web) + Fargate (worker); the task-definition
   container is named `Main` — load-bearing for Express Mode and the CD
   render steps, never rename. `ENVIRONMENT` ∈ local/dev/staging/production.

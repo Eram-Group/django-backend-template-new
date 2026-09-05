@@ -304,7 +304,7 @@ def test_sweep_command_recovers_transactional_orphans(
 def test_sweep_command_leaves_broadcast_rows_alone(
     run_enqueued_tasks: Any,
 ) -> None:
-    """Broadcasts resume from their admin page; the scheduled sweep only
+    """Broadcasts resume from their admin page; the sweep command only
     touches transactional orphans."""
     user = UserFactory.create()
     DeviceFactory.create(user=user)

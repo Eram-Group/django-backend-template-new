@@ -18,7 +18,7 @@ users ──▶ Load balancer ──▶ [ web ]  the API + admin
                                  │
 files ◀── CloudFront ◀── S3      ├──▶ PostgreSQL   the only database:
                                  │                 data, cache, sessions, task queue
-scheduler ──▶ [ cron jobs ]      │
+                                 │
                                  ▼
               [ worker ]  runs background tasks from the queue
 ```
@@ -29,7 +29,6 @@ scheduler ──▶ [ cron jobs ]      │
 |---|---|---|
 | **web** | The Django API and admin behind HTTPS. Scales from 1 task up when CPU is busy. | ECS Express Mode (Fargate) |
 | **worker** | The same image running `db_worker`, draining the task queue. One small task, always on. | ECS Fargate Spot |
-| **cron jobs** | Management commands on a timer (clean sessions, reconcile payments, …). Each run is a short-lived task; nothing is always on. | EventBridge Scheduler |
 | **release task** | Runs before every deploy: deploy checks, migrations, static files. If it fails, nothing rolls out. | one-off ECS task |
 | **database** | One PostgreSQL 18. It is also the cache, the session store and the task queue — so there is no Redis. | RDS |
 | **files** | Uploads and static assets in a bucket only the CDN can read; anyone with a file's URL can fetch it (there is no signed-URL path yet - keep sensitive uploads out until it exists). | S3 + CloudFront |
@@ -45,14 +44,16 @@ scheduler ──▶ [ cron jobs ]      │
   reclaimed with two minutes' notice). If it dies it is restarted; if it is
   interrupted it finishes the current task first. Work is never lost — it sits
   in Postgres; at worst it is delayed a few minutes.
-- **Cron** is not a server; it is a schedule that starts a task and stops.
+- **Recurring commands** (reconcile payments, clean sessions, …) are not on
+  a timer yet; they are run by hand as one-off tasks until scheduling is
+  decided.
 - **Database** has daily backups (7 days in production) and can't be deleted
   by accident.
 
 ## Environments and apps
 
 Each app has `dev` and `production` (optionally `staging`). Every
-environment is its own copy of web + worker + cron + bucket + secrets.
+environment is its own copy of web + worker + bucket + secrets.
 Production has its own database; all dev environments of all apps share one
 small database server. All web services in the account share one load
 balancer.
@@ -77,6 +78,10 @@ balancer.
   and operate; the load doesn't justify it.
 - **No scale-to-zero on web**: a load balancer needs at least one running
   task; the floor is ≈ $10/month, not worth engineering around.
+
+Every resource carries `app` and `env` tags (plus `managed-by`), so the
+bill splits per app and environment in Cost Explorer; the convention is in
+DEPLOYMENT.md.
 
 Operational detail (bootstrap, deploy commands, cost table, levers):
 [DEPLOYMENT.md](DEPLOYMENT.md). Code: [`infra/`](../infra).

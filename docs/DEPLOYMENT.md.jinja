@@ -19,16 +19,16 @@ clients ──HTTPS──▶ ALB (Express-managed, shared by every Express servi
                      └─▶ [web] Fargate ARM64 · gunicorn · CPU target tracking, 1..N tasks
                                   │
 CloudFront (OAC) ──▶ S3 static/ media/         ├──▶ RDS PostgreSQL 18 (DB + cache table + sessions + task queue)
-EventBridge Scheduler ──RunTask──▶ manage.py …  └──▶ SES
+                                              └──▶ SES
 [worker] Fargate ARM64 · db_worker · Fargate Spot in every environment
 ```
 
 | Concern | Service | Notes |
 |---|---|---|
 | Web | **ECS Express Mode** on Fargate (ARM64) | Express provisions and operates the ALB, HTTPS listener + certificate, target groups, security groups, auto scaling and canary deployments. We hand it a CDK-owned task definition (container **`Main`**, port 8000, health path `/readyz`). URL: `https://<service>-<hash>.ecs.eu-central-1.on.aws`. |
-| Worker | plain ECS Fargate service, same cluster | `manage.py db_worker --queue-name default,bulk`, 0.25 vCPU / 0.5 GB, `stopTimeout` 120 s (≥ the longest task), ECS Exec enabled. **Fargate Spot in every environment** (≈ 70 % off): jobs are idempotent and enqueued inside the writing transaction, and `db_worker` finishes the current job on SIGTERM, so a reclaim delays work by minutes and never loses it. The release task and scheduled jobs stay on-demand. Flip `EnvConfig.worker_spot` only for a worker running long, non-restartable jobs. |
+| Worker | plain ECS Fargate service, same cluster | `manage.py db_worker --queue-name default,bulk`, 0.25 vCPU / 0.5 GB, `stopTimeout` 120 s (≥ the longest task), ECS Exec enabled. **Fargate Spot in every environment** (≈ 70 % off): jobs are idempotent and enqueued inside the writing transaction, and `db_worker` finishes the current job on SIGTERM, so a reclaim delays work by minutes and never loses it. The release task stays on-demand. Flip `EnvConfig.worker_spot` only for a worker running long, non-restartable jobs. |
 | Release step | one-off `RunTask` on the worker family, on-demand | Runs before every web rollout from the exact revision being deployed. |
-| Scheduled jobs | **EventBridge Scheduler** → `ecs:RunTask` | One schedule per management command, defined in `infra/backend_infra/config.py::SCHEDULES` next to the commands. No always-on beat process. |
+| Recurring commands | **not scheduled yet** | `reconcile_payments`, `sweep_deliveries`, `clearsessions`, `prune_db_task_results` are run by hand (`just infra-run-task`) until the scheduling decision (TODO `scheduling-decision`). |
 | Database | **RDS for PostgreSQL 18** | Production: `production-<app>` db.t4g.micro, gp3 20 GB (autoscaling to 100), single-AZ, 7-day backups, deletion protection. Dev/staging: one shared `development-shared-pg18` db.t4g.small for every app's non-prod databases. Postgres also serves as cache, session store and task queue — there is no Redis. |
 | Files | S3 (private, SSE-S3) + **CloudFront** (OAC) | `static/` + `media/` prefixes (django-storages). |
 | Email | SES, region-local identity | Task role may `ses:SendEmail` from the identity's domain only. |
@@ -67,12 +67,8 @@ them (see *Account prerequisites*).
 - **CDK owns** every resource, including the task definitions — created from
   the image tag passed as `-c image_tag=<sha>`.
 - **CD mutates** task definitions (new revisions with the new image and
-  `SENTRY_RELEASE`) and repoints the services AND the scheduled jobs (every
-  schedule in the `<app>-<env>` group pins a worker revision;
-  `infra/scripts/roll_schedules.sh` advances them to the released one).
-  CloudFormation ignores that drift; it only re-registers when the
-  *template* changes - and then binds services and schedules to the
-  revision it registers.
+  `SENTRY_RELEASE`) and repoints the services. CloudFormation ignores that
+  drift; it only re-registers when the *template* changes.
 - `just infra-deploy <env>` reads the tag the worker SERVICE is running
   (`infra/scripts/live_context.sh`; not the family's latest ACTIVE revision,
   which a failed release can leave behind) before running `cdk deploy`, so a
@@ -86,10 +82,9 @@ them (see *Account prerequisites*).
 | Web task, Fargate ARM (dev 0.25 vCPU / 1 GB, prod 0.5 vCPU / 1 GB; 1-task floor) | $9.78 | $16.58 |
 | Worker task, Fargate ARM 0.25 vCPU / 0.5 GB, Spot (≈ −70 % vs $8.29 on-demand) | ≈ $2.50 | ≈ $2.50 |
 | Public IPv4 per task ENI ($0.005/h) — the price of "no NAT" | $7.30 | $7.30 |
-| Scheduled one-off tasks (reconcile */10 min, sweep */15 min, dailies) | ≈ $1.40 | ≈ $1.40 |
 | RDS PostgreSQL 18 | — (shared instance) | t4g.micro $13.87 + gp3 20 GB $2.74 |
 | Secrets Manager | $0.40 | $1.20 |
-| CloudFront / S3 / SES / Scheduler / CloudWatch Logs | ≈ $2 | ≈ $3–5 |
+| CloudFront / S3 / SES / CloudWatch Logs | ≈ $2 | ≈ $3–5 |
 | **Environment subtotal** | **≈ $23** | **≈ $49** |
 
 Shared pools, paid once per account: ALB ≈ $34/mo ($19.71 + LCU + 3 public
@@ -129,6 +124,25 @@ them. For a new account create them once, then copy the values into
 | GitHub OIDC provider | `github_oidc_provider_arn` | `aws iam create-open-id-connect-provider --url https://token.actions.githubusercontent.com --client-id-list sts.amazonaws.com` |
 | DB security group (5432 from the VPC CIDR) | `db_security_group_id` | `aws ec2 create-security-group --group-name postgres-from-vpc --description "Postgres from the VPC" --vpc-id <vpc>` + `authorize-security-group-ingress --protocol tcp --port 5432 --cidr <vpc-cidr>` |
 | Shared dev RDS (PostgreSQL 18, db.t4g.small, gp3 20 GB, RDS-managed master password, reachable from the team's IPs so databases are created with `psql`) | — (apps only see their `DATABASE_URL`) | `aws rds create-db-instance --db-instance-identifier development-shared-pg18 --engine postgres --engine-version 18 --db-instance-class db.t4g.small --allocated-storage 20 --storage-type gp3 --storage-encrypted --master-username postgres --manage-master-user-password --publicly-accessible --vpc-security-group-ids <sg> --backup-retention-period 1 --deletion-protection`, then `aws ec2 authorize-security-group-ingress --group-id <sg> --protocol tcp --port 5432 --cidr <your-ip>/32` per team member. (Existing private instance: `aws rds modify-db-instance --db-instance-identifier development-shared-pg18 --publicly-accessible --apply-immediately`.) TLS is required (`sslmode=require`); the master password lives in Secrets Manager and is read in the console when needed — never printed by tooling. |
+
+### Tagging convention (every resource, every app)
+
+Three tags, lowercase, on everything that can carry one - CDK applies them to
+its own stacks (`synth.py` / `app_env.py`), hand-made resources get them by
+hand at creation:
+
+| Key | Values | Meaning |
+|---|---|---|
+| `app` | the app name (`weem`, `dars`, `1k`, ...); `shared` for account-level resources | which product pays for it |
+| `env` | `dev` \| `staging` \| `production` \| `shared` | which environment; `shared` for account-level resources (NAT, bastion, hosted zone, CloudTrail bucket, VPC connector, DB security group) |
+| `managed-by` | `cdk` \| `manual` | whether a stack owns it |
+
+`app` and `env` are the activated cost-allocation tags: Cost Explorer can
+group by them, so a resource without both is invisible in the per-app view.
+Never use `App`/`Env`/`prod` - the account was unified to this scheme on
+2026-09-05 (the legacy keys were removed), and Cost Explorer only knows the
+lowercase keys. Resources shared across environments but owned by one app
+(the ECR repository, the ECS cluster) carry `app` without `env`.
 
 Why not CDK: an account-global resource in a per-app stack has exactly one
 owner, and a template copied into ten repos cannot express that safely —
@@ -183,8 +197,7 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    its variables:
    `ECS_CLUSTER`, `ECS_FAMILY_WEB`, `ECS_FAMILY_WORKER`, `ECS_SERVICE_WORKER`,
    `EXPRESS_SERVICE_ARN`, `EXPRESS_SERVICE_NAME`, `ECS_SUBNETS`,
-   `ECS_SECURITY_GROUPS`, `SCHEDULE_GROUP`. Then push to `main` (or re-run
-   `Deploy dev`).
+   `ECS_SECURITY_GROUPS`. Then push to `main` (or re-run `Deploy dev`).
 10. `just infra-run-task dev python manage.py createsu` (first superuser) and
     `just infra-run-task dev python manage.py shell -c "1/0"` (Sentry smoke:
     the event must carry `environment=dev` and `release=<sha>`).
@@ -222,34 +235,21 @@ identity and change `AppConfig.ses_identity`).
    configuration points at the new revision — a rolled-back deploy fails the
    job loudly.
 3. **worker** — plain `UpdateService` with circuit breaker + rollback.
-4. **scheduled jobs** — `infra/scripts/roll_schedules.sh <group> <revision>`
-   repoints every schedule in the `<app>-<env>` group to the worker
-   revision the release task validated (a Scheduler target pins an exact
-   revision, so without this step cron would keep running the last
-   `cdk deploy`'s code against a migrated database).
 
 Production promotes the exact dev image by manifest retag (build once), then
-runs the same four steps, then tags the release.
+runs the same three steps, then tags the release.
 
-Rollback: re-dispatch `Deploy production` with an older `sha` (services and
-schedules move together), or by hand
-`aws ecs update-express-gateway-service --service-arn … --task-definition-arn <previous>`,
-`aws ecs update-service --cluster <app> --service <app>-<env>-worker --task-definition <previous>`
-and `infra/scripts/roll_schedules.sh <app>-<env> <previous>`.
+Rollback: re-dispatch `Deploy production` with an older `sha`, or by hand
+`aws ecs update-express-gateway-service --service-arn … --task-definition-arn <previous>`
+and `aws ecs update-service --cluster <app> --service <app>-<env>-worker --task-definition <previous>`.
 
-## Scheduled jobs
+## Recurring commands
 
-| Name | Cron (UTC) | Command |
-|---|---|---|
-| clearsessions | `0 3 * * ? *` | `manage.py clearsessions` |
-| prune-task-results | `30 3 * * ? *` | `manage.py prune_db_task_results --min-age-days 14` |
-| reconcile-payments | `*/10 * * * ? *` | `manage.py reconcile_payments` |
-| sweep-deliveries | `*/15 * * * ? *` | `manage.py sweep_deliveries` |
-
-Adding one = a management command (thin wrapper over a service, safe to
-re-run) + a `ScheduledJob` entry in `config.py` + `just infra-deploy <env>`.
-Schedules use no flexible window and no retries: sweeps are idempotent and
-frequent, so the next tick is the retry.
+Nothing runs on a timer yet (decision pending: TODO `scheduling-decision`).
+The idempotent sweeps exist as management commands and are run by hand:
+`just infra-run-task <env> python manage.py reconcile_payments` (payments
+stuck mid-flow), `sweep_deliveries` (notification deliveries),
+`clearsessions`, `prune_db_task_results --min-age-days 14`.
 
 ## Operations
 

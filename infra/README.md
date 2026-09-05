@@ -1,7 +1,7 @@
 # infra/ — AWS CDK (Python)
 
 Infrastructure for the backend: ECS Express Mode (web), Fargate worker, RDS
-PostgreSQL 18, S3 + CloudFront, EventBridge Scheduler. The runbook is
+PostgreSQL 18, S3 + CloudFront. The runbook is
 [`docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md); this folder is the code.
 
 ```
