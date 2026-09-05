@@ -149,10 +149,40 @@ def test_schedules_cover_every_job(
     t = templates[f"App-{env_name}"]
     schedules = t.find_resources("AWS::Scheduler::Schedule")
     assert len(schedules) == len(SCHEDULES)
+    (worker_task_id,) = [
+        logical_id
+        for logical_id, r in t.find_resources("AWS::ECS::TaskDefinition").items()
+        if r["Properties"]["Family"].endswith("-worker")
+    ]
+    (jobs_role_id,) = [
+        logical_id
+        for logical_id, r in t.find_resources("AWS::IAM::Role").items()
+        if r["Properties"]["AssumeRolePolicyDocument"]["Statement"][0]["Principal"]
+        == {"Service": "scheduler.amazonaws.com"}
+    ]
     for r in schedules.values():
         assert r["Properties"]["State"] == "ENABLED"
         assert r["Properties"]["FlexibleTimeWindow"] == {"Mode": "OFF"}
-        assert '"name":"Main"' in r["Properties"]["Target"]["Input"]
+        target = r["Properties"]["Target"]
+        assert '"name":"Main"' in target["Input"]
+        # Pinned to the worker revision CDK registers; the deploy workflow
+        # advances it (roll_schedules.sh) - the group name is its handle.
+        assert target["EcsParameters"]["TaskDefinitionArn"] == {"Ref": worker_task_id}
+        assert target["RoleArn"] == {"Fn::GetAtt": [jobs_role_id, "Arn"]}
+    t.has_output("ScheduleGroupName", {"Value": f"{APP.name}-{env_name}"})
+    # The shared execution role may run EVERY revision of the family, not
+    # just the one CDK bound - a repointed schedule must still start.
+    run_task = [
+        s
+        for p in t.find_resources("AWS::IAM::Policy").values()
+        if p["Properties"]["Roles"] == [{"Ref": jobs_role_id}]
+        for s in p["Properties"]["PolicyDocument"]["Statement"]
+        if s["Action"] == "ecs:RunTask"
+    ]
+    assert any(
+        f"task-definition/{APP.name}-{env_name}-worker:*" in str(s["Resource"])
+        for s in run_task
+    )
 
 
 def test_production_database_is_its_own_protected_stack(
@@ -208,6 +238,13 @@ def test_deploy_role_is_scoped_to_this_app(
     assert isinstance(resources, list)
     patterns = [r for r in resources if isinstance(r, str)]
     assert patterns == [f"arn:aws:iam::{APP.account}:role/{APP.name}-App-*"]
+    passed_to = pass_role["Condition"]["StringEquals"]["iam:PassedToService"]  # type: ignore[index]
+    assert "scheduler.amazonaws.com" in passed_to
+    # Repointing schedules after a rollout: this app's groups only.
+    (update_schedule,) = by_action["scheduler:UpdateSchedule"]
+    assert update_schedule["Resource"] == (
+        f"arn:aws:scheduler:{APP.region}:{APP.account}:schedule/{APP.name}-*/*"
+    )
     (logs_stmt,) = by_action["logs:GetLogEvents"]
     assert all(
         f":log-group:/aws/ecs/{APP.name}-" in r

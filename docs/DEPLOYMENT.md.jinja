@@ -67,12 +67,17 @@ them (see *Account prerequisites*).
 - **CDK owns** every resource, including the task definitions — created from
   the image tag passed as `-c image_tag=<sha>`.
 - **CD mutates** task definitions (new revisions with the new image and
-  `SENTRY_RELEASE`) and repoints the services. CloudFormation ignores that
-  drift; it only re-registers when the *template* changes.
-- `just infra-deploy <env>` reads the currently deployed tag from the ACTIVE
-  worker revision (`infra/scripts/live_context.sh`) before running
-  `cdk deploy`, so a config-only deploy never reverts the image. The first
-  deploy of an environment is `just infra-deploy-first <env> <sha>`.
+  `SENTRY_RELEASE`) and repoints the services AND the scheduled jobs (every
+  schedule in the `<app>-<env>` group pins a worker revision;
+  `infra/scripts/roll_schedules.sh` advances them to the released one).
+  CloudFormation ignores that drift; it only re-registers when the
+  *template* changes - and then binds services and schedules to the
+  revision it registers.
+- `just infra-deploy <env>` reads the tag the worker SERVICE is running
+  (`infra/scripts/live_context.sh`; not the family's latest ACTIVE revision,
+  which a failed release can leave behind) before running `cdk deploy`, so a
+  config-only deploy never reverts the image. The first deploy of an
+  environment is `just infra-deploy-first <env> <sha>`.
 
 ## Cost (eu-central-1, on-demand list prices, 730 h/month)
 
@@ -178,7 +183,8 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    its variables:
    `ECS_CLUSTER`, `ECS_FAMILY_WEB`, `ECS_FAMILY_WORKER`, `ECS_SERVICE_WORKER`,
    `EXPRESS_SERVICE_ARN`, `EXPRESS_SERVICE_NAME`, `ECS_SUBNETS`,
-   `ECS_SECURITY_GROUPS`. Then push to `main` (or re-run `Deploy dev`).
+   `ECS_SECURITY_GROUPS`, `SCHEDULE_GROUP`. Then push to `main` (or re-run
+   `Deploy dev`).
 10. `just infra-run-task dev python manage.py createsu` (first superuser) and
     `just infra-run-task dev python manage.py shell -c "1/0"` (Sentry smoke:
     the event must carry `environment=dev` and `release=<sha>`).
@@ -216,13 +222,20 @@ identity and change `AppConfig.ses_identity`).
    configuration points at the new revision — a rolled-back deploy fails the
    job loudly.
 3. **worker** — plain `UpdateService` with circuit breaker + rollback.
+4. **scheduled jobs** — `infra/scripts/roll_schedules.sh <group> <revision>`
+   repoints every schedule in the `<app>-<env>` group to the worker
+   revision the release task validated (a Scheduler target pins an exact
+   revision, so without this step cron would keep running the last
+   `cdk deploy`'s code against a migrated database).
 
 Production promotes the exact dev image by manifest retag (build once), then
-runs the same three steps, then tags the release.
+runs the same four steps, then tags the release.
 
-Rollback: re-dispatch `Deploy production` with an older `sha`, or by hand
-`aws ecs update-express-gateway-service --service-arn … --task-definition-arn <previous>`
-and `aws ecs update-service --cluster <app> --service <app>-<env>-worker --task-definition <previous>`.
+Rollback: re-dispatch `Deploy production` with an older `sha` (services and
+schedules move together), or by hand
+`aws ecs update-express-gateway-service --service-arn … --task-definition-arn <previous>`,
+`aws ecs update-service --cluster <app> --service <app>-<env>-worker --task-definition <previous>`
+and `infra/scripts/roll_schedules.sh <app>-<env> <previous>`.
 
 ## Scheduled jobs
 

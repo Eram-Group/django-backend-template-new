@@ -1,9 +1,21 @@
-"""EventBridge Scheduler -> ecs:RunTask, one schedule per management command."""
+"""EventBridge Scheduler -> ecs:RunTask, one schedule per management command.
 
+Every schedule targets the worker task definition BY REVISION (a Scheduler
+target pins an exact ARN). CDK binds the revision it registers; the deploy
+workflow then advances every schedule in the group to the revision it
+rolled out (``infra/scripts/roll_schedules.sh``), so scheduled jobs always
+run the released code, never the last ``cdk deploy``'s. The execution role
+is created here, once, and may run ANY revision of the family - otherwise
+a schedule repointed by CD would be refused by a revision-pinned grant.
+"""
+
+from aws_cdk import ArnFormat
 from aws_cdk import Duration
 from aws_cdk import RemovalPolicy
+from aws_cdk import Stack
 from aws_cdk import aws_ec2 as ec2
 from aws_cdk import aws_ecs as ecs
+from aws_cdk import aws_iam as iam
 from aws_cdk import aws_scheduler as scheduler
 from aws_cdk import aws_scheduler_targets as targets
 from constructs import Construct
@@ -35,6 +47,7 @@ def scheduled_jobs(
         schedule_group_name=group_name,
         removal_policy=RemovalPolicy.DESTROY,
     )
+    role = _jobs_role(scope, cluster=cluster, task_definition=task_definition)
     for job in jobs:
         scheduler.Schedule(
             scope,
@@ -49,6 +62,7 @@ def scheduled_jobs(
             target=targets.EcsRunFargateTask(
                 cluster,
                 task_definition=task_definition,
+                role=role,
                 vpc_subnets=ec2.SubnetSelection(subnet_type=ec2.SubnetType.PUBLIC),
                 security_groups=[security_group],
                 assign_public_ip=True,
@@ -68,3 +82,35 @@ def scheduled_jobs(
             ),
         )
     return group
+
+
+def _jobs_role(
+    scope: Construct,
+    *,
+    cluster: ecs.ICluster,
+    task_definition: ecs.FargateTaskDefinition,
+) -> iam.Role:
+    """The role Scheduler assumes to start a job. CDK's templated target
+    grants the revision it knows; this grant covers every revision of the
+    family so the deploy workflow can repoint the schedules."""
+    role = iam.Role(
+        scope,
+        "JobsRole",
+        assumed_by=iam.ServicePrincipal("scheduler.amazonaws.com"),
+        description="EventBridge Scheduler execution role for the scheduled jobs",
+    )
+    role.add_to_policy(
+        iam.PolicyStatement(
+            actions=["ecs:RunTask"],
+            resources=[
+                Stack.of(scope).format_arn(
+                    service="ecs",
+                    resource="task-definition",
+                    resource_name=f"{task_definition.family}:*",
+                    arn_format=ArnFormat.SLASH_RESOURCE_NAME,
+                )
+            ],
+            conditions={"ArnEquals": {"ecs:cluster": cluster.cluster_arn}},
+        )
+    )
+    return role

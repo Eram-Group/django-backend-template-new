@@ -214,7 +214,7 @@ class AppEnvStack(Stack):
             image_tag=image_tag,
             execute_before=[self.web, self.worker],
         )
-        scheduled_jobs(
+        schedule_group = scheduled_jobs(
             self,
             group_name=f"{app.name}-{cfg.name}",
             jobs=SCHEDULES,
@@ -230,6 +230,7 @@ class AppEnvStack(Stack):
         CfnOutput(self, "WorkerServiceName", value=naming.worker_family(app, cfg))
         CfnOutput(self, "WebFamily", value=naming.web_family(app, cfg))
         CfnOutput(self, "WorkerFamily", value=naming.worker_family(app, cfg))
+        CfnOutput(self, "ScheduleGroupName", value=schedule_group.schedule_group_name)
         CfnOutput(self, "Subnets", value=",".join(subnet_ids))
         CfnOutput(self, "SecurityGroup", value=app_sg.security_group_id)
         CfnOutput(self, "Bucket", value=storage.bucket.bucket_name)

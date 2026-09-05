@@ -69,6 +69,7 @@ def github_deploy_role(
     ecr_repository_arn: str,
     cluster_arn: str,
     task_definition_arn_pattern: str,
+    schedule_arn_pattern: str,
     log_group_arns: list[str],
     passable_role_arns: list[str],
 ) -> iam.Role:
@@ -163,6 +164,18 @@ def github_deploy_role(
             resources=["*"],
         )
     )
+    # Scheduled jobs follow the release: after the worker rolls, the workflow
+    # repoints every schedule in this app's groups to the new revision
+    # (infra/scripts/roll_schedules.sh). ListSchedules has no resource ARN.
+    role.add_to_policy(
+        iam.PolicyStatement(actions=["scheduler:ListSchedules"], resources=["*"])
+    )
+    role.add_to_policy(
+        iam.PolicyStatement(
+            actions=["scheduler:GetSchedule", "scheduler:UpdateSchedule"],
+            resources=[schedule_arn_pattern],
+        )
+    )
     role.add_to_policy(
         iam.PolicyStatement(
             actions=["iam:PassRole"],
@@ -172,6 +185,8 @@ def github_deploy_role(
                     "iam:PassedToService": [
                         "ecs-tasks.amazonaws.com",
                         "ecs.amazonaws.com",
+                        # UpdateSchedule re-sends the target's execution role.
+                        "scheduler.amazonaws.com",
                     ]
                 }
             },

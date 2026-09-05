@@ -54,10 +54,11 @@ its own app (as zones is), not a conditional.
    `git init && git add -A && cp .env.example .env`, then `just gates` and
    `just infra-gates` - exactly what `.github/workflows/template.yml` runs
    for every preset on every push.
-   Copier clones a git source at its HEAD commit, so uncommitted template
-   edits are NOT rendered from `.` - commit first, or generate from a plain
-   copy of the working tree (`rsync -a --exclude .git --exclude build . /tmp/tpl`
-   then `copier copy ... /tmp/tpl build/<preset>`).
+   Copier renders a git source at its latest TAG by default - pass
+   `--vcs-ref HEAD` to render the current commit; with it, uncommitted edits
+   in the working tree ARE included (Copier 9.17 commits them into a
+   temporary clone and warns `DirtyLocalWarning`), so no rsync copy of the
+   tree is needed.
 2. Make the change in the generated tree, watch the gates, then back-port it
    into the template source (`.jinja` or plain file). Never commit `build/`.
 3. Add a preset when a new answer combination needs its own proof; the

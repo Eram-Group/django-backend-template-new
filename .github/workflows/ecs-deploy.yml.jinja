@@ -56,6 +56,7 @@ jobs:
       # No `service`: the action registers the revision and runs the one-off
       # task only. Always on-demand Fargate, even where the worker runs on Spot.
       - name: Release task
+        id: release
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render-worker.outputs.task-definition }}
@@ -123,4 +124,18 @@ jobs:
           cluster: ${{ vars.ECS_CLUSTER }}
           service: ${{ vars.ECS_SERVICE_WORKER }}
           wait-for-service-stability: true
-          wait-for-minutes: 12{% endraw %}
+          wait-for-minutes: 12
+
+      # Scheduled jobs pin a task-definition revision (CDK bound the one it
+      # registered). Repoint every schedule to the revision that just rolled
+      # out - the SAME revision the release task validated - so cron runs the
+      # released code. A rollback re-dispatch moves them back the same way.
+      - name: Checkout deploy scripts
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: infra/scripts
+      - name: Roll scheduled jobs
+        env:
+          SCHEDULE_GROUP: ${{ vars.SCHEDULE_GROUP }}
+          TASK_DEF_ARN: ${{ steps.release.outputs.task-definition-arn }}
+        run: infra/scripts/roll_schedules.sh "$SCHEDULE_GROUP" "$TASK_DEF_ARN"{% endraw %}
