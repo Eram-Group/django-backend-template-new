@@ -39,10 +39,9 @@ PUBLIC_CODES = {
     "wallet_not_found",
     "webhook_rejected",
     "location",
-    "invalid_coordinates",
 }
 #: Only in projects generated with the PostGIS knob (apps.zones).
-ZONES_CODES = {"zones", "zone_file"}
+ZONES_CODES = {"zones", "zone_file", "invalid_coordinates"}
 
 
 def _subclasses(cls: type[ApplicationError]) -> set[type[ApplicationError]]:
@@ -54,9 +53,11 @@ def _subclasses(cls: type[ApplicationError]) -> set[type[ApplicationError]]:
 
 
 def test_every_public_error_code_is_snapshotted() -> None:
-    # Import every app's exceptions so the registry is complete.
+    # Import every module that defines public errors so the registry is
+    # complete whatever else the test run happened to import.
+    import_module("apps.common.pagination")
     for app_config in apps.get_app_configs():
-        if app_config.name.startswith("apps."):
+        if app_config.name.startswith("apps.") and app_config.name != "apps.common":
             import_module(f"{app_config.name}.exceptions")
     expected = set(PUBLIC_CODES)
     if apps.is_installed("apps.zones"):
