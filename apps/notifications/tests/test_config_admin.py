@@ -114,7 +114,7 @@ class TestEditorPage:
 
     def test_every_catalog_context_key_has_an_example_value(self) -> None:
         """Insert chips (tooltip and "{" menu) need an example per placeholder."""
-        from apps.notifications.admin.notificationkindconfig.form import SAMPLE_VALUES
+        from apps.notifications.admin.forms import SAMPLE_VALUES
 
         keys = set().union(*(entry.context_keys for entry in CATALOG.values()))
 

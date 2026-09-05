@@ -1,13 +1,13 @@
-"""Scaffold a per-entity admin package: manage.py generate_dashboard <app> <Model>.
+"""Scaffold an admin module: manage.py generate_dashboard <app> <Model>.
 
-Emits admin/<entity>/{__init__,admin,list_view,change_view,permissions,
-resource}.py + CHECKLIST.md on the apps.common.admin framework (the admin
-class picks the sibling modules' constants up by name). The
-package is complete, real code with exactly one hole: the three capability
+Emits ``admin/<entity>.py`` on the apps.common.admin framework and appends the
+model's export resource to ``admin/resources.py`` (created if missing). The
+module is complete, real code with exactly one hole: the three capability
 flags are ``...`` so the admin fails at import until a human decides them.
 Existing files are never overwritten.
 """
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -16,56 +16,58 @@ from django.core.management.base import BaseCommand
 from django.core.management.base import CommandError
 from django.core.management.base import CommandParser
 
-TEMPLATES: dict[str, str] = {
-    "__init__.py": """from {app_name}.admin.{entity}.admin import {model}Admin
+ADMIN_TEMPLATE = """from django.contrib import admin
 
-__all__ = ["{model}Admin"]
-""",
-    "permissions.py": '''"""Capability + field decisions for the {model} admin."""
-
+from {app_name}.admin.resources import {model}Resource
+from {app_name}.models import {model}
+from apps.common.admin import BaseModelAdmin
 from apps.common.admin import FieldPermissions
 
-# Decide each one; the admin refuses to import while any is still `...`.
-CAN_ADD = ...
-CAN_CHANGE = ...
-CAN_DELETE = ...
 
-# Per-request rules: readonly_when / hidden_when keyed by field name, valued
-# by a rule (on_change, or lambda ctx: ...). Rules auto-cover modeltranslation
-# _ar/_en shadow columns. Unconditionally readonly fields belong in
-# change_view.READONLY_FIELDS instead.
-FIELD_PERMISSIONS = FieldPermissions()
-''',
-    "list_view.py": '''"""Changelist configuration for {model}."""
+@admin.register({model})
+class {model}Admin(BaseModelAdmin):
+    # Decide each one; the admin refuses to import while any is still `...`.
+    can_add = ...
+    can_change = ...
+    can_delete = ...
+    # Per-request rules: readonly_when / hidden_when keyed by field name, valued
+    # by a rule (on_change, or lambda ctx: ...). Rules auto-cover modeltranslation
+    # _ar/_en shadow columns. Unconditionally readonly fields belong in
+    # readonly_fields instead.
+    field_permissions = FieldPermissions()
+    resource_classes = [{model}Resource]
 
-LIST_DISPLAY = ("__str__", "created_at")
-LIST_FILTER = ()
-LIST_FILTER_SUBMIT = False
-SEARCH_FIELDS = ()
-SEARCH_HELP_TEXT = ""
-ORDERING = ("-created_at",)
-LIST_PER_PAGE = 50
-''',
-    "change_view.py": '''"""Change-form configuration for {model}."""
+    list_display = ("__str__", "created_at")
+    list_filter = ()
+    list_filter_submit = False
+    search_fields = ()
+    search_help_text = ""
+    ordering = ("-created_at",)
+    list_per_page = 50
 
-FIELDSETS = (
-    (
-        None,
-        {{
-            "fields": (
+    fieldsets = (
+        (
+            None,
+            {{
+                "fields": (
 {fieldset_rows}
-            )
-        }},
-    ),
-    ("Dates", {{"fields": ("created_at", "updated_at")}}),
-)
-READONLY_FIELDS = ()
-''',
-    "resource.py": '''"""Import-export resource for {model} (explicit fields only)."""
+                )
+            }},
+        ),
+        ("Dates", {{"fields": ("created_at", "updated_at")}}),
+    )
+    readonly_fields = ()
+"""
 
-from {app_name}.models import {model}
+RESOURCES_HEADER = '''"""Import-export resources for {app_label} - explicit fields only.
+
+Exports are read by non-engineers - never raw provider payloads or credentials.
+"""
+
 from apps.common.admin import BaseModelResource
+'''
 
+RESOURCE_TEMPLATE = """
 
 class {model}Resource(BaseModelResource):
     class Meta:
@@ -75,35 +77,16 @@ class {model}Resource(BaseModelResource):
 {resource_rows}
             "created_at",
         )
-''',
-    "admin.py": """from django.contrib import admin
-
-from {app_name}.admin.{entity}.resource import {model}Resource
-from {app_name}.models import {model}
-from apps.common.admin import BaseModelAdmin
+"""
 
 
-@admin.register({model})
-class {model}Admin(BaseModelAdmin):
-    # permissions.py / list_view.py / change_view.py constants land here by
-    # name (apps.common.admin.package); this body holds behaviour only.
-    resource_classes = [{model}Resource]
-""",
-    "CHECKLIST.md": """# {model} admin checklist
-
-- [ ] permissions: CAN_ADD / CAN_CHANGE / CAN_DELETE decided (undecided = import error)
-- [ ] permissions: FieldPermissions rules for conditionally readonly/hidden fields
-- [ ] list_view: list_display / search_fields (+ translated help text) / filters
-- [ ] change_view: fieldsets reviewed; always-readonly fields in READONLY_FIELDS
-- [ ] resource: export fields reviewed (no secrets)
-- [ ] if {model} embeds on a parent admin, add an inline by hand (Base*Inline)
-- [ ] registered import: {app_name}/admin/__init__.py imports {model}Admin
-""",
-}
+def _entity_name(model_name: str) -> str:
+    """CamelCase -> snake_case module name (WalletTransaction -> wallet_transaction)."""
+    return re.sub(r"(?<!^)(?=[A-Z])", "_", model_name).lower()
 
 
 class Command(BaseCommand):
-    help = "Scaffold an admin/<entity>/ package wired to apps.common.admin."
+    help = "Scaffold admin/<entity>.py (+ its export resource) on apps.common.admin."
 
     def add_arguments(self, parser: CommandParser) -> None:
         parser.add_argument("app_label", help="App label, e.g. users")
@@ -118,11 +101,18 @@ class Command(BaseCommand):
             raise CommandError(str(exc)) from exc
 
         app_config = apps.get_app_config(app_label)
-        entity = model.__name__.lower()
-        target = Path(app_config.path) / "admin" / entity
-        existing = sorted(name for name in TEMPLATES if (target / name).exists())
-        if existing:
-            msg = f"{target}: already has {', '.join(existing)} - not overwriting."
+        admin_dir = Path(app_config.path) / "admin"
+        module = admin_dir / f"{_entity_name(model.__name__)}.py"
+        resources = admin_dir / "resources.py"
+        if module.exists():
+            msg = f"{module}: already exists - not overwriting."
+            raise CommandError(msg)
+        resource_class = f"class {model.__name__}Resource("
+        if resources.exists() and resource_class in resources.read_text():
+            msg = (
+                f"{resources}: already defines {model.__name__}Resource - "
+                "not overwriting."
+            )
             raise CommandError(msg)
 
         concrete_fields = [
@@ -134,21 +124,43 @@ class Command(BaseCommand):
         ]
         substitutions = {
             "app_name": app_config.name,
-            "entity": entity,
+            "app_label": app_label,
             "model": model.__name__,
             "fieldset_rows": "\n".join(
-                f'                "{name}",' for name in concrete_fields
+                f'                    "{name}",' for name in concrete_fields
             ),
             "resource_rows": "\n".join(
                 f'            "{name}",' for name in concrete_fields
             ),
         }
-        target.mkdir(parents=True)
-        for filename, template in TEMPLATES.items():
-            (target / filename).write_text(template.format(**substitutions))
+        admin_dir.mkdir(parents=True, exist_ok=True)
+        if not resources.exists():
+            resources.write_text(
+                RESOURCES_HEADER.format(**substitutions)
+                + f"from {app_config.name}.models import {model.__name__}\n"
+            )
+        else:
+            text = resources.read_text()
+            model_import = f"from {app_config.name}.models import {model.__name__}\n"
+            if model_import not in text:
+                # Keep the import block together: after the last import line.
+                lines = text.splitlines(keepends=True)
+                last = max(
+                    i for i, line in enumerate(lines) if line.startswith("from ")
+                )
+                lines.insert(last + 1, model_import)
+                text = "".join(lines)
+            resources.write_text(text)
+        with resources.open("a") as handle:
+            handle.write(RESOURCE_TEMPLATE.format(**substitutions))
+        module.write_text(ADMIN_TEMPLATE.format(**substitutions))
 
-        self.stdout.write(self.style.SUCCESS(f"{target}: wrote {', '.join(TEMPLATES)}"))
         self.stdout.write(
-            f"Next: decide permissions.py, import {model.__name__}Admin in "
-            f"{app_config.name}.admin (__init__.py), then work the CHECKLIST."
+            self.style.SUCCESS(
+                f"wrote {module} and {model.__name__}Resource in {resources}"
+            )
+        )
+        self.stdout.write(
+            f"Next: decide can_add/can_change/can_delete in {module.name}, then "
+            f"import {model.__name__}Admin in {app_config.name}.admin (__init__.py)."
         )

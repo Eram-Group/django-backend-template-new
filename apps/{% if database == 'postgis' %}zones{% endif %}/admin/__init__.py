@@ -1,3 +1,3 @@
-from apps.zones.admin.zone.admin import ZoneAdmin
+from apps.zones.admin.zone import ZoneAdmin
 
 __all__ = ["ZoneAdmin"]

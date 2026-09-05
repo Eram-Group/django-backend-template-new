@@ -1,10 +1,8 @@
-from apps.notifications.admin.broadcast.admin import BroadcastAdmin
-from apps.notifications.admin.device.admin import DeviceAdmin
-from apps.notifications.admin.notification.admin import NotificationAdmin
-from apps.notifications.admin.notificationdelivery.admin import (
-    NotificationDeliveryAdmin,
-)
-from apps.notifications.admin.notificationkindconfig.admin import (
+from apps.notifications.admin.broadcast import BroadcastAdmin
+from apps.notifications.admin.device import DeviceAdmin
+from apps.notifications.admin.notification import NotificationAdmin
+from apps.notifications.admin.notification_delivery import NotificationDeliveryAdmin
+from apps.notifications.admin.notification_kind_config import (
     NotificationKindConfigAdmin,
 )
 

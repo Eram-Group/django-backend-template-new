@@ -20,7 +20,6 @@ from apps.common.admin.context import AdminContext
 from apps.common.admin.declarations import require_declared
 from apps.common.admin.field_permissions import FieldRuleLookups
 from apps.common.admin.inlines import InlineDiscipline
-from apps.common.admin.package import wire_package_declarations
 from apps.common.admin.resources import BaseModelResource
 
 REQUIRED_DECLARATIONS = {
@@ -38,11 +37,10 @@ class BaseModelAdmin(FieldRuleLookups, ModelAdmin, ExportActionModelAdmin):
       on the class or an ancestor (loud import-time failure; intermediates
       that decide nothing set ``abstract_admin = True`` in their own body).
       Per-OBJECT decisions: override has_change_permission/has_delete_permission.
-    - In a per-entity package (``admin/<entity>/``) the flags, field rules
-      and changelist/change-form settings are the UPPER_CASE constants of
-      the sibling ``permissions`` / ``list_view`` / ``change_view`` modules,
-      wired onto the class by name (``apps.common.admin.package``) - the
-      class body holds only behaviour (actions, querysets, save_model).
+    - One module per entity (``admin/<entity>.py``): the flags, field rules
+      and changelist/change-form settings are ordinary class attributes,
+      declared next to the behaviour they configure; export resources live
+      in the app's ``admin/resources.py`` and forms in ``admin/forms.py``.
     - field_permissions rules shape the form AND the declared fieldsets AND
       list_display per request/object (state-conditional views: use
       ctx.is_add / ctx.is_change in a hidden_when rule). Emptied fieldsets
@@ -65,9 +63,9 @@ class BaseModelAdmin(FieldRuleLookups, ModelAdmin, ExportActionModelAdmin):
     # Declare `abstract_admin = True` in an intermediate's own body to skip
     # the declaration enforcement; the flag deliberately does NOT inherit.
     abstract_admin: ClassVar[bool]
-    # django-stubs types this with a TypedDict that the plain dict literals in
-    # change_view modules do not satisfy; Django's admin checks validate the
-    # shape at startup (admin.E0xx) - keep the modules literal.
+    # django-stubs types this with a TypedDict that plain dict literals do
+    # not satisfy; Django's admin checks validate the shape at startup
+    # (admin.E0xx) - keep the declarations literal.
     fieldsets: ClassVar[Any]
 
     export_form_class = SelectableFieldsExportForm
@@ -95,9 +93,6 @@ class BaseModelAdmin(FieldRuleLookups, ModelAdmin, ExportActionModelAdmin):
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        # Per-entity packages: permissions/list_view/change_view constants
-        # land on the class by name (see apps.common.admin.package).
-        wire_package_declarations(cls)
         # Django's changelist formset reads self.list_editable directly and
         # never consults per-request readonly/hidden rules, so a ruled field
         # in list_editable would be bulk-editable from the changelist.

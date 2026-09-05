@@ -1,3 +1,3 @@
-from apps.location.admin.country.admin import CountryAdmin
+from apps.location.admin.country import CountryAdmin
 
 __all__ = ["CountryAdmin"]

@@ -243,7 +243,7 @@
       "endGoal": "Zones are data, not code: staff create/edit zones in the admin dashboard, the app reads them at runtime through selectors, and zone changes require no deploy.",
       "tips": [
         "Requested by Omar 2026-07-18. Scope to clarify with Omar before building: what a zone is (geographic service/delivery area? pricing region? country subdivision?) and which app owns it (likely a new bounded-context app per the one-app-one-domain rule).",
-        "Follow the house patterns: model inherits BaseModel (uuidv7 pk) + factory registered in factories_registry (coverage gate), admin package scaffolded via `manage.py generate_dashboard <app> Zone`, writes through a zone service, reads through selectors.",
+        "Follow the house patterns: model inherits BaseModel (uuidv7 pk) + factory registered in factories_registry (coverage gate), admin module scaffolded via `manage.py generate_dashboard <app> Zone`, writes through a zone service, reads through selectors.",
         "Zone names are user-facing: per-app translation.py (django-modeltranslation) for Arabic-first naming.",
         "If zones are geometric (polygons/radii) decide storage early: PostGIS/GeoDjango is a real infra dependency (RDS supports it) vs simple structured fields (city/district lists) - record the decision here.",
         "2026-08-29: apps/location now exists (Country loaded from the admin sheet); a Region/Zone model belongs in the same app, FK -> location.Country (PROTECT).",

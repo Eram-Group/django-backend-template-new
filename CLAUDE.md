@@ -48,8 +48,9 @@ tracker; neither is generated into projects.
   referenced by value in `AppConfig`, never created — this template is
   copied into many apps and none may own them.
 - Admin: subclass `apps.common.admin.BaseModelAdmin`; declare
-  `can_add/can_change/can_delete`; field rules via `FieldPermissions`;
-  scaffold new packages with `manage.py generate_dashboard <app> <Model>`.
+  `can_add/can_change/can_delete`; field rules via `FieldPermissions`; one
+  module per entity (`admin/<entity>.py`, resources in `admin/resources.py`);
+  scaffold new admins with `manage.py generate_dashboard <app> <Model>`.
 - Arabic-first: `gettext_lazy` for strings; user-facing emails render in
   `user.language`; content models use per-app `translation.py`.
 - Models inherit `apps.common.models.BaseModel` (db-generated uuidv7 pk);

@@ -33,7 +33,7 @@ apps/<app>/
 ├── services/      writes/business logic; typed keyword-only <entity>_<action>()
 ├── schemas/       ninja Schemas (I/O shapes)
 ├── apis/          routers - no business logic
-├── admin/         one package per entity (generate_dashboard scaffolds it)
+├── admin/         one module per entity + resources.py/forms.py (generate_dashboard scaffolds it)
 ├── management/    thin commands calling services
 └── tests/         factories.py + test modules
 ```
@@ -415,12 +415,12 @@ docstrings; proven by the admin-basics gate):
   their own body. The same discipline applies to inlines
   (`BaseTabularInline`/`BaseStackedInline`); display-only child rows are the
   three flags set to False.
-- Per-entity packages (`admin/<entity>/`) keep the decisions as UPPER_CASE
-  constants in `permissions.py` / `list_view.py` / `change_view.py`; the
-  admin class receives each one as its lower-cased attribute automatically
-  (`apps/common/admin/package.py`). A constant with no matching attribute
-  is an import-time error, so nothing can be declared and then dropped; a
-  value set in the class body wins. `admin.py` holds behaviour only.
+- One module per entity (`admin/<entity>.py`): capability flags, field
+  rules, changelist and change-form settings are ordinary class attributes,
+  declared next to the behaviour they configure (the reasons for each
+  decision live in comments on the attribute). Export resources live in
+  the app's `admin/resources.py` (one class per admin), forms in
+  `admin/forms.py`; inlines sit beside the admin of the model they show.
 - `FieldPermissions(readonly_when=…, hidden_when=…)` drives per-request
   field behavior through `AdminContext` (`ctx.is_add`, `ctx.is_change`,
   `ctx.user`, `ctx.is_superuser`) — one implementation (`FieldRuleLookups`)
@@ -456,10 +456,11 @@ docstrings; proven by the admin-basics gate):
   item (gate-enforced consistency). unfold also supports live `badge`
   callables (dotted path, `request -> str`, `""` hides) — use a selector
   behind it and mind that it runs a query per admin page render.
-- New entity → `manage.py generate_dashboard <app> <Model>` scaffolds the
-  `admin/<entity>/` package + checklist: complete code whose capability
-  flags are `...` — the admin refuses to import until a human decides them.
-  Existing packages are never overwritten.
+- New entity → `manage.py generate_dashboard <app> <Model>` scaffolds
+  `admin/<entity>.py` and appends the export resource to
+  `admin/resources.py`: complete code whose capability flags are `...` —
+  the admin refuses to import until a human decides them. Existing files
+  are never overwritten.
 - Reads may use admin querysets; anything with business meaning calls the
   service — logic is never duplicated in admin.
 - Third-party admins get re-registered when their defaults don't fit
