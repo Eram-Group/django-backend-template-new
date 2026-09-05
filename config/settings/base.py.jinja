@@ -10,6 +10,7 @@ from typing import Any
 
 import dj_database_url
 import structlog
+from corsheaders.defaults import default_headers
 from django.templatetags.static import static
 from django.urls import reverse_lazy
 from django.utils.csp import CSP
@@ -616,6 +617,10 @@ SECURE_CSP: dict[str, list[str]] = {
 # --- Cross-origin (browser SPA clients) ----------------------------------------
 CORS_ALLOWED_ORIGINS = env.FRONTEND_ALLOWED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
+# A browser SPA on the app-client (token) flow sends the allauth headless
+# session token in a custom header; a preflight that does not list it fails
+# the request before it reaches the API.
+CORS_ALLOW_HEADERS = (*default_headers, "x-session-token")
 
 # Only the API surfaces are cross-origin; the admin (and anything else) must
 # never carry credentialed CORS headers for the frontend origins.

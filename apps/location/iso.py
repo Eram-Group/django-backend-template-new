@@ -13,6 +13,7 @@ import phonenumbers
 import pycountry
 from babel import Locale
 from babel.numbers import get_territory_currencies
+from phonenumbers import PhoneMetadata
 
 _ARABIC = Locale.parse("ar")
 _ENGLISH = Locale.parse("en")
@@ -74,11 +75,20 @@ def _iso_country(code: str) -> CountryData | None:
         phone_example=phonenumbers.format_number(
             example, phonenumbers.PhoneNumberFormat.INTERNATIONAL
         ),
-        # One example's national digit count: a client-side input hint, not
-        # a validator - phonenumbers validates real numbers.
-        max_phone_length=len(str(example.national_number)),
+        # The longest national number the region's dial plan allows (any
+        # number type) - safe as a client-side maxlength; phonenumbers still
+        # validates real numbers.
+        max_phone_length=_max_national_length(code),
         currency=currencies[0],
     )
+
+
+def _max_national_length(code: str) -> int:
+    metadata = PhoneMetadata.metadata_for_region(code)
+    if metadata is None or not metadata.general_desc.possible_length:
+        msg = f"phonenumbers has no dial plan for {code}"
+        raise LookupError(msg)
+    return max(metadata.general_desc.possible_length)
 
 
 @cache

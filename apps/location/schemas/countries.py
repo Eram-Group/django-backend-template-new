@@ -1,5 +1,6 @@
 import uuid
 
+from ninja import Field
 from ninja import Schema
 
 from apps.location.models import Country
@@ -14,7 +15,12 @@ class CountrySummary(Schema):
     name: str
     dial_code: str
     phone_example: str
-    max_phone_length: int
+    max_phone_length: int = Field(
+        description=(
+            "Longest national number (digits, no dial code) the country's "
+            "dial plan allows - safe as the input's maxlength."
+        )
+    )
     currency: str
     flag_url: str | None
 

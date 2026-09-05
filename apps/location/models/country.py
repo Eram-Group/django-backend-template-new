@@ -28,7 +28,10 @@ class Country(BaseModel):
     dial_code = models.CharField(_("dial code"), max_length=5)
     phone_example = models.CharField(_("phone example"), max_length=32)
     # Digit count of the ISO example number - a client input hint only.
-    max_phone_length = models.PositiveSmallIntegerField(_("max phone length"))
+    max_phone_length = models.PositiveSmallIntegerField(
+        _("max phone length"),
+        help_text=_("Longest national number the dial plan allows (digits)."),
+    )
     # CLDR tender currency (ISO 4217). Deliberately not payments.Currency:
     # that enum is the set our gateways can charge, a subset of this.
     currency = models.CharField(_("currency"), max_length=3, db_index=True)

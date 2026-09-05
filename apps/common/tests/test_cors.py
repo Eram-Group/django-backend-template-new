@@ -22,6 +22,20 @@ def test_allauth_responses_carry_cors_headers(client: Client) -> None:
     assert response.headers.get("Access-Control-Allow-Origin") == _origin()
 
 
+def test_preflight_allows_the_session_token_header(client: Client) -> None:
+    """The app-client auth flow (X-Session-Token, config/api/auth.py) must
+    survive a browser preflight from an allowed origin."""
+    response = client.options(
+        "/api/v1/users/me",
+        HTTP_ORIGIN=_origin(),
+        HTTP_ACCESS_CONTROL_REQUEST_METHOD="PATCH",
+        HTTP_ACCESS_CONTROL_REQUEST_HEADERS="content-type,x-session-token",
+    )
+    allowed = response.headers.get("Access-Control-Allow-Headers", "").lower()
+    assert "x-session-token" in allowed
+    assert "content-type" in allowed
+
+
 def test_admin_responses_never_carry_cors_headers(client: Client) -> None:
     response = client.get("/admin/login/", HTTP_ORIGIN=_origin())
     assert "Access-Control-Allow-Origin" not in response.headers

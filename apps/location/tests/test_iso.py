@@ -14,9 +14,17 @@ def test_build_returns_full_data() -> None:
     assert country.alpha_3 == "SAU"
     assert country.currency == "SAR"
     assert country.dial_code == "+966"
-    assert country.max_phone_length == 9
+    assert country.max_phone_length == 10  # 9 or 10 digits: the max, not an example
     assert country.phone_example.startswith("+966 ")
     assert country.flag_emoji == "🇸🇦"
+
+
+def test_max_phone_length_is_the_dial_plans_longest_number() -> None:
+    """A client may use it as ``maxlength``: an example's length (EG 9,
+    DE 8) would truncate valid numbers."""
+    assert iso_country("EG").max_phone_length == 10  # type: ignore[union-attr]
+    assert iso_country("DE").max_phone_length == 15  # type: ignore[union-attr]
+    assert iso_country("US").max_phone_length == 10  # type: ignore[union-attr]
 
 
 def test_code_is_normalised() -> None:
