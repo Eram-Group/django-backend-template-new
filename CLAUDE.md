@@ -58,7 +58,8 @@ design log and TODO.json the task tracker.
 
 ## Daily commands
 
-- `just bootstrap` (one-time) · `just run` (dev server) + `just worker`
+- `just bootstrap` (one-time) · `just run` (dev server) + `just worker` (both
+  start postgres + mailpit in compose if they are down; `just stop` stops them)
   (the one dev road; compose runs only postgres + mailpit)
 - `just test` · `just lint` (pre-commit, the single lint source) · `just fmt` ·
   `just typecheck` · `uv run lint-imports`

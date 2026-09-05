@@ -61,7 +61,7 @@ Run `just` for the full list. The ones you'll use daily:
 
 | Recipe | Does |
 |---|---|
-| `just run` | runserver with the local settings module (debug toolbar on) |
+| `just run` | runserver with the local settings module (debug toolbar on); starts postgres + mailpit first if they are down |
 | `just test [args]` | pytest (append paths/flags as needed) |
 | `just lint` / `just fmt` / `just typecheck` | ruff check / ruff format / mypy --strict |
 | `just manage <cmd>` | any manage.py command |

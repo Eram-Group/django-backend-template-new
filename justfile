@@ -22,15 +22,21 @@ bootstrap:
     [ "$(uname)" != Darwin ] || brew list --versions gdal geos >/dev/null || brew install gdal geos
     [ -f .env ] || cp .env.example .env
     uv run pre-commit install --hook-type pre-commit --hook-type pre-push
-    docker compose up -d --wait postgres mailpit
+    just services
     just migrate
 
+# Postgres + Mailpit in compose - idempotent, ~1 s when already up. `run` and
+# `worker` call it, so a stopped stack (just stop, a Docker restart, a reboot)
+# never makes the dev server fail with "connection refused".
+services:
+    docker compose up -d --wait postgres mailpit
+
 # Host dev server (local settings, debug toolbar). Run `just worker` alongside.
-run *args:
+run *args: services
     uv run manage.py runserver {{ args }}
 
 # Drain the DB task queue on the host (`just worker --batch` = drain & exit).
-worker *args:
+worker *args: services
     uv run manage.py db_worker --queue-name default,bulk {{ args }}
 
 # Stop the compose services (keep volumes).
