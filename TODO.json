@@ -112,7 +112,7 @@
         "SMS routing: cover one Saudi number (-> oursms) and one Egyptian number (-> smsmisr) so clients/sms/routing.py is actually observed choosing.",
         "Idempotency: replay the same webhook twice - second delivery must not double-apply the wallet transaction.",
         "Paymob docs review 2026-08-24 (aligned code, not yet observed live): (a) the transaction-inquiry fallback now authenticates with an auth_token minted from PAYMOB_API_KEY in the body - POST /payments/{id}/verify on an UNPAID intention must return the PENDING row, not 503, and on a paid one must settle it; (b) the checkout URL is now https://eg.checkout.paymob.com/?publicKey=..&clientSecret=.. - confirm the hosted page opens without the 302 from the old accept.paymob.com/unifiedcheckout/ path; (c) a same-day refund from the admin: if Paymob rejects a pre-settlement refund, add /api/acceptance/void_refund/void as the fallback INSIDE the same write-ahead-marked attempt (never a second attempt); (d) observe a refund child callback (has_parent_transaction) landing on a REFUNDED row without changing gateway_transaction_id.",
-        "Review 2026-09-05 changes to observe live: (e) Paymob create-intention response carries intention_order_id (stored as Payment.gateway_charge_id; every transaction callback's signed order.id must equal it or the event is refused with PaymentEventMismatchError); (f) GET /api/acceptance/transactions/{id} with a Bearer auth token is what fetch_refund uses to finish a refund Paymob answered pending=true - confirm the auth scheme; (g) Tap: a refund answered ACCEPTED/PENDING keeps the row REFUND_PENDING and the reconcile sweep's GET /v2/refunds/{id} finishes it; (h) the webhook for a row whose checkout response was lost (gateway_charge_id empty) binds from fetch_status - Tap by charge id, Paymob by merchant_order_id inquiry."
+        "Review 2026-09-05 changes to observe live: (e) Paymob create-intention response carries intention_order_id (stored as Payment.gateway_charge_id; every transaction callback's signed order.id must equal it or the event is refused with PaymentEventMismatchError); (f) Tap: a refund answered ACCEPTED/PENDING keeps the row REFUND_PENDING with the refund id for a human to confirm in the dashboard; (h) the webhook for a row whose checkout response was lost (gateway_charge_id empty) binds from fetch_status - Tap by charge id, Paymob by merchant_order_id inquiry."
       ],
       "status": "pending"
     },
@@ -174,11 +174,10 @@
       "id": "domain-app-hardening",
       "group": "G24",
       "title": "Remaining payments/notifications hardening items",
-      "endGoal": "reconcile_payments has a time budget; a real two-connection test covers wallet_apply and the delivery claim; every payments admin has a test; DATA_UPLOAD_MAX_NUMBER_FIELDS is scoped to the form that needs it.",
+      "endGoal": "A real two-connection test covers wallet_apply and the delivery claim; every payments admin has a test; DATA_UPLOAD_MAX_NUMBER_FIELDS is scoped to the form that needs it.",
       "tips": [
         "Done 2026-09-05 (review implementation): provider HTTP outside every lock/transaction; deliveries_resume bounded (RESUME_LIMIT, reports remaining); dispatcher one page per task; notification_render defensive ({key} literal for stale rows, label fallback); task bodies moved to services/execution.py + services/dispatch.py (tasks are trampolines).",
         "Indexes were MEASURED, not added: EXPLAIN ANALYZE on a seeded DB (1.8k users, 3.5k payments, 6.3k notifications) shows payment/notification/wallet-transaction cursor lists served by the FK index + an in-memory sort of a handful of rows (3-9 buffers) - a (owner, id) composite only pays off for owners with thousands of rows; re-measure with a real distribution before adding one. The wallet_transaction filter by wallet_id (3 buffers) vs the wallet__user join (6) is noise at this scale.",
-        "reconcile_payments is serial with no time budget (500 x 10 s worst case) - add a per-run deadline that leaves the rest to the next tick.",
         "Tests: one real two-connection test for wallet_apply and the delivery claim; payments/tests/test_admin.py covers 1 of 4 admins; DATA_UPLOAD_MAX_NUMBER_FIELDS=100_000 (commit 536bf09, 'm2m form limit fields') should be scoped to the form that needs it."
       ],
       "status": "pending"
@@ -287,11 +286,11 @@
       "id": "scheduling-decision",
       "group": "G18",
       "title": "Decide (later) how recurring commands get scheduled",
-      "endGoal": "reconcile_payments (every ~10 min), sweep_deliveries (~15 min), clearsessions and prune_db_task_results (daily) run on a cadence in every environment, always from the released image, with a failure that pages.",
+      "endGoal": "A decision on whether recurring work runs on a timer at all. If yes: a reconcile sweep for payments (lost webhooks, accepted-not-settled refunds via a gateway refund lookup, abandoned-checkout expiry), a delivery sweep, and daily housekeeping, always from the released image, with a failure that pages.",
       "tips": [
-        "Not for now. Until decided, run them by hand: `just infra-run-task <env> python manage.py reconcile_payments` etc.",
-        "Candidates: EventBridge Scheduler -> ecs:RunTask (was implemented and removed; the trap is that a schedule pins a task-definition revision, so CD must repoint every schedule after the worker rolls - see git history 68647cd for a working version incl. the IAM); a `db_worker`-side periodic loop in the worker service (no infra, but couples cadence to the worker process); ECS scheduled tasks via EventBridge rules.",
-        "Whatever is chosen must run the SAME revision the release task validated, retry or page on launch failure, and keep the sweeps idempotent (they already are)."
+        "Not for now. The owner handles stuck state by hand: Sentry ERRORs at every known-risk moment + the admin's \"Needs attention\" badges/filters + the Verify / Re-queue / Resume actions (docs/DEPLOYMENT.md#recovery).",
+        "The sweep commands themselves were removed on 2026-09-05 (reconcile_payments incl. payment_expire + payment_refund_verify + gateway fetch_refund, and sweep_deliveries) - git history 85bc2c9^ has the last working versions with tests.",
+        "Candidates for the timer: EventBridge Scheduler -> ecs:RunTask (was implemented and removed; the trap is that a schedule pins a task-definition revision, so CD must repoint every schedule after the worker rolls - see 68647cd for a working version incl. the IAM); a db_worker-side periodic loop (no infra, couples cadence to the worker process); EventBridge rules."
       ],
       "status": "pending"
     }

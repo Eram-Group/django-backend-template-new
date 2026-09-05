@@ -3,10 +3,11 @@
 A refund is three commits, never one transaction: ``payment_refund_start``
 (the interlock: REFUND_PENDING + wallet debit, in the request),
 ``payment_refund_execute`` (the non-idempotent provider call, in the
-worker, behind a write-ahead marker) and finalization - immediately when
-the provider settles synchronously, otherwise by ``payment_refund_verify``
-from the reconcile sweep once the provider reports completion. A provider
-"accepted" is never treated as "done".
+worker, behind a write-ahead marker) and finalization. A provider
+"accepted" is never treated as "done": the row stays REFUND_PENDING with
+the provider's refund id, an ERROR reaches Sentry, and the admin lists it
+under "Needs attention" until a human confirms it in the provider
+dashboard (there is no automatic follow-up - nothing runs on a timer).
 """
 
 import uuid
@@ -113,8 +114,8 @@ def payment_refund_execute(*, payment_id: uuid.UUID, actor: User | None) -> Paym
 
     Outcome contract: SUCCEEDED finalizes (REFUNDED); FAILED reverts the
     interlock (row back to PAID, wallet compensated - safe to retry);
-    PENDING keeps REFUND_PENDING with the provider's refund id stored, and
-    ``payment_refund_verify`` (reconcile sweep) finishes it.
+    PENDING keeps REFUND_PENDING with the provider's refund id stored for a
+    human to follow up (logged as an error).
 
     Error contract: ``PaymentGatewayUnavailableError`` /
     ``PaymentRefundFailedError`` mean the interlock was reverted. A raw
@@ -162,25 +163,6 @@ def payment_refund_execute(*, payment_id: uuid.UUID, actor: User | None) -> Paym
     return _refund_settle(payment_id=locked.pk, result=result, actor=actor)
 
 
-def payment_refund_verify(*, payment: Payment) -> Payment:
-    """Ask the provider how an accepted refund ended (reconcile sweep).
-
-    Only for REFUND_PENDING rows that carry a provider refund id - the
-    provider accepted the refund but had not settled it when asked. A
-    provider error leaves the row untouched for the next sweep.
-    """
-    if payment.status != PaymentStatus.REFUND_PENDING or not payment.gateway_refund_id:
-        return payment
-    gateway = gateway_by_name(payment.gateway)
-    try:
-        result = gateway.fetch_refund(refund_id=payment.gateway_refund_id)
-    except (OutboundError, GatewayError) as exc:
-        raise PaymentGatewayUnavailableError(
-            str(_("The payment provider is unavailable. Try again shortly."))
-        ) from exc
-    return _refund_settle(payment_id=payment.pk, result=result, actor=None)
-
-
 def _refund_settle(
     *, payment_id: uuid.UUID, result: RefundResult, actor: User | None
 ) -> Payment:
@@ -206,7 +188,9 @@ def _refund_settle(
         _refund_revert(payment_id=payment_id, actor=actor)
         raise PaymentRefundFailedError(str(_("The gateway rejected the refund.")))
     if result.status == RefundStatus.PENDING:
-        logger.info(
+        # Nothing polls the provider: this row needs a human (Sentry + the
+        # admin's "Needs attention" filter both surface it).
+        logger.error(
             "payment_refund_pending_at_provider",
             payment_id=str(payment_id),
             gateway=locked.gateway,

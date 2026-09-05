@@ -66,8 +66,8 @@ _BASE = "https://accept.paymob.com"
 #: ``accept.paymob.com/unifiedcheckout/`` path only survives as a 302.
 _CHECKOUT_BASE = "https://eg.checkout.paymob.com/"
 #: Intention lifetime in seconds - the documented maximum. constants.
-#: PENDING_EXPIRY must stay above this so the reconcile sweep never expires
-#: a checkout the customer can still complete.
+#: PENDING_ATTENTION_AFTER stays above this: a checkout is only flagged once
+#: the customer can no longer complete it.
 INTENTION_EXPIRATION_SECONDS = 3600
 _AUTH_TOKEN_CACHE_KEY = "paymob:auth_token"  # noqa: S105 - cache key, not a secret
 #: Paymob auth tokens live one hour; refresh well before that.
@@ -423,19 +423,6 @@ class PaymobGateway:
             },
             timeout=PROVIDER_TIMEOUT,
             retry="connect-only",
-        )
-        return _refund_result(response.json())
-
-    def fetch_refund(self, *, refund_id: str) -> RefundResult:
-        """The refund child transaction as Paymob holds it (Retrieve
-        Transaction, Bearer auth token)."""
-        response = request_json(
-            service="paymob",
-            method="GET",
-            url=f"{_BASE}/api/acceptance/transactions/{refund_id}",
-            headers={"Authorization": f"Bearer {self._auth_token()}"},
-            timeout=PROVIDER_TIMEOUT,
-            retry="transient",  # read-only
         )
         return _refund_result(response.json())
 

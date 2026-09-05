@@ -44,12 +44,10 @@ TERMINAL_STATUSES = frozenset(
     {PaymentStatus.PAID, PaymentStatus.REFUND_PENDING, PaymentStatus.REFUNDED}
 )
 
-#: How long a PENDING checkout may stay open before the reconcile sweep
-#: marks it FAILED (abandoned). Must exceed every gateway's hosted-session
-#: lifetime (Paymob intentions live at most one hour) so a checkout that is
-#: still payable is never expired underneath the customer. FAILED stays
-#: non-terminal, so a late webhook still heals a wrongly-expired row.
-PENDING_EXPIRY = timedelta(hours=2)
+#: A PENDING checkout older than this has outlived every gateway's hosted
+#: session (Paymob intentions live at most one hour): the customer can no
+#: longer complete it, so it either got its webhook or needs a look.
+PENDING_ATTENTION_AFTER = timedelta(hours=2)
 
 
 class GatewayName(models.TextChoices):

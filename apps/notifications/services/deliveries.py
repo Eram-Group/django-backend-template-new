@@ -8,8 +8,8 @@ acks - telemetry, not money; a Meta retry storm must not build.
 
 ``deliveries_resume`` recovers incomplete deliveries - for one broadcast
 (the admin "Resume incomplete" action) or for the transactional orphans
-(the ``sweep_deliveries`` command). There is no auto-retry by
-design; this is the explicit, idempotent re-enqueue.
+(the Deliveries list's "Re-queue stuck deliveries" action). There is no
+auto-retry by design; this is the explicit, idempotent re-enqueue.
 """
 
 from datetime import timedelta
@@ -26,6 +26,7 @@ from apps.notifications.constants import DeliveryStatus
 from apps.notifications.exceptions import BroadcastStateError
 from apps.notifications.models import Broadcast
 from apps.notifications.models import NotificationDelivery
+from apps.notifications.selectors.deliveries import STALE_PROCESSING_MINUTES
 from apps.notifications.services.dispatch import DELIVERY_BATCH
 from apps.notifications.services.execution import maybe_complete_broadcast
 from apps.notifications.services.progress import broadcast_record_progress
@@ -58,9 +59,6 @@ _ALLOWED_FROM: dict[DeliveryStatus, tuple[DeliveryStatus, ...]] = {
     ),
 }
 
-#: A PROCESSING row untouched this long was claimed by a worker that died
-#: mid-batch (a batch is one FCM/OurSMS call - seconds, not minutes).
-STALE_PROCESSING_MINUTES = 30
 #: Rows one resume call re-enqueues at most (oldest first); the sweep runs
 #: every tick and the admin action can be repeated, so a backlog drains in
 #: bounded steps instead of one unbounded transaction.

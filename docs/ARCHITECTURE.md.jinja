@@ -168,11 +168,13 @@ Conventions (see `apps/users/tasks/emails.py`):
   (`with run_enqueued_tasks() as records:` around the action) — the
   production worker's runner over the rows the block queued, tasks a task
   enqueues included.
-- Recurring work = idempotent management commands (`clearsessions`,
-  `prune_db_task_results`, `reconcile_payments`, `sweep_deliveries`), thin
-  wrappers over services, safe to re-run. Nothing schedules them yet - they
-  run by hand (`just infra-run-task`) until the scheduling decision (TODO
-  `scheduling-decision`). See [DEPLOYMENT.md](DEPLOYMENT.md#recurring-commands).
+- Nothing runs on a timer (TODO `scheduling-decision`). Instead, every
+  moment the system knows it cannot settle something on its own logs an
+  ERROR (Sentry), and the admin surfaces the stuck rows: sidebar badges +
+  a "Needs attention" filter (`selectors.payments_needing_attention`,
+  `selectors.deliveries_needing_attention`) with a recovery action next to
+  them (Verify with provider, Re-queue stuck deliveries, Resume incomplete).
+  See [DEPLOYMENT.md](DEPLOYMENT.md#recovery).
 
 ## Outbound clients (HTTP kernel, SMS, push, payments)
 
@@ -230,7 +232,7 @@ Per-area notes:
   THE idempotency record: executor tasks claim PENDING → PROCESSING under
   `select_for_update(skip_locked)`, outcomes persist per channel, no
   auto-retry (`deliveries_resume` - the admin resume action and the
-  `sweep_deliveries` command - re-enqueues exactly the remainder). Mass sends = `Broadcast` rows fanned out on the `bulk` queue.
+  Deliveries list's "Re-queue stuck" action - re-enqueues exactly the remainder). Mass sends = `Broadcast` rows fanned out on the `bulk` queue.
   WhatsApp status webhooks are HMAC-verified and never 5xx on input shape
   (`test_catalog` keeps `NotificationKind` ↔ `CATALOG` in lockstep).
 - **Payments** (Tap SAR / Paymob EGP): gateway Protocol + frozen DTOs in

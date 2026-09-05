@@ -28,7 +28,7 @@ CloudFront (OAC) ──▶ S3 static/ media/         ├──▶ RDS PostgreSQL
 | Web | **ECS Express Mode** on Fargate (ARM64) | Express provisions and operates the ALB, HTTPS listener + certificate, target groups, security groups, auto scaling and canary deployments. We hand it a CDK-owned task definition (container **`Main`**, port 8000, health path `/readyz`). URL: `https://<service>-<hash>.ecs.eu-central-1.on.aws`. |
 | Worker | plain ECS Fargate service, same cluster | `manage.py db_worker --queue-name default,bulk`, 0.25 vCPU / 0.5 GB, `stopTimeout` 120 s (≥ the longest task), ECS Exec enabled. **Fargate Spot in every environment** (≈ 70 % off): jobs are idempotent and enqueued inside the writing transaction, and `db_worker` finishes the current job on SIGTERM, so a reclaim delays work by minutes and never loses it. The release task stays on-demand. Flip `EnvConfig.worker_spot` only for a worker running long, non-restartable jobs. |
 | Release step | one-off `RunTask` on the worker family, on-demand | Runs before every web rollout from the exact revision being deployed. |
-| Recurring commands | **not scheduled yet** | `reconcile_payments`, `sweep_deliveries`, `clearsessions`, `prune_db_task_results` are run by hand (`just infra-run-task`) until the scheduling decision (TODO `scheduling-decision`). |
+| Recovery | **by hand, from the admin** | Nothing runs on a timer. Stuck payments and deliveries are counted on the sidebar and listed under "Needs attention"; every known-risk moment logs an ERROR (Sentry). See *Recovery* below. |
 | Database | **RDS for PostgreSQL 18** | Production: `production-<app>` db.t4g.micro, gp3 20 GB (autoscaling to 100), single-AZ, 7-day backups, deletion protection. Dev/staging: one shared `development-shared-pg18` db.t4g.small for every app's non-prod databases. Postgres also serves as cache, session store and task queue — there is no Redis. |
 | Files | S3 (private, SSE-S3) + **CloudFront** (OAC) | `static/` + `media/` prefixes (django-storages). |
 | Email | SES, region-local identity | Task role may `ses:SendEmail` from the identity's domain only. |
@@ -243,13 +243,32 @@ Rollback: re-dispatch `Deploy production` with an older `sha`, or by hand
 `aws ecs update-express-gateway-service --service-arn … --task-definition-arn <previous>`
 and `aws ecs update-service --cluster <app> --service <app>-<env>-worker --task-definition <previous>`.
 
-## Recurring commands
+## Recovery
 
-Nothing runs on a timer yet (decision pending: TODO `scheduling-decision`).
-The idempotent sweeps exist as management commands and are run by hand:
-`just infra-run-task <env> python manage.py reconcile_payments` (payments
-stuck mid-flow), `sweep_deliveries` (notification deliveries),
-`clearsessions`, `prune_db_task_results --min-age-days 14`.
+Nothing runs on a timer (decision deferred: TODO `scheduling-decision`), so
+the system does two things instead: it makes stuck state visible, and it
+gives the operator a button.
+
+- **Sentry**: an ERROR is logged the moment the system knows it cannot
+  settle something on its own - a checkout whose provider response was lost
+  (`payment_checkout_outcome_unknown`), a refund the provider accepted but
+  did not settle (`payment_refund_pending_at_provider`), a refund whose
+  outcome is unknown (`payment_refund_needs_reconciliation`), a signed event
+  that could not be bound to a row.
+- **Admin**: the Payments and Deliveries sidebar items carry a badge with
+  the count of rows that need a human; the same rows are the
+  "Needs attention" list filter. Payments: PENDING for more than two hours
+  (past every hosted-session lifetime), or REFUND_PENDING already sent to
+  the provider. Deliveries: in progress for more than 30 minutes (a worker
+  died mid-batch), or a transactional send the provider rejected.
+- **Buttons**: a pending payment has **Verify with provider** (applies the
+  provider's answer through the same guarded transition a webhook takes);
+  the Deliveries list has **Re-queue stuck deliveries**; a broadcast has
+  **Resume incomplete** on its own page. Accepted-not-settled refunds are
+  confirmed in the provider dashboard (the row carries the refund id).
+- Housekeeping (`manage.py clearsessions`, `prune_db_task_results
+  --min-age-days 14`) is run by hand via `just infra-run-task` when the
+  tables grow.
 
 ## Operations
 

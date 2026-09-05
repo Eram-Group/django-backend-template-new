@@ -656,128 +656,6 @@ def test_paid_event_rejects_mismatched_wallet_currency() -> None:
     assert not wallet.transactions.exists()
 
 
-# --- reconcile_payments (the recovery sweep) -------------------------------------
-
-
-def test_reconcile_verifies_stale_pending(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A payment whose webhook was lost is settled from the provider's answer."""
-    payment = PaymentFactory.create(kind=PaymentKind.WALLET_TOPUP)
-    _age(payment, minutes=60)
-    monkeypatch.setattr(
-        FakeGateway,
-        "fetch_status",
-        lambda self, **kwargs: _event(payment, transaction_id="txn_9"),
-    )
-
-    call_command("reconcile_payments")
-
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.PAID
-    assert payment.gateway_transaction_id == "txn_9"
-    assert payment.user.wallet.balance == payment.amount
-
-
-def test_reconcile_completes_unattempted_stale_refund() -> None:
-    """Interlock committed but the executor task was lost: the sweep is the
-    retry mechanism (django.tasks has none of its own)."""
-    staff = UserFactory.create(staff=True)
-    payment = _refund_pending_topup(actor=staff)
-    _age(payment, minutes=60)
-
-    call_command("reconcile_payments")
-
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.REFUNDED
-
-
-def test_reconcile_reports_attempted_refund_without_recontacting_provider(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    staff = UserFactory.create(staff=True)
-    payment = _refund_pending_topup(actor=staff)
-    Payment.objects.filter(pk=payment.pk).update(refund_attempted_at=timezone.now())
-    _age(payment, minutes=60)
-    gateway_calls: list[str] = []
-    monkeypatch.setattr(
-        FakeGateway,
-        "refund",
-        lambda self, **kwargs: gateway_calls.append(kwargs["transaction_id"]),
-    )
-
-    call_command("reconcile_payments")
-
-    assert gateway_calls == []  # never re-sent to the provider
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.REFUND_PENDING  # awaiting a human
-
-
-def test_reconcile_leaves_fresh_rows_alone(monkeypatch: pytest.MonkeyPatch) -> None:
-    # NOTE: the admin-gate session fixture commits rows outside the test
-    # transaction, so assertions are scoped to THIS test's rows rather
-    # than "the provider was never contacted at all".
-    staff = UserFactory.create(staff=True)
-    fresh_pending = PaymentFactory.create()
-    fresh_refunding = _refund_pending_topup(actor=staff)
-    checked_references: list[str] = []
-
-    def recording_fetch(self: FakeGateway, **kwargs: Any) -> None:
-        checked_references.append(kwargs["reference"])
-
-    monkeypatch.setattr(FakeGateway, "fetch_status", recording_fetch)
-
-    call_command("reconcile_payments")
-
-    assert str(fresh_pending.idempotency_key) not in checked_references
-    fresh_pending.refresh_from_db()
-    fresh_refunding.refresh_from_db()
-    assert fresh_pending.status == PaymentStatus.PENDING
-    assert fresh_refunding.status == PaymentStatus.REFUND_PENDING
-    assert fresh_refunding.refund_attempted_at is None  # executor never ran on it
-
-
-def test_reconcile_exits_non_zero_when_a_provider_call_fails(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A skipped row is retried next run, but the scheduled task must not
-    report a clean sweep: the exit code is what alerts."""
-    payment = PaymentFactory.create()
-    _age(payment, minutes=60)
-
-    def down(self: FakeGateway, **kwargs: Any) -> None:
-        raise OutboundTransportError(
-            service="tap", detail="connect refused", request_sent=False
-        )
-
-    monkeypatch.setattr(FakeGateway, "fetch_status", down)
-
-    with pytest.raises(CommandError, match="1 provider calls failed"):
-        call_command("reconcile_payments")
-
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.PENDING  # next run retries it
-
-
-def test_reconcile_counts_a_failed_refund_execution(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    staff = UserFactory.create(staff=True)
-    payment = _refund_pending_topup(actor=staff)
-    _age(payment, minutes=60)
-    monkeypatch.setattr(
-        FakeGateway,
-        "refund",
-        lambda self, **kwargs: RefundResult(
-            status=RefundStatus.FAILED, refund_id="re_1", raw={"fake": True}
-        ),
-    )
-
-    with pytest.raises(CommandError, match="1 provider calls failed"):
-        call_command("reconcile_payments")
-
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.PAID  # interlock reverted, retryable
-
-
 # --- saved cards -----------------------------------------------------------------
 
 
@@ -1278,7 +1156,7 @@ def test_verify_with_no_transaction_yet_leaves_the_row_pending() -> None:
     assert services.payment_verify(payment=payment).status == PaymentStatus.PENDING
 
 
-# --- gateway events: signed-amount cross-check, informational events, expiry ----
+# --- gateway events: signed-amount cross-check, informational events -------------
 
 
 def test_event_with_matching_signed_amount_applies() -> None:
@@ -1393,57 +1271,6 @@ def test_verify_cross_checks_the_provider_amount(
 def _backdate(payment: Payment, *, hours: int) -> None:
     stamp = timezone.now() - timedelta(hours=hours)
     Payment.objects.filter(pk=payment.pk).update(created_at=stamp, updated_at=stamp)
-
-
-def test_expire_fails_an_abandoned_checkout() -> None:
-    payment = PaymentFactory.create()
-    _backdate(payment, hours=3)
-
-    assert services.payment_expire(payment=payment).status == PaymentStatus.FAILED
-
-
-@pytest.mark.parametrize("hours", [0, 1])
-def test_expire_leaves_a_checkout_the_customer_can_still_complete(hours: int) -> None:
-    payment = PaymentFactory.create()
-    _backdate(payment, hours=hours)
-
-    assert services.payment_expire(payment=payment).status == PaymentStatus.PENDING
-
-
-def test_expire_never_touches_a_paid_row() -> None:
-    payment = _paid_topup()
-    _backdate(payment, hours=3)
-
-    assert services.payment_expire(payment=payment).status == PaymentStatus.PAID
-
-
-def test_late_webhook_heals_an_expired_row() -> None:
-    payment = PaymentFactory.create(kind=PaymentKind.WALLET_TOPUP)
-    _backdate(payment, hours=3)
-    services.payment_expire(payment=payment)
-
-    services.payment_apply_gateway_event(gateway_name=GATEWAY, event=_event(payment))
-
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.PAID
-    assert payment.user.wallet.balance == payment.amount
-
-
-def test_reconcile_expires_abandoned_pending_rows() -> None:
-    """Abandoned checkouts must leave PENDING, or the sweep's oldest-first
-    window fills up with them and newer stale rows are never re-checked.
-    The fake vault reports no transaction yet (None) for every reference."""
-    abandoned = PaymentFactory.create()
-    _backdate(abandoned, hours=3)
-    stale_but_live = PaymentFactory.create()
-    _age(stale_but_live, minutes=60)  # updated_at only - created just now
-
-    call_command("reconcile_payments")
-
-    abandoned.refresh_from_db()
-    stale_but_live.refresh_from_db()
-    assert abandoned.status == PaymentStatus.FAILED
-    assert stale_but_live.status == PaymentStatus.PENDING
 
 
 # --- charge_saved_card (ops command) ----------------------------------------------

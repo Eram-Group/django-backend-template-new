@@ -1,12 +1,10 @@
 """Broadcast lifecycle: dispatch paging, eligibility, resume, guards."""
 
-import io
 from datetime import timedelta
 from typing import Any
 
 import pytest
 from django.core.exceptions import ValidationError
-from django.core.management import call_command
 from django.utils import timezone
 from django.utils.translation import gettext
 
@@ -277,57 +275,6 @@ def test_resume_can_retry_failed_rows(
     assert summary["failed_reset"] == 1
     delivery.refresh_from_db()
     assert delivery.status == DeliveryStatus.SENT
-
-
-# --- sweep command ------------------------------------------------------------
-
-
-def test_sweep_command_recovers_transactional_orphans(
-    run_enqueued_tasks: Any,
-) -> None:
-    delivery = NotificationDeliveryFactory.create(channel=Channel.PUSH)
-    DeviceFactory.create(user=delivery.notification.recipient)
-    NotificationDelivery.objects.filter(pk=delivery.pk).update(
-        status=DeliveryStatus.PROCESSING,
-        updated_at=timezone.now() - timedelta(hours=1),
-    )
-
-    out = io.StringIO()
-    with run_enqueued_tasks():
-        call_command("sweep_deliveries", stdout=out)
-
-    delivery.refresh_from_db()
-    assert delivery.status == DeliveryStatus.SENT
-    assert "stale_reset: 1" in out.getvalue()
-
-
-def test_sweep_command_leaves_broadcast_rows_alone(
-    run_enqueued_tasks: Any,
-) -> None:
-    """Broadcasts resume from their admin page; the sweep command only
-    touches transactional orphans."""
-    user = UserFactory.create()
-    DeviceFactory.create(user=user)
-    broadcast = BroadcastFactory.create(status=BroadcastStatus.DISPATCHED)
-    notification = NotificationFactory.create(
-        recipient=user, kind=NotificationKind.ANNOUNCEMENT, broadcast=broadcast
-    )
-    delivery = NotificationDeliveryFactory.create(
-        notification=notification, channel=Channel.PUSH
-    )
-
-    transactional_pending = NotificationDelivery.objects.filter(
-        broadcast__isnull=True, status=DeliveryStatus.PENDING
-    ).count()
-
-    out = io.StringIO()
-    with run_enqueued_tasks():
-        call_command("sweep_deliveries", "--include-failed", stdout=out)
-
-    # Only the transactional rows (whatever other fixtures left behind) move.
-    assert f"re_enqueued: {transactional_pending}" in out.getvalue()
-    delivery.refresh_from_db()
-    assert delivery.status == DeliveryStatus.PENDING
 
 
 class TestAudienceFilters:

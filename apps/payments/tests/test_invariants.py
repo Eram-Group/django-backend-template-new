@@ -9,16 +9,13 @@ nothing here reaches a provider.
 
 import json
 import uuid
-from datetime import timedelta
 from decimal import Decimal
 from functools import partial
 from typing import Any
 
 import pytest
-from django.core.management import call_command
 from django.db import IntegrityError
 from django.db import transaction
-from django.utils import timezone
 from pydantic import SecretStr
 
 from apps.common.http import OutboundTransportError
@@ -30,7 +27,6 @@ from apps.payments.constants import PaymentStatus
 from apps.payments.constants import WalletTransactionKind
 from apps.payments.exceptions import PaymentEventMismatchError
 from apps.payments.exceptions import PaymentGatewayUnavailableError
-from apps.payments.exceptions import PaymentRefundFailedError
 from apps.payments.exceptions import PaymentRequestConflictError
 from apps.payments.gateways.base import CheckoutRequest
 from apps.payments.gateways.base import CheckoutSession
@@ -483,60 +479,3 @@ def test_accepted_refund_stays_pending_with_the_provider_id(
     wallet = payment.user.wallet
     wallet.refresh_from_db()
     assert wallet.balance == Decimal(0)  # debit stands until the provider settles
-
-
-@pytest.mark.parametrize(
-    ("answer", "status", "balance"),
-    [
-        (RefundStatus.SUCCEEDED, PaymentStatus.REFUNDED, Decimal(0)),
-        (RefundStatus.FAILED, PaymentStatus.PAID, Decimal("50.00")),
-    ],
-)
-def test_refund_verify_finishes_an_accepted_refund(
-    monkeypatch: pytest.MonkeyPatch,
-    answer: RefundStatus,
-    status: PaymentStatus,
-    balance: Decimal,
-) -> None:
-    payment = _refund_pending(monkeypatch, answer=RefundStatus.PENDING)
-    monkeypatch.setattr(
-        FakeGateway,
-        "fetch_refund",
-        lambda self, *, refund_id: RefundResult(
-            status=answer, refund_id=refund_id, raw={"status": str(answer)}
-        ),
-    )
-
-    if answer == RefundStatus.FAILED:
-        with pytest.raises(PaymentRefundFailedError):
-            services.payment_refund_verify(payment=payment)
-    else:
-        services.payment_refund_verify(payment=payment)
-
-    payment.refresh_from_db()
-    assert payment.status == status
-    wallet = payment.user.wallet
-    wallet.refresh_from_db()
-    assert wallet.balance == balance
-
-
-def test_reconcile_verifies_accepted_refunds(monkeypatch: pytest.MonkeyPatch) -> None:
-    payment = _refund_pending(monkeypatch, answer=RefundStatus.PENDING)
-    Payment.objects.filter(pk=payment.pk).update(
-        updated_at=timezone.now() - timedelta(hours=1)
-    )
-    asked: list[str] = []
-
-    def fetch_refund(self: FakeGateway, *, refund_id: str) -> RefundResult:
-        asked.append(refund_id)
-        return RefundResult(
-            status=RefundStatus.SUCCEEDED, refund_id=refund_id, raw={"fake": True}
-        )
-
-    monkeypatch.setattr(FakeGateway, "fetch_refund", fetch_refund)
-
-    call_command("reconcile_payments")
-
-    assert asked == ["re_accepted"]
-    payment.refresh_from_db()
-    assert payment.status == PaymentStatus.REFUNDED

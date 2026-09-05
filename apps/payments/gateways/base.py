@@ -152,8 +152,8 @@ class CheckoutSession:
 class RefundStatus(StrEnum):
     """What the provider says about a refund - three answers, never a bool.
 
-    PENDING means "accepted, not settled": the row must stay REFUND_PENDING
-    until ``fetch_refund`` (the reconcile sweep) reports SUCCEEDED/FAILED.
+    PENDING means "accepted, not settled": the row stays REFUND_PENDING for
+    a human to confirm against the provider dashboard.
     """
 
     PENDING = "pending"
@@ -165,7 +165,8 @@ class RefundStatus(StrEnum):
 class RefundResult:
     status: RefundStatus
     #: The provider's refund object id (Tap "re_...", Paymob child
-    #: transaction id) - persisted so a pending refund can be looked up.
+    #: transaction id) - persisted so a pending refund can be found in the
+    #: provider dashboard.
     refund_id: str
     raw: dict[str, Any]
 
@@ -207,10 +208,6 @@ class PaymentGateway(Protocol):
     def refund(
         self, *, transaction_id: str, amount: Decimal, currency: str
     ) -> RefundResult: ...
-
-    def fetch_refund(self, *, refund_id: str) -> RefundResult:
-        """The provider's current view of a refund it accepted earlier."""
-        ...
 
     def charge_saved(self, *, request: CheckoutRequest) -> CheckoutSession: ...
 

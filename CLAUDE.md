@@ -35,9 +35,10 @@ tracker; neither is generated into projects.
   service (function-level import, recorded in `pyproject.toml`); the work
   is idempotent; services enqueue INSIDE their transaction (the queue is
   this database - the task row commits or rolls back with the write);
-  `transaction.on_commit` is only for external side effects. Recurring work
-  is an idempotent management command; nothing schedules them yet (run by
-  hand - see TODO `scheduling-decision`).
+  `transaction.on_commit` is only for external side effects. Nothing runs
+  on a timer (TODO `scheduling-decision`): a state the system cannot settle
+  itself logs an ERROR (Sentry) and shows under the admin's "Needs
+  attention" badge/filter, with a manual recovery action beside it.
 - Deploy: ECS Express Mode (web) + Fargate (worker); the task-definition
   container is named `Main` — load-bearing for Express Mode and the CD
   render steps, never rename. `ENVIRONMENT` ∈ local/dev/staging/production.

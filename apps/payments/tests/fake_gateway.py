@@ -144,8 +144,3 @@ class FakeGateway:
             refund_id=f"fake_refund_{transaction_id}",
             raw={"fake": True},
         )
-
-    def fetch_refund(self, *, refund_id: str) -> RefundResult:
-        return RefundResult(
-            status=RefundStatus.SUCCEEDED, refund_id=refund_id, raw={"fake": True}
-        )

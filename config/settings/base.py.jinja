@@ -423,6 +423,10 @@ UNFOLD = {
                         "link": reverse_lazy(
                             "admin:notifications_notificationdelivery_changelist"
                         ),
+                        "badge": (
+                            "apps.notifications.admin.badges."
+                            "deliveries_needing_attention"
+                        ),
                         "permission": lambda request: request.user.has_perm(
                             "notifications.view_notificationdelivery"
                         ),
@@ -454,6 +458,11 @@ UNFOLD = {
                         "title": _("Payments"),
                         "icon": "payments",
                         "link": reverse_lazy("admin:payments_payment_changelist"),
+                        # Stuck rows nothing will move on its own (no sweeps
+                        # run on a timer) - one COUNT per admin page.
+                        "badge": (
+                            "apps.payments.admin.badges.payments_needing_attention"
+                        ),
                         "permission": lambda request: request.user.has_perm(
                             "payments.view_payment"
                         ),

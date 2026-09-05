@@ -116,7 +116,7 @@ Django 6 native `django.tasks` with the Postgres-backed queue — no broker.
   exiting — set the ECS `stopTimeout` (worker task definition) to at least
   your longest task.
 - Results are rows: prune with `manage.py prune_db_task_results
-  --min-age-days 14` (run by hand; nothing is scheduled yet).
+  --min-age-days 14` (by hand; nothing runs on a timer).
 
 ## Outbound integrations (payments)
 

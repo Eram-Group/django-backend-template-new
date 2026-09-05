@@ -21,7 +21,6 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.common.http import OutboundError
-from apps.payments.constants import PENDING_EXPIRY
 from apps.payments.constants import TERMINAL_STATUSES
 from apps.payments.constants import Currency
 from apps.payments.constants import PaymentKind
@@ -149,7 +148,8 @@ def payment_initiate(
     The PENDING row commits before the gateway is contacted (no request-wide
     transaction), so a webhook can never race its own row; a webhook that
     still 404s (a replay for a purged row) is covered by the gateway's
-    retry, ``payment_verify``, and the ``reconcile_payments`` sweep.
+    retry and ``payment_verify`` (the API's verify endpoint and the admin's
+    "Verify with provider" action).
     """
     existing = Payment.objects.filter(user=user, client_request_id=request_id).first()
     if existing is not None:
@@ -301,9 +301,11 @@ def _open_session(
     A provably-unsent request (DNS/connect, 4xx) marks the row FAILED with a
     conditional UPDATE - never through the in-memory instance, which the
     webhook may already have settled underneath us. Any other failure (read
-    timeout, 5xx, unusable body) leaves the row PENDING: the provider may
-    have captured, its webhook binds and settles the row, and the reconcile
-    sweep verifies or expires it. Either way the caller gets a 503.
+    timeout, 5xx, unusable body) leaves the row PENDING and logs an ERROR
+    (Sentry): the provider may have captured, its webhook binds and settles
+    the row - and if none arrives, the row shows up under "Needs attention"
+    in the admin, where "Verify with provider" settles it by hand. Either
+    way the caller gets a 503.
     """
     try:
         return (
@@ -313,7 +315,7 @@ def _open_session(
         )
     except (OutboundError, GatewayError) as exc:
         if provider_outcome_unknown(exc):
-            logger.warning(
+            logger.error(  # noqa: TRY400 - the row state is the signal, not the stack
                 "payment_checkout_outcome_unknown",
                 payment_id=str(payment.pk),
                 gateway=gateway.name,
@@ -354,13 +356,13 @@ def _record_session(
 
 
 def payment_verify(*, payment: Payment) -> Payment:
-    """Re-query the gateway on demand (webhook fallback, user is polling).
+    """Re-query the gateway on demand (webhook fallback: the user polling
+    the API, or an operator's "Verify with provider" in the admin).
 
     Only a PAID answer is applied: a declined attempt on a hosted page can
     still be retried by the customer, so the row stays PENDING until the
-    webhook or the reconcile sweep settles it. A row that never learned its
-    provider identity (checkout response lost) is left for the webhook to
-    bind or the sweep to expire.
+    webhook settles it. A row that never learned its provider identity
+    (checkout response lost) is left for the webhook to bind.
     """
     if payment.status in TERMINAL_STATUSES:
         return payment
@@ -377,29 +379,3 @@ def payment_verify(*, payment: Payment) -> Payment:
     if event is None or not event.is_paid:
         return payment
     return payment_apply_gateway_event(gateway_name=payment.gateway, event=event)
-
-
-def payment_expire(*, payment: Payment) -> Payment:
-    """Abandoned checkout: a PENDING row older than ``PENDING_EXPIRY`` becomes
-    FAILED. Called by the reconcile sweep after ``payment_verify`` found
-    nothing paid, so the sweep's oldest-first window is not clogged forever
-    by checkouts nobody completed. FAILED is non-terminal - a late webhook
-    still heals a wrongly-expired row.
-    """
-    with transaction.atomic():
-        locked = Payment.objects.select_for_update().get(pk=payment.pk)
-        if (
-            locked.status != PaymentStatus.PENDING
-            or locked.created_at > timezone.now() - PENDING_EXPIRY
-        ):
-            return locked
-        locked.status = PaymentStatus.FAILED
-        locked.full_clean()
-        locked.save(update_fields=["status", "updated_at"])
-        logger.info(
-            "payment_expired",
-            payment_id=str(locked.pk),
-            gateway=locked.gateway,
-            created_at=locked.created_at.isoformat(),
-        )
-        return locked

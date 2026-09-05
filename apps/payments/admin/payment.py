@@ -3,6 +3,7 @@ from typing import cast
 
 from django.contrib import admin
 from django.contrib import messages
+from django.db.models import QuerySet
 from django.http import HttpRequest
 from django.http import HttpResponse
 from django.shortcuts import redirect
@@ -16,11 +17,27 @@ from apps.common.admin import BaseModelAdmin
 from apps.common.admin import FieldPermissions
 from apps.common.admin import confirm_dialog
 from apps.common.exceptions import ApplicationError
+from apps.payments import selectors
 from apps.payments import services
 from apps.payments.admin.resources import PaymentResource
 from apps.payments.constants import PaymentStatus
 from apps.payments.models import Payment
 from apps.users.models import User
+
+
+class NeedsAttentionFilter(admin.SimpleListFilter):
+    """The rows an operator must look at - the sidebar badge's list."""
+
+    title = _("needs attention")
+    parameter_name = "attention"
+
+    def lookups(self, request: HttpRequest, model_admin: Any) -> list[tuple[str, Any]]:
+        return [("yes", _("Needs attention"))]
+
+    def queryset(self, request: HttpRequest, queryset: QuerySet[Payment]) -> Any:
+        if self.value() == "yes":
+            return queryset & selectors.payments_needing_attention()
+        return queryset
 
 
 @admin.register(Payment)
@@ -45,6 +62,7 @@ class PaymentAdmin(BaseModelAdmin):
         "created_at",
     )
     list_filter = (
+        NeedsAttentionFilter,
         "status",
         "gateway",
         "currency",
@@ -85,9 +103,50 @@ class PaymentAdmin(BaseModelAdmin):
 
     resource_classes = [PaymentResource]
 
-    # The only write path on this admin (can_change=False): a state
-    # transition whose body calls the service - never obj.save().
-    actions_detail = ["refund_payment"]
+    # The only write paths on this admin (can_change=False): state
+    # transitions whose bodies call a service - never obj.save().
+    actions_detail = ["verify_payment", "refund_payment"]
+
+    def has_verify_payment_permission(
+        self, request: HttpRequest, object_id: Any = None
+    ) -> bool:
+        if not request.user.has_perm("payments.change_payment"):
+            return False
+        if object_id is None:
+            return True
+        payment = Payment.objects.filter(pk=object_id).first()
+        return payment is not None and payment.status == PaymentStatus.PENDING
+
+    @action(
+        description=_("Verify with provider"),
+        url_path="verify",
+        permissions=["verify_payment"],
+        icon="sync",
+        dialog=confirm_dialog(
+            title=_("Ask the provider about this payment?"),
+            description=_(
+                "For a checkout whose webhook never arrived: the provider's "
+                "answer is applied through the same guarded transition a "
+                "webhook takes. A still-unpaid checkout stays pending."
+            ),
+            submit=_("Verify"),
+        ),
+    )
+    def verify_payment(
+        self, request: HttpRequest, form: BaseDialogForm, object_id: str
+    ) -> HttpResponse:
+        payment = Payment.objects.get(pk=object_id)
+        try:
+            verified = services.payment_verify(payment=payment)
+        except ApplicationError as exc:
+            messages.error(request, exc.message)
+        else:
+            messages.success(
+                request,
+                _("Provider answered: the payment is %(status)s.")
+                % {"status": verified.get_status_display()},
+            )
+        return redirect(reverse("admin:payments_payment_change", args=[object_id]))
 
     def has_refund_payment_permission(
         self, request: HttpRequest, object_id: Any = None

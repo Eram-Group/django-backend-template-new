@@ -44,9 +44,9 @@ files ◀── CloudFront ◀── S3      ├──▶ PostgreSQL   the only 
   reclaimed with two minutes' notice). If it dies it is restarted; if it is
   interrupted it finishes the current task first. Work is never lost — it sits
   in Postgres; at worst it is delayed a few minutes.
-- **Recurring commands** (reconcile payments, clean sessions, …) are not on
-  a timer yet; they are run by hand as one-off tasks until scheduling is
-  decided.
+- **Nothing runs on a timer.** Anything the system cannot settle by itself
+  (a lost payment webhook, a stuck delivery) is reported to Sentry and
+  counted on the admin sidebar, with a button to recover it by hand.
 - **Database** has daily backups (7 days in production) and can't be deleted
   by accident.
 

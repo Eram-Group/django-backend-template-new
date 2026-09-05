@@ -42,7 +42,7 @@ from apps.payments.gateways.base import to_minor_units
 _BASE = "https://api.tap.company/v2"
 _PAID_STATUS = "CAPTURED"
 # Statuses that mean "not settled yet" - the row stays PENDING for the
-# webhook / payment_verify / the reconcile sweep rather than being declared
+# webhook / payment_verify rather than being declared
 # final here.
 _PENDING_STATUSES = {"INITIATED", "IN_PROGRESS"}
 # Refund object statuses (developers.tap.company/reference/refunds). Only
@@ -273,17 +273,6 @@ class TapGateway:
             },
             timeout=PROVIDER_TIMEOUT,
             retry="connect-only",
-        )
-        return _refund_result(response.json())
-
-    def fetch_refund(self, *, refund_id: str) -> RefundResult:
-        response = request_json(
-            service="tap",
-            method="GET",
-            url=f"{_BASE}/refunds/{refund_id}",
-            headers=self._headers(),
-            timeout=PROVIDER_TIMEOUT,
-            retry="transient",  # GET is idempotent
         )
         return _refund_result(response.json())
 

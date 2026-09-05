@@ -1,6 +1,7 @@
 from apps.notifications.selectors.broadcasts import broadcast_audience
 from apps.notifications.selectors.broadcasts import broadcast_audience_summary
 from apps.notifications.selectors.config import effective_channels
+from apps.notifications.selectors.deliveries import deliveries_needing_attention
 from apps.notifications.selectors.devices import device_tokens_by_user_id
 from apps.notifications.selectors.messages import ConfigMap
 from apps.notifications.selectors.messages import RenderedMessage
@@ -15,6 +16,7 @@ __all__ = [
     "RenderedMessage",
     "broadcast_audience",
     "broadcast_audience_summary",
+    "deliveries_needing_attention",
     "device_tokens_by_user_id",
     "effective_channels",
     "notification_config_map",

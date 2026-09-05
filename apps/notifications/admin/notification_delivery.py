@@ -1,12 +1,42 @@
+from typing import Any
+
 from django.contrib import admin
+from django.contrib import messages
+from django.db.models import QuerySet
+from django.http import HttpRequest
+from django.http import HttpResponse
+from django.shortcuts import redirect
+from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from unfold.contrib.filters.admin import RangeDateFilter
+from unfold.decorators import action
+from unfold.forms import BaseDialogForm
 
 from apps.common.admin import BaseModelAdmin
 from apps.common.admin import BaseTabularInline
 from apps.common.admin import FieldPermissions
+from apps.common.admin import confirm_dialog
+from apps.notifications import selectors
+from apps.notifications import services
 from apps.notifications.admin.resources import NotificationDeliveryResource
 from apps.notifications.models import NotificationDelivery
+
+
+class NeedsAttentionFilter(admin.SimpleListFilter):
+    """The rows an operator must look at - the sidebar badge's list."""
+
+    title = _("needs attention")
+    parameter_name = "attention"
+
+    def lookups(self, request: HttpRequest, model_admin: Any) -> list[tuple[str, Any]]:
+        return [("yes", _("Needs attention"))]
+
+    def queryset(
+        self, request: HttpRequest, queryset: QuerySet[NotificationDelivery]
+    ) -> Any:
+        if self.value() == "yes":
+            return queryset & selectors.deliveries_needing_attention()
+        return queryset
 
 
 class NotificationDeliveryInline(BaseTabularInline):
@@ -50,6 +80,7 @@ class NotificationDeliveryAdmin(BaseModelAdmin):
         "created_at",
     )
     list_filter = (
+        NeedsAttentionFilter,
         "channel",
         "status",
         ("created_at", RangeDateFilter),
@@ -73,3 +104,36 @@ class NotificationDeliveryAdmin(BaseModelAdmin):
     readonly_fields = ()
 
     resource_classes = [NotificationDeliveryResource]
+
+    # The recovery road for transactional sends (broadcasts resume from
+    # their own page): re-queue what a dead worker left PROCESSING.
+    actions_list = ["requeue_stuck"]
+
+    def has_requeue_stuck_permission(
+        self, request: HttpRequest, object_id: Any = None
+    ) -> bool:
+        return request.user.has_perm("notifications.change_notificationdelivery")
+
+    @action(
+        description=_("Re-queue stuck deliveries"),
+        url_path="requeue-stuck",
+        permissions=["requeue_stuck"],
+        icon="replay",
+        dialog=confirm_dialog(
+            title=_("Re-queue stuck transactional deliveries?"),
+            description=_(
+                "Deliveries a worker left in progress for over 30 minutes go "
+                "back to pending and are sent; nothing already sent is sent "
+                "again. Failed rows stay failed (the provider rejected them)."
+            ),
+            submit=_("Re-queue"),
+        ),
+    )
+    def requeue_stuck(self, request: HttpRequest, form: BaseDialogForm) -> HttpResponse:
+        summary = services.deliveries_resume(broadcast=None, include_failed=False)
+        messages.success(
+            request,
+            _("Re-queued: %(summary)s")
+            % {"summary": ", ".join(f"{k}={v}" for k, v in summary.items())},
+        )
+        return redirect(reverse("admin:notifications_notificationdelivery_changelist"))
