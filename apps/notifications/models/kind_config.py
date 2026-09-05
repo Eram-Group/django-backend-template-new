@@ -14,8 +14,32 @@ from apps.notifications.constants import notification_kind_choices
 
 
 def _placeholders(text: str) -> set[str]:
-    """Field names a str.format call on ``text`` would look up."""
-    return {name for _lit, name, _spec, _conv in string.Formatter().parse(text) if name}
+    """The ``{key}`` names in a template, in the ONE grammar the editor
+    supports: literal text and bare ``{key}`` tokens.
+
+    Anything else str.format would accept - conversions (``{amount!r}``),
+    format specs (``{amount:>10}``), nested fields (``{x:{y}}``), positional
+    or attribute/index fields (``{}``, ``{name.upper}``, ``{a[0]}``) - is a
+    ValueError here, as is an unmatched brace. ``clean()`` turns that into
+    a field error, so a template that validates always renders.
+    """
+    names: set[str] = set()
+    try:
+        parsed = list(string.Formatter().parse(text))
+    except ValueError as exc:  # unmatched or single brace
+        msg = f"unbalanced braces ({exc})"
+        raise ValueError(msg) from exc
+    for _literal, name, spec, conversion in parsed:
+        if name is None:
+            continue
+        if not name.isidentifier():
+            msg = f"unsupported placeholder {{{name}}}"
+            raise ValueError(msg)
+        if spec or conversion:
+            msg = f"unsupported placeholder format in {{{name}}}"
+            raise ValueError(msg)
+        names.add(name)
+    return names
 
 
 #: The modeltranslation shadow columns of the copy fields (``title_ar``, ...),
@@ -76,9 +100,10 @@ class NotificationKindConfig(BaseModel):
     def clean(self) -> None:
         """Channels ⊆ supported; every placeholder ⊆ the kind's context_keys.
 
-        The placeholder check is also the safety boundary: names outside the
-        contract (including attribute traversals like ``{name.__class__}``)
-        never reach str.format at render time.
+        The placeholder check is also the safety boundary: only bare
+        ``{key}`` tokens of the kind's contract pass (no attribute
+        traversals, conversions or format specs), so nothing a template
+        can say fails or misbehaves at render time.
         """
         from apps.notifications.catalog import catalog_entry
 
@@ -108,7 +133,18 @@ class NotificationKindConfig(BaseModel):
             value = getattr(self, field)
             if not value:
                 continue  # blank enforcement lives on the field (translation.py)
-            unknown = sorted(_placeholders(value) - entry.context_keys)
+            try:
+                placeholders = _placeholders(value)
+            except ValueError as exc:
+                errors[field] = str(
+                    _(
+                        "Cannot render this message: %(reason)s. "
+                        "Use {key} placeholders only."
+                    )
+                    % {"reason": exc}
+                )
+                continue
+            unknown = sorted(placeholders - entry.context_keys)
             if unknown:
                 errors[field] = str(
                     _(

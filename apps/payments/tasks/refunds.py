@@ -15,7 +15,7 @@ import uuid
 from django.tasks import task
 
 
-@task()
+@task(priority=10)  # transactional: outranks broadcast batches
 def process_payment_refund(*, payment_id: str, actor_id: str) -> None:
     # Trampoline into the owning service: refund finalization moves money
     # (wallet_apply), which is business logic and stays in services -

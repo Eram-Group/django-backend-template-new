@@ -49,7 +49,7 @@ def notification_send(
         NotificationDelivery.objects.bulk_create(deliveries)
         if deliveries:
             pending_ids = [str(delivery.pk) for delivery in deliveries]
-            transaction.on_commit(lambda: deliver_notifications.enqueue(pending_ids))
+            deliver_notifications.enqueue(pending_ids)  # same transaction as the rows
     return notification
 
 

@@ -60,10 +60,10 @@ def test_user_update_rejects_an_empty_name() -> None:
 
 
 def test_user_create_provisions_wallet_and_enqueues_welcome_email(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
     mailoutbox: list[EmailMessage],
 ) -> None:
-    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+    with run_enqueued_tasks() as records:
         user = services.user_create(
             user=User(),
             email="Signup@Example.com",
@@ -76,8 +76,8 @@ def test_user_create_provisions_wallet_and_enqueues_welcome_email(
     assert not user.has_usable_password()
     assert user.wallet.currency == wallet_currency_for(language=Language.ENGLISH)
     assert user.wallet.balance == 0
-    # ImmediateBackend (test settings) ran the enqueued task synchronously.
-    assert len(callbacks) == 1
+    # The drained queue ran the welcome-email task.
+    assert len(records) == 1
     assert len(mailoutbox) == 1
     assert mailoutbox[0].to == [user.email]
     # WELCOME is inbox-only by catalog default (no devices exist at signup).

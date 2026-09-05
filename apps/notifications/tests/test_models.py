@@ -155,3 +155,38 @@ def test_enum_columns_use_callable_choices() -> None:
         NotificationDelivery(channel="carrier_pigeon").full_clean(
             exclude=["notification"]
         )
+
+
+# --- the template grammar is {key} tokens only (review 2026-09-05, #7) --------
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Broken {",
+        "Broken }",
+        "{amount:invalid_format}",
+        "{amount!r}",
+        "{x:{amount}}",
+        "{}",
+        "{amount.__class__}",
+        "{amount[0]}",
+    ],
+)
+def test_config_rejects_every_template_shape_that_could_fail_to_render(
+    body: str,
+) -> None:
+    config = NotificationKindConfig.objects.get(kind=NotificationKind.PAYMENT_PAID)
+    config.body_en = body
+
+    with pytest.raises(ValidationError) as excinfo:
+        config.full_clean()
+
+    assert "body_en" in excinfo.value.message_dict
+
+
+def test_config_accepts_literal_braces_and_known_keys() -> None:
+    config = NotificationKindConfig.objects.get(kind=NotificationKind.PAYMENT_PAID)
+    config.body_en = "Paid {amount} {currency} {{literally}}"
+
+    config.full_clean()  # no error

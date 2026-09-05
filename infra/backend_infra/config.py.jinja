@@ -59,7 +59,7 @@ class EnvConfig:
     web_cpu: int
     web_memory: int
     web_max_tasks: int
-    worker_spot: bool
+    worker_spot: bool  # Fargate Spot (~70% off); every env by default, see production
     database: DatabaseKind
     custom_domain: str | None = None
     # Express Mode scaling: floor and the average-CPU target it scales on.
@@ -274,7 +274,12 @@ ENVIRONMENTS: dict[EnvName, EnvConfig] = {
         web_cpu=512,
         web_memory=1024,
         web_max_tasks=6,
-        worker_spot=False,
+        # Spot in production too: the worker is a queue consumer whose jobs
+        # are idempotent and commit-or-roll-back with the DB, and db_worker
+        # finishes the current job on SIGTERM - an interruption delays work by
+        # minutes and never loses it. On-demand is for a worker running long,
+        # non-restartable jobs; the template has none.
+        worker_spot=True,
         database="dedicated",
         custom_domain="api.{{ domain }}",
         plain_env=_plain_env(

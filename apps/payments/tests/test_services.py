@@ -400,12 +400,12 @@ def test_event_for_another_gateway_is_a_404() -> None:
 
 
 def test_refund_start_flow_debits_wallet_and_refunds(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     staff = UserFactory.create(staff=True)
     payment = _paid_topup()
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         started = services.payment_refund_start(payment=payment, actor=staff)
 
     assert started.status == PaymentStatus.REFUND_PENDING  # what the admin sees
@@ -463,7 +463,7 @@ def test_refund_start_blocked_when_topup_was_spent() -> None:
 
 def test_refund_gateway_hit_once_when_second_refund_races(
     monkeypatch: pytest.MonkeyPatch,
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     """A second refund landing mid-provider-call is rejected by the interlock."""
     staff = UserFactory.create(staff=True)
@@ -486,7 +486,7 @@ def test_refund_gateway_hit_once_when_second_refund_races(
 
     monkeypatch.setattr(FakeGateway, "refund", racing_refund)
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         services.payment_refund_start(payment=payment, actor=staff)
 
     assert gateway_calls == ["txn_1"]  # provider refunded exactly once
@@ -499,7 +499,7 @@ def test_refund_gateway_hit_once_when_second_refund_races(
 
 def test_refund_reverts_wallet_and_status_when_gateway_rejects(
     monkeypatch: pytest.MonkeyPatch,
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     staff = UserFactory.create(staff=True)
     payment = _paid_topup()
@@ -513,7 +513,7 @@ def test_refund_reverts_wallet_and_status_when_gateway_rejects(
 
     # The executor's PaymentRefundFailedError lands in the task result
     # (FAILED row in prod); the observable contract is the DB end state.
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         services.payment_refund_start(payment=payment, actor=staff)
 
     payment.refresh_from_db()
@@ -967,7 +967,7 @@ def test_saved_card_store_is_idempotent_and_reassigns_owner() -> None:
 
 def test_saved_card_store_folds_a_revaulted_card_into_the_existing_row(
     monkeypatch: pytest.MonkeyPatch,
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     """Tap mints a new card id per customer; the fingerprint is the same
     physical card. One row, repointed at the newest ids, old card detached."""
@@ -983,7 +983,7 @@ def test_saved_card_store_folds_a_revaulted_card_into_the_existing_row(
     )
     first = services.saved_card_store(user=user, gateway=GATEWAY, data=_card_data())
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         second = services.saved_card_store(
             user=user,
             gateway=GATEWAY,
@@ -1006,7 +1006,7 @@ def test_saved_card_store_folds_a_revaulted_card_into_the_existing_row(
 
 def test_saved_card_store_survives_a_failed_detach_of_the_old_card(
     monkeypatch: pytest.MonkeyPatch,
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     user = UserFactory.create()
 
@@ -1021,7 +1021,7 @@ def test_saved_card_store_survives_a_failed_detach_of_the_old_card(
     )
     services.saved_card_store(user=user, gateway=GATEWAY, data=_card_data())
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         services.saved_card_store(
             user=user, gateway=GATEWAY, data=_card_data(token="fake_card_B")
         )
@@ -1049,7 +1049,7 @@ def test_saved_card_store_keeps_different_cards_apart() -> None:
 
 def test_saved_card_store_same_card_on_another_user_is_their_own_row(
     monkeypatch: pytest.MonkeyPatch,
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     """A shared family card: one row per user, nothing detached."""
     detached: list[Any] = []
@@ -1064,7 +1064,7 @@ def test_saved_card_store_same_card_on_another_user_is_their_own_row(
     first_owner = UserFactory.create()
     second_owner = UserFactory.create()
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         services.saved_card_store(user=first_owner, gateway=GATEWAY, data=_card_data())
         services.saved_card_store(
             user=second_owner, gateway=GATEWAY, data=_card_data(token="fake_card_B")
@@ -1194,7 +1194,7 @@ def test_saved_card_store_from_event_unknown_email_returns_none() -> None:
 
 
 def test_saved_card_delete_removes_row_and_detaches_after_commit(
-    monkeypatch: pytest.MonkeyPatch, django_capture_on_commit_callbacks: Any
+    monkeypatch: pytest.MonkeyPatch, run_enqueued_tasks: Any
 ) -> None:
     detached: list[Any] = []
     monkeypatch.setattr(
@@ -1204,17 +1204,16 @@ def test_saved_card_delete_removes_row_and_detaches_after_commit(
     )
     card = SavedCardFactory.create()
 
-    with django_capture_on_commit_callbacks(execute=True) as callbacks:
+    with run_enqueued_tasks():
         services.saved_card_delete(user=card.user, saved_card=card)
         assert not SavedCard.objects.filter(pk=card.pk).exists()
         assert detached == []  # the provider call waits for the commit
 
-    assert len(callbacks) == 1
     assert [ref.token for ref in detached] == [card.token]
 
 
 def test_saved_card_delete_survives_gateway_failure(
-    monkeypatch: pytest.MonkeyPatch, django_capture_on_commit_callbacks: Any
+    monkeypatch: pytest.MonkeyPatch, run_enqueued_tasks: Any
 ) -> None:
     """The user's intent wins: a dangling provider-side card is inert."""
     card = SavedCardFactory.create()
@@ -1226,7 +1225,7 @@ def test_saved_card_delete_survives_gateway_failure(
 
     monkeypatch.setattr(FakeGateway, "delete_saved_card", failing_delete)
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         services.saved_card_delete(user=card.user, saved_card=card)
 
     assert not SavedCard.objects.filter(pk=card.pk).exists()

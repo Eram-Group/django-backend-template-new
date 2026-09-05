@@ -13,7 +13,6 @@ design; this is the explicit, idempotent re-enqueue.
 """
 
 from datetime import timedelta
-from functools import partial
 from itertools import batched
 from typing import Any
 
@@ -27,11 +26,12 @@ from apps.notifications.constants import DeliveryStatus
 from apps.notifications.exceptions import BroadcastStateError
 from apps.notifications.models import Broadcast
 from apps.notifications.models import NotificationDelivery
+from apps.notifications.services.dispatch import DELIVERY_BATCH
+from apps.notifications.services.execution import maybe_complete_broadcast
+from apps.notifications.services.progress import broadcast_record_progress
 from apps.notifications.tasks import deliver_notifications
 from apps.notifications.tasks import dispatch_broadcast
 from apps.notifications.tasks.broadcast import BULK_QUEUE
-from apps.notifications.tasks.broadcast import DELIVERY_BATCH
-from apps.notifications.tasks.delivery import maybe_complete_broadcast
 
 logger = structlog.get_logger(__name__)
 
@@ -61,6 +61,10 @@ _ALLOWED_FROM: dict[DeliveryStatus, tuple[DeliveryStatus, ...]] = {
 #: A PROCESSING row untouched this long was claimed by a worker that died
 #: mid-batch (a batch is one FCM/OurSMS call - seconds, not minutes).
 STALE_PROCESSING_MINUTES = 30
+#: Rows one resume call re-enqueues at most (oldest first); the sweep runs
+#: every tick and the admin action can be repeated, so a backlog drains in
+#: bounded steps instead of one unbounded transaction.
+RESUME_LIMIT = 10_000
 
 
 def delivery_update_status(
@@ -70,7 +74,12 @@ def delivery_update_status(
     status: DeliveryStatus,
     detail: str = "",
 ) -> bool:
-    """Apply one provider status report; returns False when ignored."""
+    """Apply one provider status report; returns False when ignored.
+
+    A provider can fail a row we already counted as SENT (a bounced
+    WhatsApp message): the broadcast counters move with the row, in the
+    same transaction.
+    """
     allowed_from = _ALLOWED_FROM[status]
     now = timezone.now()
     updates: dict[str, Any] = {"status": status, "updated_at": now}
@@ -78,19 +87,32 @@ def delivery_update_status(
         updates["detail"] = detail
     if status == DeliveryStatus.SENT:
         updates["sent_at"] = now
-    updated = NotificationDelivery.objects.filter(
-        provider=provider,
-        provider_message_id=provider_message_id,
-        status__in=allowed_from,
-    ).update(**updates)
-    if not updated:
-        logger.info(
-            "delivery_status_ignored",
-            provider=provider,
-            provider_message_id=provider_message_id,
-            status=str(status),
+    with transaction.atomic():
+        row = (
+            NotificationDelivery.objects.select_for_update()
+            .filter(
+                provider=provider,
+                provider_message_id=provider_message_id,
+                status__in=allowed_from,
+            )
+            .first()
         )
-    return bool(updated)
+        if row is None:
+            logger.info(
+                "delivery_status_ignored",
+                provider=provider,
+                provider_message_id=provider_message_id,
+                status=str(status),
+            )
+            return False
+        NotificationDelivery.objects.filter(pk=row.pk).update(**updates)
+        if (
+            row.broadcast_id is not None
+            and status == DeliveryStatus.FAILED
+            and row.status == DeliveryStatus.SENT
+        ):
+            broadcast_record_progress(broadcast_id=row.broadcast_id, sent=-1, failed=1)
+    return True
 
 
 def deliveries_resume(
@@ -102,9 +124,11 @@ def deliveries_resume(
     broadcast); a broadcast scopes to its rows, re-runs a dead dispatcher
     (the cursor committed with its rows, so a fresh run continues where it
     stopped) and probes completion. Stale PROCESSING rows reset to PENDING;
-    FAILED rows reset when asked; every PENDING row is re-enqueued in
-    executor-sized batches. Over-enqueueing is harmless - the executor's
-    claim makes an already-taken row a no-op.
+    FAILED rows reset when asked (their ``failed_count`` moves with them, so
+    a retried row is counted once); up to ``RESUME_LIMIT`` PENDING rows are
+    re-enqueued in executor-sized batches - ``remaining`` reports what the
+    next call takes. Over-enqueueing is harmless - the executor's claim
+    makes an already-taken row a no-op.
     """
     with transaction.atomic():
         now = timezone.now()
@@ -118,9 +142,7 @@ def deliveries_resume(
                 raise BroadcastStateError(str(_("Broadcast has not been dispatched.")))
             summary["dispatcher_reenqueued"] = 0
             if broadcast.status == BroadcastStatus.DISPATCHING:
-                transaction.on_commit(
-                    partial(dispatch_broadcast.enqueue, str(broadcast.pk))
-                )
+                dispatch_broadcast.enqueue(str(broadcast.pk))
                 summary["dispatcher_reenqueued"] = 1
             rows = NotificationDelivery.objects.filter(broadcast=broadcast)
             enqueue = deliver_notifications.using(queue_name=BULK_QUEUE).enqueue
@@ -132,15 +154,21 @@ def deliveries_resume(
             summary["failed_reset"] = rows.filter(status=DeliveryStatus.FAILED).update(
                 status=DeliveryStatus.PENDING, detail="", updated_at=now
             )
+            if broadcast is not None and summary["failed_reset"]:
+                # Back to uncounted: the executor counts the retry's outcome.
+                broadcast_record_progress(
+                    broadcast_id=broadcast.pk, failed=-summary["failed_reset"]
+                )
+        pending_rows = rows.filter(status=DeliveryStatus.PENDING).order_by(
+            "channel", "pk"
+        )
         pending = [
-            str(pk)
-            for pk in rows.filter(status=DeliveryStatus.PENDING)
-            .order_by("channel", "pk")
-            .values_list("pk", flat=True)
+            str(pk) for pk in pending_rows.values_list("pk", flat=True)[:RESUME_LIMIT]
         ]
         for batch in batched(pending, DELIVERY_BATCH, strict=False):
-            transaction.on_commit(partial(enqueue, list(batch)))
+            enqueue(list(batch))  # task rows commit with the resets
         summary["re_enqueued"] = len(pending)
+        summary["remaining"] = max(pending_rows.count() - len(pending), 0)
         if broadcast is not None and not pending:
             maybe_complete_broadcast(broadcast_id=broadcast.pk)
         return summary

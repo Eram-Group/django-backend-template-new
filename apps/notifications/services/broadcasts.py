@@ -1,9 +1,9 @@
 """Broadcast lifecycle: author a draft, dispatch it.
 
 Dispatch is a guarded conditional UPDATE (DRAFT -> DISPATCHING; rowcount 0
-= someone else already moved it) plus an on_commit enqueue of the
-dispatcher task on the bulk queue - the request/admin path never does
-fan-out work itself.
+= someone else already moved it) plus the dispatcher task's enqueue in the
+same transaction (the queue is this database) - the request/admin path
+never does fan-out work itself.
 
 There is NO auto-retry by design: ``services.deliveries_resume`` is the
 explicit recovery path (the admin "Resume incomplete" action), re-enqueuing
@@ -120,13 +120,13 @@ def _validate_recipients(*, recipient_ids: Sequence[str]) -> list[str]:
 
 
 def broadcast_dispatch(*, broadcast: Broadcast) -> Broadcast:
-    """DRAFT -> DISPATCHING (guarded) + dispatcher enqueue on commit."""
+    """DRAFT -> DISPATCHING (guarded) + dispatcher enqueue, one transaction."""
     with transaction.atomic():
         updated = Broadcast.objects.filter(
             pk=broadcast.pk, status=BroadcastStatus.DRAFT
         ).update(status=BroadcastStatus.DISPATCHING, updated_at=timezone.now())
         if not updated:
             raise BroadcastStateError(str(_("Broadcast was already dispatched.")))
-        transaction.on_commit(lambda: dispatch_broadcast.enqueue(str(broadcast.pk)))
+        dispatch_broadcast.enqueue(str(broadcast.pk))  # commits with the status
     broadcast.refresh_from_db()
     return broadcast

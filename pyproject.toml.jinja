@@ -215,8 +215,9 @@ root_package = "apps"
 # exceptions, types, adapters, schemas) are unlisted = unconstrained.
 name = "Layered app internals"
 type = "layers"
-# services enqueue tasks (on_commit), so tasks sit BELOW services; task
-# bodies stay lean (models/selectors only) - business logic lives in services.
+# services enqueue tasks, so tasks sit BELOW services; task bodies are
+# trampolines (function-level import back into their own app's services,
+# recorded below) - business logic lives in services.
 layers = [
   "apis | admin | (management)",
   "services",
@@ -231,6 +232,10 @@ ignore_imports = [
   # must run in the worker, outside any request, while the money logic
   # (wallet_apply, revert) stays in services.
   "apps.payments.tasks.refunds -> apps.payments.services.refunds",
+  # Same shape for notifications (2026-09-05): the task modules are 5-line
+  # trampolines; delivery execution and broadcast fan-out live in services.
+  "apps.notifications.tasks.delivery -> apps.notifications.services.execution",
+  "apps.notifications.tasks.broadcast -> apps.notifications.services.dispatch",
 ]
 
 [[tool.importlinter.contracts]]

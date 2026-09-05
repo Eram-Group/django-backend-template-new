@@ -25,12 +25,12 @@ pytestmark = pytest.mark.django_db
 
 
 def test_send_creates_inbox_row_and_pending_deliveries(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     user = UserFactory.create()
     DeviceFactory.create(user=user)
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         notification = services.notification_send(
             recipient=user,
             kind=NotificationKind.WALLET_CREDITED,
@@ -39,7 +39,7 @@ def test_send_creates_inbox_row_and_pending_deliveries(
 
     delivery = notification.deliveries.get()
     assert delivery.channel == Channel.PUSH
-    assert delivery.status == DeliveryStatus.SENT  # executed inline on commit
+    assert delivery.status == DeliveryStatus.SENT  # the drained delivery task
     assert len(push_outbox) == 1
 
 
@@ -55,14 +55,14 @@ def test_send_validates_context_keys() -> None:
 
 
 def test_send_honors_the_kind_config_channels(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     NotificationKindConfig.objects.filter(kind=NotificationKind.PAYMENT_PAID).update(
         channels=[]
     )
     user = UserFactory.create()
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         notification = services.notification_send(
             recipient=user,
             kind=NotificationKind.PAYMENT_PAID,

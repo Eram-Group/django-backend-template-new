@@ -20,13 +20,13 @@ clients ──HTTPS──▶ ALB (Express-managed, shared by every Express servi
                                   │
 CloudFront (OAC) ──▶ S3 static/ media/         ├──▶ RDS PostgreSQL 18 (DB + cache table + sessions + task queue)
 EventBridge Scheduler ──RunTask──▶ manage.py …  └──▶ SES
-[worker] Fargate ARM64 · db_worker · prod on-demand, dev Spot
+[worker] Fargate ARM64 · db_worker · Fargate Spot in every environment
 ```
 
 | Concern | Service | Notes |
 |---|---|---|
 | Web | **ECS Express Mode** on Fargate (ARM64) | Express provisions and operates the ALB, HTTPS listener + certificate, target groups, security groups, auto scaling and canary deployments. We hand it a CDK-owned task definition (container **`Main`**, port 8000, health path `/readyz`). URL: `https://<service>-<hash>.ecs.eu-central-1.on.aws`. |
-| Worker | plain ECS Fargate service, same cluster | `manage.py db_worker --queue-name default,bulk`, 0.25 vCPU / 0.5 GB, `stopTimeout` 120 s (≥ the longest task), ECS Exec enabled. Production on-demand; dev/staging on **Fargate Spot** (tasks are idempotent and `db_worker` finishes the current task on SIGTERM). |
+| Worker | plain ECS Fargate service, same cluster | `manage.py db_worker --queue-name default,bulk`, 0.25 vCPU / 0.5 GB, `stopTimeout` 120 s (≥ the longest task), ECS Exec enabled. **Fargate Spot in every environment** (≈ 70 % off): jobs are idempotent and enqueued inside the writing transaction, and `db_worker` finishes the current job on SIGTERM, so a reclaim delays work by minutes and never loses it. The release task and scheduled jobs stay on-demand. Flip `EnvConfig.worker_spot` only for a worker running long, non-restartable jobs. |
 | Release step | one-off `RunTask` on the worker family, on-demand | Runs before every web rollout from the exact revision being deployed. |
 | Scheduled jobs | **EventBridge Scheduler** → `ecs:RunTask` | One schedule per management command, defined in `infra/backend_infra/config.py::SCHEDULES` next to the commands. No always-on beat process. |
 | Database | **RDS for PostgreSQL 18** | Production: `production-<app>` db.t4g.micro, gp3 20 GB (autoscaling to 100), single-AZ, 7-day backups, deletion protection. Dev/staging: one shared `development-shared-pg18` db.t4g.small for every app's non-prod databases. Postgres also serves as cache, session store and task queue — there is no Redis. |
@@ -84,22 +84,22 @@ them (see *Account prerequisites*).
 | Item | dev | production |
 |---|---|---|
 | Web task, Fargate ARM (dev 0.25 vCPU / 1 GB, prod 0.5 vCPU / 1 GB; 1-task floor) | $9.78 | $16.58 |
-| Worker task, Fargate ARM 0.25 vCPU / 0.5 GB (dev on Spot ≈ −70 %) | ≈ $2.50 | $8.29 |
+| Worker task, Fargate ARM 0.25 vCPU / 0.5 GB, Spot (≈ −70 % vs $8.29 on-demand) | ≈ $2.50 | ≈ $2.50 |
 | Public IPv4 per task ENI ($0.005/h) — the price of "no NAT" | $7.30 | $7.30 |
 | Scheduled one-off tasks (reconcile */10 min, sweep */15 min, dailies) | ≈ $1.40 | ≈ $1.40 |
 | RDS PostgreSQL 18 | — (shared instance) | t4g.micro $13.87 + gp3 20 GB $2.74 |
 | Secrets Manager | $0.40 | $1.20 |
 | CloudFront / S3 / SES / Scheduler / CloudWatch Logs | ≈ $2 | ≈ $3–5 |
-| **Environment subtotal** | **≈ $23** | **≈ $55** |
+| **Environment subtotal** | **≈ $23** | **≈ $49** |
 
 Shared pools, paid once per account: ALB ≈ $34/mo ($19.71 + LCU + 3 public
 IPs) split across every Express service in the VPC; `development-shared-pg18`
 ≈ $30/mo split across every dev/staging database. With ~5 apps that lands at
-≈ $33/mo per dev environment and ≈ $58/mo per production environment.
+≈ $33/mo per dev environment and ≈ $52/mo per production environment.
 
 Compared with the previous shape (App Runner 1 vCPU/2 GB per env + x86
 on-demand workers + a NAT gateway for App Runner's VPC egress, ≈ $105–120/mo
-per app with dev + prod), this lands at ≈ $91/mo per app at low traffic: the
+per app with dev + prod), this lands at ≈ $85/mo per app at low traffic: the
 NAT share and x86 workers go away, public IPv4 ($3.65/task) and the ALB share
 come in. The gap widens under real traffic (App Runner bills per active
 vCPU-hour; Fargate is flat and only scales out above 60 % CPU) and by another
@@ -258,8 +258,11 @@ frequent, so the next tick is the retry.
 - **Shell**: `aws ecs execute-command --cluster <app> --task <id> --container Main --interactive --command "python manage.py shell"`.
 - **Logs**: `aws logs tail /aws/ecs/<app>-<env>-web --follow` (JSON; grep a
   `request_id` to follow one request). Worker: `…-worker`.
-- **Spot**: a reclaimed dev worker task gets SIGTERM two minutes ahead;
-  `db_worker` finishes the current task and ECS starts a replacement.
+- **Spot**: a reclaimed worker task (any environment) gets SIGTERM two
+  minutes ahead; `db_worker` finishes the current job and ECS starts a
+  replacement, so queued work is delayed a few minutes, never lost. If an
+  app ever runs long, non-restartable jobs, set `worker_spot=False` for that
+  environment.
 - **When CDK rolls services**: any change to the task definition template
   (env value, size, secret key) registers a revision with the *live* image tag
   and triggers a canary on web and a rolling update on the worker.

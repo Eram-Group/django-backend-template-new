@@ -7,7 +7,11 @@ translation.override(recipient.language); the API renders under the request
 locale). Rendered text is never stored - that would freeze one language.
 
 A kind without a row still renders: title and body fall back to the kind's
-label, so a send never fails on missing copy. Two reads, one road each:
+label, so a send never fails on missing copy; a placeholder the row's
+context lacks (a row written before the catalog changed) renders as its
+literal ``{key}``, and a template that somehow escaped validation falls back
+to the label - one bad row can never fail a delivery batch or 500 the
+inbox. Two reads, one road each:
 ``notification_config_get`` is the single-row query for a config edit (loud
 when missing - there is nothing to edit); ``notification_render`` takes the
 map from ``notification_config_map`` - loaded ONCE per executor batch / API
@@ -71,6 +75,29 @@ def notification_render(
         label = str(kind.label)
         return RenderedMessage(title=label, body=label)
     return RenderedMessage(
-        title=config.title.format(**context),
-        body=config.body.format(**context),
+        title=_render(config.title, context=context, fallback=kind),
+        body=_render(config.body, context=context, fallback=kind),
     )
+
+
+class _Context(dict[str, Any]):
+    """A stale row's missing key renders as its literal placeholder."""
+
+    def __missing__(self, key: str) -> str:
+        return f"{{{key}}}"
+
+
+def _render(
+    template: str, *, context: Mapping[str, Any], fallback: NotificationKind
+) -> str:
+    try:
+        return template.format_map(_Context(context))
+    except (ValueError, IndexError, AttributeError, KeyError) as exc:
+        # Validation rejects every shape that can raise here; a row that
+        # escaped it (a template edited outside the admin) must still send.
+        logger.exception(
+            "notification_template_unrenderable",
+            kind=str(fallback),
+            error=str(exc),
+        )
+        return str(fallback.label)

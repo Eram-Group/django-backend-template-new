@@ -161,8 +161,17 @@ CACHES = {
 }
 SESSION_ENGINE = "django.contrib.sessions.backends.db"
 # Two queues: "default" for transactional work (emails, refunds, single
-# notification sends), "bulk" for broadcast dispatch + delivery batches so a
-# campaign never starves an OTP. One worker drains both (`just worker`).
+# notification sends), "bulk" for broadcast dispatch + delivery batches. One
+# worker drains both (`just worker`) and a queue name reserves NO capacity -
+# the backend orders by task priority: transactional tasks declare
+# priority=10, broadcast work runs at the default 0, so a campaign never
+# starves an OTP.
+# The queue IS this database: ``task.enqueue()`` inserts the task row through
+# the ORM on the current connection, so services enqueue INSIDE their
+# transaction - the row commits with the domain write and rolls back with it
+# (no on_commit window in which data commits but the task is never queued).
+# That guarantee holds for a same-database backend only; an external broker
+# would need on_commit again.
 TASKS = {
     "default": {
         "BACKEND": "django_tasks_db.DatabaseBackend",

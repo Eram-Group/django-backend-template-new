@@ -29,10 +29,12 @@ CACHES = {
     },
 }
 
-# Tasks run inline so assertions see their effects immediately.
+# The real queue: task rows land in the test database inside the service's
+# transaction, exactly as in production. Nothing runs by itself - a test
+# drains the queue with the ``run_enqueued_tasks`` fixture (conftest.py).
 TASKS = {
     "default": {
-        "BACKEND": "django.tasks.backends.immediate.ImmediateBackend",
+        "BACKEND": "django_tasks_db.DatabaseBackend",
         "QUEUES": ["default", "bulk"],
     }
 }

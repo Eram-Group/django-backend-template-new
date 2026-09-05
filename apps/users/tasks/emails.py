@@ -6,7 +6,7 @@ from apps.common.emails import email_send
 from apps.users.models import User
 
 
-@task()
+@task(priority=10)  # transactional: outranks broadcast batches
 def send_welcome_email(user_id: str) -> None:
     """Welcome email, rendered in the user's language (no request in a worker)."""
     user = User.objects.get(pk=user_id)

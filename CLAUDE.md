@@ -31,8 +31,11 @@ tracker; neither is generated into projects.
 - **Env discipline**: `config/env.py` is the only `os.environ` reader; every
   field required, no code defaults; a new field updates `.env.example` in
   the same change (test_env_contract enforces the sync).
-- Tasks (`django.tasks`): bodies take pk strings, are idempotent, use only
-  models/selectors; services enqueue via `transaction.on_commit`. A scheduled
+- Tasks (`django.tasks`): trampolines that take pk strings and call one
+  service (function-level import, recorded in `pyproject.toml`); the work
+  is idempotent; services enqueue INSIDE their transaction (the queue is
+  this database - the task row commits or rolls back with the write);
+  `transaction.on_commit` is only for external side effects. A scheduled
   job = a management command + a `ScheduledJob` entry in
   `infra/backend_infra/config.py::SCHEDULES` (EventBridge → RunTask).
 - Deploy: ECS Express Mode (web) + Fargate (worker); the task-definition

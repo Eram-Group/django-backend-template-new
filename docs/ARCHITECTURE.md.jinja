@@ -44,8 +44,9 @@ apps/<app>/
 apis | admin | management  →  services  →  tasks  →  selectors  →  models
 ```
 
-- `tasks` sits BELOW `services` because services enqueue tasks
-  (`transaction.on_commit`); task bodies never import services.
+- `tasks` sits BELOW `services` because services enqueue tasks; task
+  modules are trampolines whose function-level import back into their own
+  app's services is a recorded exception in `pyproject.toml`.
 - Apps are independent: cross-app access only through the other app's
   services/selectors re-exports, decided explicitly.
 - `apps.common` is primitives only and imports no domain app (exceptions:
@@ -153,12 +154,20 @@ Conventions (see `apps/users/tasks/emails.py`):
 - Task signatures take **pk strings**, never model instances; the body
   re-fetches (the row may have changed since enqueue).
 - Tasks are **idempotent** — a retried/duplicated run must be safe.
-- Services enqueue via `transaction.on_commit(lambda: task.enqueue(...))` —
-  a rolled-back write must never produce a task run.
+- Services enqueue INSIDE their transaction: the queue is this database
+  (django-tasks-db inserts the task row through the ORM on the current
+  connection), so the task row commits with the domain write and rolls
+  back with it — no window in which data commits but the task is never
+  queued. `transaction.on_commit` is reserved for genuinely external side
+  effects (a provider call); this rule must not be copied unchanged to an
+  immediate or external-broker backend.
 - Task bodies render user-facing text with
   `translation.override(user.language)` — there is no request in a worker.
-- `config/settings/test.py` runs tasks on the ImmediateBackend, so a test
-  sees a task's effects right after the enqueue.
+- `config/settings/test.py` uses the real database backend; nothing runs
+  by itself. A test drains the queue with the `run_enqueued_tasks` fixture
+  (`with run_enqueued_tasks() as records:` around the action) — the
+  production worker's runner over the rows the block queued, tasks a task
+  enqueues included.
 - Scheduled work = management commands triggered by EventBridge Scheduler →
   ECS RunTask. The cadence is code: one `ScheduledJob` entry per command in
   `infra/backend_infra/config.py::SCHEDULES` (`clearsessions`,
@@ -219,7 +228,7 @@ Per-area notes:
   (admin-editable, ar/en via modeltranslation); rendering happens at
   send/read time in the viewer's locale — never stored pre-rendered.
   Delivery = one `NotificationDelivery` row per (notification, channel),
-  THE idempotency record: `on_commit` tasks claim PENDING → PROCESSING under
+  THE idempotency record: executor tasks claim PENDING → PROCESSING under
   `select_for_update(skip_locked)`, outcomes persist per channel, no
   auto-retry (`deliveries_resume` - the admin resume action and the
   `sweep_deliveries` cron - re-enqueues exactly the remainder). Mass sends = `Broadcast` rows fanned out on the `bulk` queue.

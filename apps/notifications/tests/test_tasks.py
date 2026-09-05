@@ -17,8 +17,8 @@ from apps.notifications.models import Device
 from apps.notifications.models import Notification
 from apps.notifications.selectors import notification_config_map
 from apps.notifications.selectors import notification_render
+from apps.notifications.services.execution import execute_deliveries
 from apps.notifications.tasks.delivery import deliver_notifications
-from apps.notifications.tasks.delivery import execute_deliveries
 from apps.notifications.tests.factories import DeviceFactory
 from apps.notifications.tests.factories import NotificationDeliveryFactory
 from apps.notifications.tests.factories import NotificationFactory
@@ -56,11 +56,12 @@ def test_double_execution_sends_exactly_once() -> None:
     assert delivery.attempts == 1
 
 
-def test_task_wrapper_runs_the_executor() -> None:
+def test_task_wrapper_runs_the_executor(run_enqueued_tasks: Any) -> None:
     delivery = _delivery(channel=Channel.PUSH)
     DeviceFactory.create(user=delivery.notification.recipient)
 
-    deliver_notifications.enqueue([str(delivery.pk)])  # inline in tests
+    with run_enqueued_tasks():
+        deliver_notifications.enqueue([str(delivery.pk)])
 
     delivery.refresh_from_db()
     assert delivery.status == DeliveryStatus.SENT
@@ -321,7 +322,7 @@ def test_sms_rows_the_provider_accepted_before_a_rejection_are_sent(
     def _partial(*, to: list[str], body: str) -> None:
         raise SmsProviderError(provider="smsmisr", detail="code='1905'", sent=to[:1])
 
-    monkeypatch.setattr("apps.notifications.tasks.delivery.sms_send_many", _partial)
+    monkeypatch.setattr("apps.notifications.services.execution.sms_send_many", _partial)
 
     execute_deliveries(delivery_ids=[str(row.pk) for row in rows])
 

@@ -56,7 +56,7 @@ SEED_DOMAIN = "seed.example.com"
 CHUNK = 10_000
 BATCH = 1_000
 
-# The executor's skip reasons (apps/notifications/tasks/delivery.py writes
+# The executor's skip reasons (apps/notifications/services/execution.py writes
 # these literals into NotificationDelivery.detail); the bulk path replicates
 # its rows, so the strings must match what an operator sees for real skips.
 SKIP_NO_DEVICES = "no devices"

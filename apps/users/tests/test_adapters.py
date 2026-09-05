@@ -53,12 +53,12 @@ def test_login_code_email_is_branded_html_with_real_expiry(
 
 def test_signup_captures_language_and_welcome_email_uses_it(
     client: Client,
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
     mailoutbox: list[EmailMessage],
 ) -> None:
     """An English-locale signup must not get the Arabic-default welcome
     email - Accept-Language is captured at save_user time."""
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         response = client.post(
             "/_allauth/app/v1/auth/signup",
             {"email": "locale.probe@example.com", "name": "Probe"},
@@ -74,9 +74,9 @@ def test_signup_captures_language_and_welcome_email_uses_it(
 
 
 def test_signup_defaults_to_arabic_without_accept_language(
-    client: Client, django_capture_on_commit_callbacks: Any
+    client: Client, run_enqueued_tasks: Any
 ) -> None:
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         client.post(
             "/_allauth/app/v1/auth/signup",
             {"email": "locale.default@example.com", "name": "Probe"},
@@ -101,11 +101,11 @@ def test_signup_without_a_name_is_rejected(client: Client) -> None:
 
 def test_signup_triggers_welcome_email_after_commit(
     client: Client,
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
     mailoutbox: list[EmailMessage],
 ) -> None:
     """The no-signals chain: adapter.save_user -> service -> task on_commit."""
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         response = client.post(
             "/_allauth/app/v1/auth/signup",
             {"email": "chain.probe@example.com", "name": "Probe"},

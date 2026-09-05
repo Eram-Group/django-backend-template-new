@@ -28,7 +28,7 @@ scheduler ──▶ [ cron jobs ]      │
 | Piece | What it is | AWS service |
 |---|---|---|
 | **web** | The Django API and admin behind HTTPS. Scales from 1 task up when CPU is busy. | ECS Express Mode (Fargate) |
-| **worker** | The same image running `db_worker`, draining the task queue. One small task, always on. | ECS Fargate (Spot in dev) |
+| **worker** | The same image running `db_worker`, draining the task queue. One small task, always on. | ECS Fargate Spot |
 | **cron jobs** | Management commands on a timer (clean sessions, reconcile payments, …). Each run is a short-lived task; nothing is always on. | EventBridge Scheduler |
 | **release task** | Runs before every deploy: deploy checks, migrations, static files. If it fails, nothing rolls out. | one-off ECS task |
 | **database** | One PostgreSQL 18. It is also the cache, the session store and the task queue — so there is no Redis. | RDS |
@@ -41,8 +41,10 @@ scheduler ──▶ [ cron jobs ]      │
 
 - **Web** scales out on CPU and back down to one task. Deploys are canaries:
   a bad image is rolled back automatically.
-- **Worker** is one task; if it dies it is restarted; if it is interrupted it
-  finishes the current task first. Work is never lost — it sits in Postgres.
+- **Worker** is one task on Fargate Spot (spare capacity, ≈ 70 % off, can be
+  reclaimed with two minutes' notice). If it dies it is restarted; if it is
+  interrupted it finishes the current task first. Work is never lost — it sits
+  in Postgres; at worst it is delayed a few minutes.
 - **Cron** is not a server; it is a schedule that starts a task and stops.
 - **Database** has daily backups (7 days in production) and can't be deleted
   by accident.
@@ -57,10 +59,10 @@ balancer.
 
 ## What it costs
 
-- **dev** ≈ $23/month, **production** ≈ $55/month per app, plus a share of the
+- **dev** ≈ $23/month, **production** ≈ $49/month per app, plus a share of the
   two shared pieces (load balancer ≈ $34, dev database ≈ $30 — split across
   ~5 apps, the divisor docs/DEPLOYMENT.md uses).
-- Roughly **$91/month per app** for dev + production once those shares are
+- Roughly **$85/month per app** for dev + production once those shares are
   counted (the per-environment detail is in docs/DEPLOYMENT.md), versus
   ≈ $105–120 on the previous App Runner setup.
 

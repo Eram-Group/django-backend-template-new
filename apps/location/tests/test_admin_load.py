@@ -47,15 +47,13 @@ def test_sheet_lists_loadable_and_marks_loaded(admin: Client) -> None:
 
 
 @respx.mock
-def test_post_loads_the_picked_codes(
-    admin: Client, django_capture_on_commit_callbacks: Any
-) -> None:
+def test_post_loads_the_picked_codes(admin: Client, run_enqueued_tasks: Any) -> None:
     Country.objects.filter(code="EG").delete()
     respx.get(FLAG_URL.format(code="eg")).mock(
         return_value=httpx.Response(200, content=TINY_PNG)
     )
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         response = admin.post(LOAD_URL, {"codes": ["EG"]}, follow=True)
 
     assert response.redirect_chain[-1][0] == CHANGELIST_URL
@@ -87,14 +85,14 @@ def test_load_needs_add_permission(client: Client) -> None:
 
 @respx.mock
 def test_fetch_flags_action_queues_downloads(
-    admin: Client, django_capture_on_commit_callbacks: Any
+    admin: Client, run_enqueued_tasks: Any
 ) -> None:
     country = CountryFactory.create(code="OM")
     route = respx.get(FLAG_URL.format(code="om")).mock(
         return_value=httpx.Response(200, content=TINY_PNG)
     )
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         response = admin.post(
             CHANGELIST_URL,
             {"action": "fetch_flags", "_selected_action": [str(country.pk)]},

@@ -41,14 +41,14 @@ def countries_load(*, codes: Iterable[str]) -> list[Country]:
             country.full_clean()
             country.save()
             created.append(country)
-        transaction.on_commit(lambda: _enqueue_flags(created))
+        _enqueue_flags(created)  # queued in the same transaction as the rows
     return created
 
 
 def country_flags_fetch(*, countries: Iterable[Country]) -> int:
     """(Re)download flags for ``countries`` - the admin retry path."""
     rows = list(countries)
-    transaction.on_commit(lambda: _enqueue_flags(rows))
+    _enqueue_flags(rows)
     return len(rows)
 
 

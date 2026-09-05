@@ -22,7 +22,7 @@ from apps.notifications.exceptions import BroadcastStateError
 from apps.notifications.models import Notification
 from apps.notifications.models import NotificationDelivery
 from apps.notifications.models import NotificationKindConfig
-from apps.notifications.tasks import broadcast as broadcast_tasks
+from apps.notifications.services import dispatch as dispatch_service
 from apps.notifications.tests.factories import BroadcastFactory
 from apps.notifications.tests.factories import DeviceFactory
 from apps.notifications.tests.factories import NotificationDeliveryFactory
@@ -37,8 +37,8 @@ pytestmark = pytest.mark.django_db
 @pytest.fixture(autouse=True)
 def _small_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     """Exercise multi-page dispatch without thousands of rows."""
-    monkeypatch.setattr(broadcast_tasks, "DISPATCH_PAGE", 2)
-    monkeypatch.setattr(broadcast_tasks, "DELIVERY_BATCH", 2)
+    monkeypatch.setattr(dispatch_service, "DISPATCH_PAGE", 2)
+    monkeypatch.setattr(dispatch_service, "DELIVERY_BATCH", 2)
 
 
 @pytest.fixture(autouse=True)
@@ -52,20 +52,20 @@ def _exclusive_audience(db: Any) -> None:
     User.objects.update(is_active=False)
 
 
-def _dispatch(broadcast: Any, django_capture_on_commit_callbacks: Any) -> None:
-    with django_capture_on_commit_callbacks(execute=True):
+def _dispatch(broadcast: Any, run_enqueued_tasks: Any) -> None:
+    with run_enqueued_tasks():
         services.broadcast_dispatch(broadcast=broadcast)
 
 
 def test_dispatch_pages_the_audience_and_delivers(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     users = [UserFactory.create() for _ in range(5)]
     for user in users:
         DeviceFactory.create(user=user)
     broadcast = BroadcastFactory.create()  # created_by joins the audience too
 
-    _dispatch(broadcast, django_capture_on_commit_callbacks)
+    _dispatch(broadcast, run_enqueued_tasks)
 
     broadcast.refresh_from_db()
     assert broadcast.status == BroadcastStatus.COMPLETED
@@ -77,13 +77,13 @@ def test_dispatch_pages_the_audience_and_delivers(
 
 
 def test_dispatch_writes_inbox_rows_even_for_ineligible_users(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     """No device -> no PUSH delivery row, but the inbox row always exists."""
     UserFactory.create()  # no device
     broadcast = BroadcastFactory.create()  # author is device-less too
 
-    _dispatch(broadcast, django_capture_on_commit_callbacks)
+    _dispatch(broadcast, run_enqueued_tasks)
 
     broadcast.refresh_from_db()
     assert broadcast.total_recipients == 2
@@ -93,7 +93,7 @@ def test_dispatch_writes_inbox_rows_even_for_ineligible_users(
 
 
 def test_dispatch_respects_channel_capabilities(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     with_phone = UserFactory.create(phone="+966501234567")
     DeviceFactory.create(user=with_phone)
@@ -101,7 +101,7 @@ def test_dispatch_respects_channel_capabilities(
     DeviceFactory.create(user=phoneless)
     broadcast = BroadcastFactory.create(channels=[Channel.PUSH, Channel.SMS])
 
-    _dispatch(broadcast, django_capture_on_commit_callbacks)
+    _dispatch(broadcast, run_enqueued_tasks)
 
     by_user = {
         (d.notification.recipient_id, d.channel)
@@ -115,13 +115,13 @@ def test_dispatch_respects_channel_capabilities(
 
 
 def test_dispatch_filters_audience_by_language(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     arabic = UserFactory.create(language="ar")
     english = UserFactory.create(language="en")
     broadcast = BroadcastFactory.create(language="ar")
 
-    _dispatch(broadcast, django_capture_on_commit_callbacks)
+    _dispatch(broadcast, run_enqueued_tasks)
 
     recipients = set(
         Notification.objects.filter(broadcast=broadcast).values_list(
@@ -133,10 +133,10 @@ def test_dispatch_filters_audience_by_language(
 
 
 def test_dispatch_twice_raises_state_error(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     broadcast = BroadcastFactory.create()
-    _dispatch(broadcast, django_capture_on_commit_callbacks)
+    _dispatch(broadcast, run_enqueued_tasks)
 
     with pytest.raises(BroadcastStateError):
         services.broadcast_dispatch(broadcast=broadcast)
@@ -185,7 +185,7 @@ class TestChannels:
 
 
 def test_resume_resets_stale_processing_and_completes(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     user = UserFactory.create()
     DeviceFactory.create(user=user)
@@ -202,7 +202,7 @@ def test_resume_resets_stale_processing_and_completes(
         updated_at=timezone.now() - timedelta(hours=1),
     )
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         summary = services.deliveries_resume(broadcast=broadcast, include_failed=False)
 
     assert summary["stale_reset"] == 1
@@ -241,14 +241,14 @@ def test_resume_of_draft_raises() -> None:
 
 
 def test_resume_reenqueues_a_dead_dispatcher(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     """DISPATCHING with no worker alive: the cursor committed with its rows,
     so a fresh dispatcher run finishes the fan-out."""
     UserFactory.create()
     broadcast = BroadcastFactory.create(status=BroadcastStatus.DISPATCHING)
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         summary = services.deliveries_resume(broadcast=broadcast, include_failed=False)
 
     assert summary["dispatcher_reenqueued"] == 1
@@ -257,7 +257,7 @@ def test_resume_reenqueues_a_dead_dispatcher(
 
 
 def test_resume_can_retry_failed_rows(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     user = UserFactory.create()
     DeviceFactory.create(user=user)
@@ -272,7 +272,7 @@ def test_resume_can_retry_failed_rows(
         status=DeliveryStatus.FAILED, detail="quota"
     )
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         summary = services.deliveries_resume(broadcast=broadcast, include_failed=True)
 
     assert summary["failed_reset"] == 1
@@ -284,7 +284,7 @@ def test_resume_can_retry_failed_rows(
 
 
 def test_sweep_command_recovers_transactional_orphans(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     delivery = NotificationDeliveryFactory.create(channel=Channel.PUSH)
     DeviceFactory.create(user=delivery.notification.recipient)
@@ -294,7 +294,7 @@ def test_sweep_command_recovers_transactional_orphans(
     )
 
     out = io.StringIO()
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         call_command("sweep_deliveries", stdout=out)
 
     delivery.refresh_from_db()
@@ -303,7 +303,7 @@ def test_sweep_command_recovers_transactional_orphans(
 
 
 def test_sweep_command_leaves_broadcast_rows_alone(
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     """Broadcasts resume from their admin page; the scheduled sweep only
     touches transactional orphans."""
@@ -322,7 +322,7 @@ def test_sweep_command_leaves_broadcast_rows_alone(
     ).count()
 
     out = io.StringIO()
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         call_command("sweep_deliveries", "--include-failed", stdout=out)
 
     # Only the transactional rows (whatever other fixtures left behind) move.
@@ -476,3 +476,98 @@ class TestPerBroadcastChannels:
             selectors.effective_channels(
                 kind=NotificationKind.ANNOUNCEMENT, broadcast=broadcast
             )
+
+
+# --- counters count rows in a state, never attempts (review 2026-09-05, #8) ----
+
+
+def test_retry_replaces_a_failed_outcome_instead_of_counting_it_twice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from apps.notifications.services import execution
+
+    broadcast = BroadcastFactory.create(
+        status=BroadcastStatus.DISPATCHED, total_recipients=1, total_deliveries=1
+    )
+    notification = NotificationFactory.create(broadcast=broadcast)
+    delivery = NotificationDeliveryFactory.create(
+        notification=notification,
+        broadcast=broadcast,
+        channel=Channel.PUSH,
+        status=DeliveryStatus.PENDING,
+    )
+    outcomes = iter([DeliveryStatus.FAILED, DeliveryStatus.SENT])
+
+    def deliver(rows: Any, *, configs: Any) -> None:
+        outcome = next(outcomes)
+        for row in rows:
+            row.status = outcome
+            row.detail = "provider said no" if outcome == DeliveryStatus.FAILED else ""
+            row.sent_at = timezone.now() if outcome == DeliveryStatus.SENT else None
+
+    monkeypatch.setitem(execution._DELIVERERS, Channel.PUSH, deliver)
+
+    execution.execute_deliveries(delivery_ids=[str(delivery.pk)])
+    broadcast.refresh_from_db()
+    assert (broadcast.sent_count, broadcast.failed_count) == (0, 1)
+
+    services.deliveries_resume(broadcast=broadcast, include_failed=True)
+    execution.execute_deliveries(delivery_ids=[str(delivery.pk)])
+
+    broadcast.refresh_from_db()
+    assert (broadcast.sent_count, broadcast.failed_count, broadcast.skipped_count) == (
+        1,
+        0,
+        0,
+    )
+    assert (
+        broadcast.sent_count + broadcast.failed_count + broadcast.skipped_count
+        == broadcast.total_deliveries
+    )
+    assert broadcast.status == BroadcastStatus.COMPLETED
+
+
+def test_provider_failing_a_sent_row_moves_the_counters_with_it() -> None:
+    broadcast = BroadcastFactory.create(
+        status=BroadcastStatus.COMPLETED, total_deliveries=1, sent_count=1
+    )
+    notification = NotificationFactory.create(broadcast=broadcast)
+    NotificationDeliveryFactory.create(
+        notification=notification,
+        broadcast=broadcast,
+        channel=Channel.WHATSAPP,
+        status=DeliveryStatus.SENT,
+        provider="whatsapp",
+        provider_message_id="wamid.1",
+    )
+
+    assert services.delivery_update_status(
+        provider="whatsapp",
+        provider_message_id="wamid.1",
+        status=DeliveryStatus.FAILED,
+        detail="bounced",
+    )
+
+    broadcast.refresh_from_db()
+    assert (broadcast.sent_count, broadcast.failed_count) == (0, 1)
+
+
+def test_resume_is_bounded_and_reports_the_remainder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from apps.notifications.services import deliveries
+
+    monkeypatch.setattr(deliveries, "RESUME_LIMIT", 2)
+    broadcast = BroadcastFactory.create(status=BroadcastStatus.DISPATCHED)
+    for _ in range(3):
+        NotificationDeliveryFactory.create(
+            notification=NotificationFactory.create(broadcast=broadcast),
+            broadcast=broadcast,
+            channel=Channel.PUSH,
+            status=DeliveryStatus.PENDING,
+        )
+
+    summary = services.deliveries_resume(broadcast=broadcast, include_failed=False)
+
+    assert summary["re_enqueued"] == 2
+    assert summary["remaining"] == 1

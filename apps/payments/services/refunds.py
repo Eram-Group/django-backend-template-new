@@ -45,7 +45,8 @@ def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
     concurrent second refund fails this check before ever reaching the
     gateway), debits the wallet for top-ups (a spent credit raises
     InsufficientBalanceError before the provider is contacted), flips to
-    REFUND_PENDING, and enqueues ``process_payment_refund`` on commit.
+    REFUND_PENDING, and enqueues ``process_payment_refund`` in the same
+    transaction.
 
     The provider call lives in the worker task on purpose: the executor's
     phases must each commit on their own, and a request handler (an admin
@@ -88,10 +89,10 @@ def payment_refund_start(*, payment: Payment, actor: User) -> Payment:
                 "updated_at",
             ]
         )
-        transaction.on_commit(
-            lambda: process_payment_refund.enqueue(
-                payment_id=str(locked.pk), actor_id=str(actor.pk)
-            )
+        # Queued in the interlock's own transaction: the task row commits
+        # with REFUND_PENDING or not at all - never one without the other.
+        process_payment_refund.enqueue(
+            payment_id=str(locked.pk), actor_id=str(actor.pk)
         )
         return locked
 

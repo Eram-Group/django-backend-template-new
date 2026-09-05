@@ -87,3 +87,37 @@ def test_missing_row_renders_the_kind_label() -> None:
 
     assert configs == {}
     assert (message.title, message.body) == ("Welcome", "Welcome")
+
+
+# --- rendering never raises (review 2026-09-05, #7) ---------------------------
+
+
+def test_render_keeps_a_stale_rows_missing_key_as_its_placeholder() -> None:
+    """A row written before the catalog gained a key renders, visibly."""
+    configs = notification_config_map()
+
+    message = notification_render(
+        kind=NotificationKind.WALLET_CREDITED,
+        context={"amount": "10.00", "currency": "SAR"},  # no balance
+        configs=configs,
+    )
+
+    assert "{balance}" in message.body
+
+
+def test_render_falls_back_to_the_label_when_a_template_cannot_render() -> None:
+    """A template that escaped validation (edited outside the admin) must
+    not fail the batch or the inbox."""
+    config = NotificationKindConfig.objects.get(kind=NotificationKind.PAYMENT_PAID)
+    NotificationKindConfig.objects.filter(pk=config.pk).update(
+        body_en="{amount:not-a-spec}"
+    )
+    configs = notification_config_map()
+
+    with translation.override("en"):
+        message = notification_render(
+            kind=NotificationKind.PAYMENT_PAID,
+            context={"amount": "10.00", "currency": "SAR"},
+            configs=configs,
+        )
+        assert message.body == str(NotificationKind.PAYMENT_PAID.label)

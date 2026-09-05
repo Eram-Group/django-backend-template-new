@@ -42,7 +42,9 @@ def user_create(*, user: User, email: str, name: str, language: Language) -> Use
         notification_send(
             recipient=user, kind=NotificationKind.WELCOME, context={"name": name}
         )
-        transaction.on_commit(lambda: send_welcome_email.enqueue(str(user.pk)))
+        # Same transaction as the row (django-tasks-db): a rolled-back signup
+        # leaves no task, a committed one always has its welcome email queued.
+        send_welcome_email.enqueue(str(user.pk))
     return user
 
 

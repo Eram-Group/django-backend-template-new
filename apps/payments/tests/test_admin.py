@@ -25,7 +25,7 @@ CONFIRM = {"_form_submitted": "1"}
 
 def test_refund_action_runs_interlock_and_executor(
     client: Client,
-    django_capture_on_commit_callbacks: Any,
+    run_enqueued_tasks: Any,
 ) -> None:
     superuser = UserFactory.create(is_staff=True, is_superuser=True)
     client.force_login(superuser)
@@ -47,7 +47,7 @@ def test_refund_action_runs_interlock_and_executor(
     )
     url = reverse("admin:payments_payment_refund_payment", args=[payment.pk])
 
-    with django_capture_on_commit_callbacks(execute=True):
+    with run_enqueued_tasks():
         response = client.post(url, CONFIRM)
 
     assert response.status_code == 302
@@ -57,7 +57,7 @@ def test_refund_action_runs_interlock_and_executor(
     started = gettext("Refund started - refresh to see the final status.")
     assert any(started in str(m) for m in get_messages(response.wsgi_request))
     payment.refresh_from_db()
-    assert payment.status == PaymentStatus.REFUNDED  # ImmediateBackend ran inline
+    assert payment.status == PaymentStatus.REFUNDED  # the drained executor task
     wallet = payment.user.wallet
     wallet.refresh_from_db()
     assert wallet.balance == Decimal(0)
