@@ -44,10 +44,16 @@ class Broadcast(BaseModel):
     )
     joined_after = models.DateField(_("joined on or after"), null=True, blank=True)
     joined_before = models.DateField(_("joined on or before"), null=True, blank=True)
-    # Hand-picked audience: user pks (as strings). Non-empty = send to exactly
-    # these users (still active, ``require_device`` still applies) and the
-    # language/date filters are ignored. Empty = the filters decide.
-    recipient_ids = models.JSONField(_("specific recipients"), default=list, blank=True)
+    # Hand-picked audience. Non-empty = send to exactly these users (still
+    # active, ``require_device`` still applies) and the language/date filters
+    # are ignored. Empty = the filters decide. A real relation so the admin's
+    # autocomplete picker and exports work without custom code.
+    recipients = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        related_name="+",
+        blank=True,
+        verbose_name=_("specific recipients"),
+    )
     # Exactly the channels this send goes out on - every broadcast picks its
     # own, there is no kind-level default. Never empty (blank=False rejects
     # [] in full_clean; the service validates the subset).

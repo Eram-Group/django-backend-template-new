@@ -32,9 +32,7 @@ ConfigMap = Mapping[NotificationKind, NotificationKindConfig]
 
 logger = structlog.get_logger(__name__)
 
-_MISSING_ROW_HINT = (
-    "opening the Notification actions page creates it with recommended values"
-)
+_MISSING_ROW_HINT = "the seed migration (notifications/0005) creates every kind's row"
 
 
 def notification_config_map() -> dict[NotificationKind, NotificationKindConfig]:

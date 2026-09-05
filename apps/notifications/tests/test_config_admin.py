@@ -1,9 +1,10 @@
-"""The single-page notification-actions editor and its save seam.
+"""The notification-actions admin: a standard change form per kind.
 
-The page is Django's changelist underneath (gates keep exercising it); these
-tests cover what the replacement adds: the cards, the one JSON save for
-every edited card (atomic, routed through services.notification_config_update),
-and the locks.
+Rows exist by migration (one per catalog kind); the change form edits the
+channel policy (a checkbox set limited to the kind's supported channels)
+and the ar/en copy on translation tabs, shows the placeholders and a
+sample-rendered preview, and writes through
+services.notification_config_update - the single writer.
 """
 
 import re
@@ -15,6 +16,7 @@ from django.urls import reverse
 from django.utils import translation
 
 from apps.notifications import services
+from apps.notifications.admin.forms import SAMPLE_VALUES
 from apps.notifications.catalog import CATALOG
 from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationKind
@@ -27,8 +29,7 @@ from apps.users.tests.factories import UserFactory
 
 pytestmark = pytest.mark.django_db
 
-PAGE_URL = "admin:notifications_notificationkindconfig_changelist"
-SAVE_URL = "admin:notifications_notificationkindconfig_config_save"
+LIST_URL = "admin:notifications_notificationkindconfig_changelist"
 
 
 def _superuser_client(client: Client) -> Client:
@@ -36,116 +37,89 @@ def _superuser_client(client: Client) -> Client:
     return client
 
 
-def _payload(kind: str, **fields: Any) -> dict[str, Any]:
-    payload: dict[str, Any] = {"kind": kind}
-    for name, value in fields.items():
-        payload[f"{kind}-{name}"] = value
-    return payload
-
-
-def _message(kind: str, **fields: Any) -> dict[str, Any]:
-    """A complete card payload: the stored copy plus the given overrides."""
+def _change_url(kind: NotificationKind) -> str:
     config = NotificationKindConfig.objects.get(kind=kind)
-    return _payload(
-        kind,
-        title_ar=config.title_ar,
-        title_en=config.title_en,
-        body_ar=config.body_ar,
-        body_en=config.body_en,
-        **fields,
+    return reverse(
+        "admin:notifications_notificationkindconfig_change", args=[config.pk]
     )
 
 
-class TestEditorPage:
-    def test_renders_one_card_per_kind(self, client: Client) -> None:
-        response = _superuser_client(client).get(reverse(PAGE_URL))
+def _payload(kind: NotificationKind, **fields: Any) -> dict[str, Any]:
+    """A complete change-form POST: the stored copy plus the overrides."""
+    config = NotificationKindConfig.objects.get(kind=kind)
+    payload: dict[str, Any] = {
+        "channels": list(config.channels),
+        "title_ar": config.title_ar,
+        "title_en": config.title_en,
+        "body_ar": config.body_ar,
+        "body_en": config.body_en,
+        "_save": "Save",
+    }
+    payload.update(fields)
+    return payload
 
-        assert response.status_code == 200
-        body = response.content.decode()
-        for kind in NotificationKind:
-            editable = not CATALOG[kind].authored_per_send
-            assert (f'data-kind="{kind}"' in body) is editable
 
-    def test_editable_card_exposes_both_language_columns(self, client: Client) -> None:
-        body = _superuser_client(client).get(reverse(PAGE_URL)).content.decode()
+class TestChangeForm:
+    def test_every_catalog_kind_has_a_row_to_edit(self, client: Client) -> None:
+        """Rows are born from the seed migration - the changelist lists one
+        per kind, and there is no add button to make more."""
+        response = _superuser_client(client).get(reverse(LIST_URL))
 
-        assert 'name="welcome-title_ar"' in body
-        assert 'name="welcome-title_en"' in body
-        assert 'name="welcome-body_ar"' in body
-        assert 'name="welcome-body_en"' in body
+        assert response.context["cl"].result_count == len(NotificationKind)
+        assert response.context["has_add_permission"] is False
 
-    def test_a_missing_row_renders_unsaved_with_recommended_values(
+    def test_renders_both_language_columns_and_the_supported_channels(
         self, client: Client
     ) -> None:
-        """No seed step: the page prefills a missing kind from the catalog and
-        flags it until its first save - opening the page never writes."""
-        NotificationKindConfig.objects.filter(kind=NotificationKind.WELCOME).delete()
-        admin_client = _superuser_client(client)
-
-        body = admin_client.get(reverse(PAGE_URL)).content.decode()
-
-        assert not NotificationKindConfig.objects.filter(
-            kind=NotificationKind.WELCOME
-        ).exists()
-        assert 'data-kind="welcome" data-new="1"' in body
-        assert 'data-kind="payment_paid" data-new="1"' not in body
-        assert 'name="welcome-title_en" value="Welcome!"' in body
-        again = admin_client.get(reverse(PAGE_URL)).content.decode()
-        assert 'data-kind="welcome" data-new="1"' in again
-
-    def test_a_retired_kind_does_not_appear(self, client: Client) -> None:
-        """Removing a kind from the enum needs no migration: its leftover row
-        is ignored and the page shows only the current catalog."""
-        NotificationKindConfig.objects.filter(kind=NotificationKind.WELCOME).update(
-            kind="retired_kind"
+        body = (
+            _superuser_client(client)
+            .get(_change_url(NotificationKind.WELCOME))
+            .content.decode()
         )
 
-        response = _superuser_client(client).get(reverse(PAGE_URL))
+        for name in ("title_ar", "title_en", "body_ar", "body_en"):
+            assert f'name="{name}"' in body
+        # WELCOME supports push only: the picker offers nothing else.
+        assert 'name="channels" value="push"' in body
+        assert 'value="sms"' not in body
 
-        assert response.status_code == 200
-        assert "retired_kind" not in response.content.decode()
+    def test_shows_placeholders_and_a_sample_preview(self, client: Client) -> None:
+        body = (
+            _superuser_client(client)
+            .get(_change_url(NotificationKind.WALLET_CREDITED))
+            .content.decode()
+        )
 
-    def test_announcement_has_no_card(self, client: Client) -> None:
-        """authored_per_send: message and channels are both picked per
-        broadcast in the composer - nothing to configure here."""
-        body = _superuser_client(client).get(reverse(PAGE_URL)).content.decode()
+        assert "{balance}" in body
+        assert SAMPLE_VALUES["balance"] in body  # the preview rendered with it
 
-        assert "announcement-" not in body
+    def test_announcement_copy_is_read_only(self, client: Client) -> None:
+        """authored_per_send: the composer writes the message per broadcast."""
+        body = (
+            _superuser_client(client)
+            .get(_change_url(NotificationKind.ANNOUNCEMENT))
+            .content.decode()
+        )
+
+        assert 'name="title_en"' not in body
+        assert 'name="body_en"' not in body
+        assert 'name="channels"' in body  # the channel policy is still editable
 
     def test_every_catalog_context_key_has_an_example_value(self) -> None:
-        """Insert chips (tooltip and "{" menu) need an example per placeholder."""
-        from apps.notifications.admin.forms import SAMPLE_VALUES
-
+        """The preview and the placeholder list need an example per key."""
         keys = set().union(*(entry.context_keys for entry in CATALOG.values()))
 
         assert keys <= set(SAMPLE_VALUES), sorted(keys - set(SAMPLE_VALUES))
 
-    def test_message_fields_render_as_token_editors(self, client: Client) -> None:
-        """Each language pane pairs the real field with its editor; the
-        palette carries an example value per variable."""
-        body = _superuser_client(client).get(reverse(PAGE_URL)).content.decode()
 
-        assert 'name="wallet_credited-body_en"' in body
-        assert 'data-for="wallet_credited-body_en"' in body
-        assert 'data-for="wallet_credited-body_ar"' in body
-        assert 'data-key="balance" data-sample="1,250.00"' in body
-        assert "{#" not in body  # a template comment leaking into the page
-
-    def test_sort_params_do_not_break_the_page(self, client: Client) -> None:
-        """The admin sorting gate hits the changelist with ?o= permutations."""
-        response = _superuser_client(client).get(reverse(PAGE_URL), {"o": "1"})
-
-        assert response.status_code == 200
-
-
-class TestConfigSave:
+class TestChangeFormSave:
     def test_save_updates_channels_and_copy_for_the_next_send(
         self, client: Client
     ) -> None:
         response = _superuser_client(client).post(
-            reverse(SAVE_URL),
+            _change_url(NotificationKind.WALLET_CREDITED),
             _payload(
-                "wallet_credited",
+                NotificationKind.WALLET_CREDITED,
                 channels=[Channel.PUSH, Channel.SMS],
                 title_ar="تم الإيداع",
                 title_en="Wallet topped up",
@@ -154,8 +128,7 @@ class TestConfigSave:
             ),
         )
 
-        assert response.status_code == 200
-        assert response.json() == {"ok": True, "saved": ["wallet_credited"]}
+        assert response.status_code == 302
         assert effective_channels(kind=NotificationKind.WALLET_CREDITED) == frozenset(
             {Channel.PUSH, Channel.SMS}
         )
@@ -175,139 +148,72 @@ class TestConfigSave:
 
     def test_unknown_placeholder_is_a_field_error(self, client: Client) -> None:
         response = _superuser_client(client).post(
-            reverse(SAVE_URL),
-            _payload(
-                "welcome",
-                channels=[],
-                title_ar="أهلاً",
-                title_en="Hello",
-                body_ar="مرحباً {name}",
-                body_en="Hi {surname}",
-            ),
+            _change_url(NotificationKind.WELCOME),
+            _payload(NotificationKind.WELCOME, body_en="Hi {surname}"),
         )
 
-        assert response.status_code == 400
-        assert "surname" in response.json()["errors"]["welcome"]["body_en"][0]
+        assert response.status_code == 200
+        assert "surname" in response.context["adminform"].form.errors["body_en"][0]
 
-    def test_unsupported_channel_is_rejected(self, client: Client) -> None:
+    @pytest.mark.parametrize("body", ["Broken {", "{name:>10}", "{name!r}"])
+    def test_unrenderable_template_is_a_field_error(
+        self, client: Client, body: str
+    ) -> None:
+        response = _superuser_client(client).post(
+            _change_url(NotificationKind.WELCOME),
+            _payload(NotificationKind.WELCOME, body_en=body),
+        )
+
+        assert response.status_code == 200
+        assert "body_en" in response.context["adminform"].form.errors
+
+    def test_unsupported_channel_cannot_be_posted(self, client: Client) -> None:
         """WELCOME supports push only - the form's choices are the ceiling."""
         response = _superuser_client(client).post(
-            reverse(SAVE_URL),
-            _payload("welcome", channels=[Channel.SMS]),
-        )
-
-        assert response.status_code == 400
-        assert "channels" in response.json()["errors"]["welcome"]
-
-    def test_first_save_creates_the_row(self, client: Client) -> None:
-        NotificationKindConfig.objects.filter(kind=NotificationKind.WELCOME).delete()
-
-        response = _superuser_client(client).post(
-            reverse(SAVE_URL),
-            _payload(
-                "welcome",
-                channels=[Channel.PUSH],
-                title_ar="أهلاً",
-                title_en="Hello",
-                body_ar="مرحباً {name}",
-                body_en="Hi {name}",
-            ),
+            _change_url(NotificationKind.WELCOME),
+            _payload(NotificationKind.WELCOME, channels=[Channel.SMS]),
         )
 
         assert response.status_code == 200
-        created = NotificationKindConfig.objects.get(kind=NotificationKind.WELCOME)
-        assert created.channels == ["push"]
-        assert created.body_ar == "مرحباً {name}"
-
-    def test_a_new_row_is_validated_like_an_existing_one(self, client: Client) -> None:
-        NotificationKindConfig.objects.filter(kind=NotificationKind.WELCOME).delete()
-
-        response = _superuser_client(client).post(
-            reverse(SAVE_URL),
-            _payload(
-                "welcome",
-                channels=[Channel.SMS],
-                title_ar="a",
-                title_en="a",
-                body_ar="b",
-                body_en="b",
-            ),
-        )
-
-        assert response.status_code == 400
-        assert "channels" in response.json()["errors"]["welcome"]
-        assert not NotificationKindConfig.objects.filter(
-            kind=NotificationKind.WELCOME
-        ).exists()
-
-    def test_several_cards_save_in_one_request(self, client: Client) -> None:
-        payload = _message("welcome", channels=[Channel.PUSH])
-        payload.update(_message("payment_paid", channels=[]))
-        payload["kind"] = ["welcome", "payment_paid"]
-
-        response = _superuser_client(client).post(reverse(SAVE_URL), payload)
-
-        assert response.status_code == 200
-        assert response.json() == {"ok": True, "saved": ["welcome", "payment_paid"]}
-        assert effective_channels(kind=NotificationKind.WELCOME) == frozenset(
-            {Channel.PUSH}
-        )
-        assert effective_channels(kind=NotificationKind.PAYMENT_PAID) == frozenset()
-
-    def test_one_invalid_card_saves_nothing(self, client: Client) -> None:
-        """All or nothing: the valid card must not land while the other fails."""
-        payload = _message("welcome", channels=[Channel.PUSH])
-        payload.update(_message("payment_paid", channels=[Channel.WHATSAPP]))
-        payload["kind"] = ["welcome", "payment_paid"]
-
-        response = _superuser_client(client).post(reverse(SAVE_URL), payload)
-
-        assert response.status_code == 400
-        assert list(response.json()["errors"]) == ["payment_paid"]
+        assert "channels" in response.context["adminform"].form.errors
         assert effective_channels(kind=NotificationKind.WELCOME) == frozenset()
 
-    def test_an_empty_save_is_rejected(self, client: Client) -> None:
-        response = _superuser_client(client).post(reverse(SAVE_URL), {})
-
-        assert response.status_code == 400
-
-    def test_unknown_kind_is_rejected(self, client: Client) -> None:
+    def test_inbox_only_is_a_legitimate_policy(self, client: Client) -> None:
         response = _superuser_client(client).post(
-            reverse(SAVE_URL), {"kind": "carrier_pigeon"}
+            _change_url(NotificationKind.PAYMENT_PAID),
+            _payload(NotificationKind.PAYMENT_PAID, channels=[]),
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 302
+        assert effective_channels(kind=NotificationKind.PAYMENT_PAID) == frozenset()
 
-    def test_an_authored_kind_cannot_be_saved_here(self, client: Client) -> None:
-        """No card, no save: a hand-crafted POST for the composer's kind is
-        refused like an unknown one, so the passthrough template stays."""
+    def test_an_authored_kind_keeps_its_passthrough_copy(self, client: Client) -> None:
+        """The copy fields are read-only on the form; a hand-crafted POST
+        that carries them cannot change the passthrough template."""
         response = _superuser_client(client).post(
-            reverse(SAVE_URL),
-            _payload(
-                "announcement",
-                channels=[Channel.SMS],
-                title_en="hijacked",
-                body_en="hijacked",
-            ),
+            _change_url(NotificationKind.ANNOUNCEMENT),
+            {
+                "channels": [Channel.SMS],
+                "title_en": "hijacked",
+                "body_en": "hijacked",
+                "_save": "Save",
+            },
         )
 
-        assert response.status_code == 400
+        assert response.status_code == 302
         config = NotificationKindConfig.objects.get(kind=NotificationKind.ANNOUNCEMENT)
         assert config.title_en == "{title}"
         assert config.body_en == "{message}"
-        assert config.channels == []
-
-    def test_anonymous_callers_are_redirected_to_login(self, client: Client) -> None:
-        response = client.post(reverse(SAVE_URL), {})
-
-        assert response.status_code == 302
+        assert config.channels == [Channel.SMS]
 
     def test_a_staff_user_without_change_permission_is_refused(
         self, client: Client
     ) -> None:
         client.force_login(UserFactory.create(is_staff=True))
 
-        response = client.post(reverse(SAVE_URL), {})
+        response = client.post(
+            _change_url(NotificationKind.WELCOME), _payload(NotificationKind.WELCOME)
+        )
 
         # admin_view bounces a staff user with no model perms at the door.
         assert response.status_code in (302, 403)

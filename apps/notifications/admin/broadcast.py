@@ -4,18 +4,16 @@ from typing import cast
 
 from django.contrib import admin
 from django.contrib import messages
-from django.core.exceptions import PermissionDenied
 from django.db.models import Model
 from django.forms import ModelForm
 from django.http import HttpRequest
 from django.http import HttpResponse
-from django.http import JsonResponse
 from django.shortcuts import redirect
-from django.urls import path
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from unfold.contrib.filters.admin import RangeDateFilter
 from unfold.decorators import action
+from unfold.decorators import display
 from unfold.forms import BaseDialogForm
 
 from apps.common.admin import BaseModelAdmin
@@ -25,9 +23,8 @@ from apps.common.admin import on_change
 from apps.common.exceptions import ApplicationError
 from apps.notifications import selectors
 from apps.notifications import services
-from apps.notifications.admin.forms import MESSAGE_LIMIT
-from apps.notifications.admin.forms import TITLE_LIMIT
-from apps.notifications.admin.forms import BroadcastAudienceForm
+from apps.notifications.admin.forms import TARGET_FILTERS
+from apps.notifications.admin.forms import TARGET_USERS
 from apps.notifications.admin.forms import BroadcastComposeForm
 from apps.notifications.admin.resources import BroadcastResource
 from apps.notifications.constants import BroadcastStatus
@@ -39,12 +36,11 @@ if TYPE_CHECKING:
 
 @admin.register(Broadcast)
 class BroadcastAdmin(BaseModelAdmin):
-    # Capability + field decisions for the Broadcast admin.
-    #
-    # Operators author a DRAFT here (kind, context, audience), then move it
-    # through its lifecycle with the Dispatch/Resume detail actions - status,
-    # cursor, and counters are code-owned and stay read-only; content freezes
-    # once the row exists (a dispatched broadcast must show what was sent).
+    # Operators author a DRAFT here (title/message, audience, channels) on the
+    # standard add form, then move it through its lifecycle with the
+    # Dispatch/Resume detail actions - status, cursor and counters are
+    # code-owned and stay read-only; content freezes once the row exists (a
+    # dispatched broadcast must show what was sent).
 
     can_add = True
     can_change = True  # the change view hosts the lifecycle actions
@@ -59,10 +55,12 @@ class BroadcastAdmin(BaseModelAdmin):
             "require_device": on_change,
             "joined_after": on_change,
             "joined_before": on_change,
-            "recipient_ids": on_change,
+            "recipients": on_change,
             "channels": on_change,
         },
     )
+    resource_classes = [BroadcastResource]
+
     list_display = (
         "kind",
         "status",
@@ -84,9 +82,10 @@ class BroadcastAdmin(BaseModelAdmin):
     ordering = ("-created_at",)
     list_per_page = 50
 
-    # The add view uses BroadcastComposeForm, whose `title` and `message` are
-    # form-only fields (they are rendered into `context`) - so the add fieldsets
-    # cannot be the change ones.
+    # Composing an announcement and inspecting a dispatched one are different
+    # jobs: the add view gets the message/audience form, the change view stays
+    # the plain frozen record. Mirrors django.contrib.auth's UserAdmin.
+    add_form = BroadcastComposeForm
     add_fieldsets = (
         (None, {"fields": ("title", "message")}),
         (
@@ -108,20 +107,21 @@ class BroadcastAdmin(BaseModelAdmin):
     fieldsets = (
         (None, {"fields": ("kind", "context")}),
         (
-            "Audience",
+            _("Audience"),
             {
                 "fields": (
                     "language",
                     "require_device",
                     "joined_after",
                     "joined_before",
-                    "recipient_ids",
+                    "recipients",
                     "channels",
+                    "audience_estimate",
                 )
             },
         ),
         (
-            "Progress",
+            _("Progress"),
             {
                 "fields": (
                     "status",
@@ -134,11 +134,11 @@ class BroadcastAdmin(BaseModelAdmin):
                 )
             },
         ),
-        ("Meta", {"fields": ("created_by", "created_at", "updated_at")}),
+        (_("Meta"), {"fields": ("created_by", "created_at", "updated_at")}),
     )
-
     # Code-owned: stamped from request.user / written by the dispatcher.
     readonly_fields = (
+        "audience_estimate",
         "created_by",
         "status",
         "dispatch_cursor",
@@ -148,110 +148,32 @@ class BroadcastAdmin(BaseModelAdmin):
         "failed_count",
         "skipped_count",
     )
-
-    resource_classes = [BroadcastResource]
-
-    # Composing an announcement and inspecting a dispatched one are different
-    # jobs: the add view gets the message/audience form, the change view stays
-    # the plain frozen record. Mirrors django.contrib.auth's UserAdmin.
-    add_form = BroadcastComposeForm
-    # Presentation only: Django still owns POST -> validate -> save_model ->
-    # redirect. The template just lays the same form out as a composer with a
-    # live reach estimate and a message preview.
-    add_form_template = "admin/notifications/broadcast/compose.html"
+    # The user picker: Django's autocomplete against UserAdmin.search_fields
+    # (the operator needs the users view permission the endpoint checks).
+    autocomplete_fields = ["recipients"]
+    # unfold shows the picker only for "specific users" and the filters only
+    # for "everyone matching the filters" (Alpine expressions over the form).
+    conditional_fields = {
+        "recipients": f"target == '{TARGET_USERS}'",
+        "language": f"target == '{TARGET_FILTERS}'",
+        "joined_after": f"target == '{TARGET_FILTERS}'",
+        "joined_before": f"target == '{TARGET_FILTERS}'",
+    }
 
     # Lifecycle buttons on the change form - each calls a service, never
     # obj.save(); the fan-out itself runs in the bulk-queue worker.
     actions_detail = ["dispatch_broadcast", "resume_broadcast"]
 
-    def get_urls(self) -> list[Any]:
-        # Prepended so it wins over the admin's `<path:object_id>` catch-all,
-        # which would otherwise read "audience-estimate" as a primary key.
-        estimate = [
-            path(
-                "audience-estimate/",
-                self.admin_site.admin_view(self.audience_estimate_view),
-                name="notifications_broadcast_audience_estimate",
-            ),
-            path(
-                "audience-users/",
-                self.admin_site.admin_view(self.audience_users_view),
-                name="notifications_broadcast_audience_users",
-            ),
-        ]
-        return estimate + list(super().get_urls())
-
-    def audience_users_view(self, request: HttpRequest) -> JsonResponse:
-        """The "specific users" picker's search: a short page of active users
-        matching ``q`` by name, email or phone."""
-        if not self.has_add_permission(request):
-            raise PermissionDenied
-        users = selectors.broadcast_user_search(query=request.GET.get("q", ""))
-        return JsonResponse(
-            {
-                "ok": True,
-                "users": [
-                    {
-                        "id": str(user.pk),
-                        "name": user.name,
-                        "email": user.email,
-                        "phone": str(user.phone) if user.phone else "",
-                        "language": user.language,
-                    }
-                    for user in users
-                ],
-            }
+    @display(description=_("Reach"))
+    def audience_estimate(self, obj: Broadcast) -> str:
+        """Who a DRAFT would reach right now - the same query the dispatcher
+        pages, so the number cannot drift from the send."""
+        if obj.status != BroadcastStatus.DRAFT:
+            return str(_("Dispatched - see the progress counters."))
+        summary = selectors.broadcast_audience_summary(broadcast=obj)
+        return str(
+            _("%(recipients)d recipients, %(devices)d registered devices") % summary
         )
-
-    def audience_estimate_view(self, request: HttpRequest) -> JsonResponse:
-        """Live "who would this reach" for the compose screen.
-
-        Validates only the audience half of the form, so a reach number appears
-        before the operator has written the message.
-        """
-        if not self.has_add_permission(request):
-            raise PermissionDenied
-        # Bound unconditionally, never `request.POST or None`: an empty POST is
-        # the meaningful "no filters" case (everyone), and the usual idiom would
-        # leave the form unbound so is_valid() said False and the operator got
-        # an error instead of the total.
-        form = BroadcastAudienceForm(data=request.POST)
-        if not form.is_valid():
-            return JsonResponse({"ok": False, "errors": form.errors}, status=400)
-        summary = selectors.broadcast_audience_summary(
-            broadcast=form.audience_preview()
-        )
-        return JsonResponse({"ok": True, **summary})
-
-    def render_change_form(
-        self,
-        request: HttpRequest,
-        context: dict[str, Any],
-        add: bool = False,
-        change: bool = False,
-        form_url: str = "",
-        obj: Any | None = None,
-    ) -> HttpResponse:
-        if add:
-            context["audience_estimate_url"] = reverse(
-                "admin:notifications_broadcast_audience_estimate"
-            )
-            context["audience_users_url"] = reverse(
-                "admin:notifications_broadcast_audience_users"
-            )
-            # The composer replaces the admin's own submit row, so it also has
-            # to offer the way back out that the submit row would have.
-            context["changelist_url"] = reverse(
-                "admin:notifications_broadcast_changelist"
-            )
-            # Advisory counter limits; the form owns the numbers so the page
-            # and any future validation cannot drift apart.
-            context["title_limit"] = TITLE_LIMIT
-            context["message_limit"] = MESSAGE_LIMIT
-        response: HttpResponse = super().render_change_form(
-            request, context, add=add, change=change, form_url=form_url, obj=obj
-        )
-        return response
 
     def get_form(
         self,
@@ -291,6 +213,14 @@ class BroadcastAdmin(BaseModelAdmin):
         # which the form left unsaved - point it at the row the service made.
         obj.pk = broadcast.pk
 
+    def save_related(
+        self, request: HttpRequest, form: ModelForm[Any], formsets: Any, change: bool
+    ) -> None:
+        # The service already set the recipients on add; Django's default
+        # would re-save the M2M from the form onto the row.
+        if change or not isinstance(form, BroadcastComposeForm):
+            super().save_related(request, form, formsets, change)
+
     # Both lifecycle guards check the MODEL permission before the status
     # (unfold enforces has_<action>_permission inside the view), so status
     # alone must never authorize a send to the whole user base by any
@@ -315,8 +245,8 @@ class BroadcastAdmin(BaseModelAdmin):
         dialog=confirm_dialog(
             title=_("Dispatch this broadcast?"),
             description=_(
-                "Every user in the audience gets it on the selected "
-                "channels. A dispatch cannot be recalled."
+                "Every user in the audience (see Reach on the form) gets it on "
+                "the selected channels. A dispatch cannot be recalled."
             ),
             submit=_("Dispatch"),
         ),

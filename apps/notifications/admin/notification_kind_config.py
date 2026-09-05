@@ -4,28 +4,28 @@ from typing import ClassVar
 from typing import cast
 
 from django.contrib import admin
-from django.core.exceptions import PermissionDenied
-from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db.models import Model
+from django.forms import ModelForm
 from django.http import HttpRequest
-from django.http import HttpResponse
-from django.http import JsonResponse
-from django.urls import path
-from django.urls import reverse
-from django.utils.translation import gettext as _
+from django.utils import translation
+from django.utils.html import format_html
+from django.utils.html import format_html_join
+from django.utils.translation import gettext_lazy as _
 from modeltranslation.admin import TabbedTranslationAdmin
+from unfold.decorators import display
 
 from apps.common.admin import AdminContext
 from apps.common.admin import BaseModelAdmin
 from apps.common.admin import FieldPermissions
-from apps.common.exceptions import ApplicationError
 from apps.notifications import selectors
 from apps.notifications import services
-from apps.notifications.admin.forms import KindConfigForm
+from apps.notifications.admin.forms import SAMPLE_VALUES
+from apps.notifications.admin.forms import KindConfigAdminForm
 from apps.notifications.admin.resources import NotificationKindConfigResource
 from apps.notifications.catalog import catalog_entry
 from apps.notifications.constants import NotificationKind
 from apps.notifications.models import NotificationKindConfig
+from apps.notifications.models.kind_config import MESSAGE_FIELDS
 
 if TYPE_CHECKING:
     from django.contrib.admin.options import _FieldsetSpec
@@ -35,13 +35,11 @@ def message_locked(context: AdminContext) -> bool:
     """authored_per_send kinds (the broadcast composer's ANNOUNCEMENT) keep
     their passthrough title/body - the message is written per broadcast.
 
-    A row is needed to know the kind (the add view has none - CAN_ADD is
+    A row is needed to know the kind (the add view has none - can_add is
     False today, and the rule must not 500 if that ever flips); every row's
     kind is a catalog kind - the field is read-only and the rows were born
     from the catalog.
     """
-    from apps.notifications.catalog import catalog_entry
-
     if context.obj is None:
         return False
     config = cast("NotificationKindConfig", context.obj)
@@ -52,25 +50,17 @@ def message_locked(context: AdminContext) -> bool:
 class NotificationKindConfigAdmin(
     BaseModelAdmin, TabbedTranslationAdmin[NotificationKindConfig]
 ):
-    """Per-action channel + message config.
+    """Per-action channel + message config: THE operator surface for "this
+    action sends on these channels, saying this".
 
-    The changelist template is replaced by the single-page editor (every
-    action as an editable card; one Save posts every edited card to
-    config_save_view -> services.notification_config_update, atomically).
-    The standard change form stays as the no-JS fallback:
-    TabbedTranslationAdmin swaps ``title``/``body`` for their ar/en shadow
-    fields, and FieldPermissions rules auto-cover the shadows, so the
-    ANNOUNCEMENT message lock holds on both tabs.
+    One row per catalog kind, seeded by migration (a new kind ships its
+    row in a data migration) - the kind set is the catalog's, never the
+    operator's, so add/delete stay off. TabbedTranslationAdmin swaps
+    ``title``/``body`` for their ar/en tabs, and FieldPermissions rules
+    auto-cover the shadows, so the ANNOUNCEMENT message lock holds on both.
     """
 
-    # Capability + field decisions for the NotificationKindConfig admin.
-    #
-    # THE operator surface for "this action sends on these channels, saying this".
-    # The actions page shows one card per kind and creates a missing row with the
-    # catalog's recommended values when opened (no generic add form) - the kind set
-    # is the catalog's, never the operator's, so add/delete stay off.
-
-    can_add = False  # one card per catalog kind; the actions page creates the row
+    can_add = False  # one row per catalog kind, born from a migration
     can_change = True
     can_delete = False  # a deleted row = label-only, inbox-only sends
     field_permissions = FieldPermissions(
@@ -80,138 +70,81 @@ class NotificationKindConfigAdmin(
             "body": message_locked,
         },
     )
-    list_display = (
-        "kind",
-        "updated_at",
-    )
+    resource_classes = [NotificationKindConfigResource]
+
+    form = KindConfigAdminForm
+    list_display = ("kind", "channels_display", "updated_at")
     list_filter = ()
     list_filter_submit = False
     search_fields = ()
     search_help_text = ""
     ordering = ("kind",)
     list_per_page = 50
+
     # TabbedTranslationAdmin is a typed base: name the TypedDict shape here.
     fieldsets: ClassVar[_FieldsetSpec] = (
         (None, {"fields": ("kind", "channels")}),
-        ("Message", {"fields": ("title", "body")}),
+        (
+            _("Message"),
+            {
+                "fields": ("placeholders", "title", "body", "preview"),
+                "description": _(
+                    "Write literal text with {key} placeholders from the list "
+                    "below; both languages are required."
+                ),
+            },
+        ),
     )
-    readonly_fields = ("kind",)  # the identity of the row, never retyped
+    readonly_fields = ("kind", "placeholders", "preview")  # kind: the row's identity
 
-    resource_classes = [NotificationKindConfigResource]
+    @display(description=_("Channels"))
+    def channels_display(self, obj: NotificationKindConfig) -> str:
+        return ", ".join(obj.channels) if obj.channels else str(_("inbox only"))
 
-    # Presentation only: the model list still renders through Django's
-    # changelist_view (the sorting/filter gates keep exercising it) - the
-    # template just draws editor cards instead of a result table.
-    change_list_template = "admin/notifications/notificationkindconfig/change_list.html"
-
-    def get_urls(self) -> list[Any]:
-        # Prepended so it wins over the admin's `<path:object_id>` catch-all,
-        # which would otherwise read "config-save" as a primary key.
-        save = [
-            path(
-                "config-save/",
-                self.admin_site.admin_view(self.config_save_view),
-                name="notifications_notificationkindconfig_config_save",
-            ),
-        ]
-        return save + list(super().get_urls())
-
-    def changelist_view(
-        self, request: HttpRequest, extra_context: dict[str, Any] | None = None
-    ) -> HttpResponse:
-        extra = dict(extra_context or {})
-        # Cards must not read list params: the sorting gate hits this view
-        # with ?o= permutations and the page has to stay identical.
-        extra["config_cards"] = self._build_cards()
-        extra["config_save_url"] = reverse(
-            "admin:notifications_notificationkindconfig_config_save"
+    @display(description=_("Placeholders"))
+    def placeholders(self, obj: NotificationKindConfig) -> str:
+        """The kind's context keys, each with the example the preview uses."""
+        entry = catalog_entry(NotificationKind(obj.kind))
+        if not entry.context_keys:
+            return str(_("This action has no placeholders."))
+        return format_html_join(
+            ", ",
+            "<code>{{{}}}</code> ({})",
+            ((key, SAMPLE_VALUES[key]) for key in sorted(entry.context_keys)),
         )
-        extra["config_can_save"] = self.has_change_permission(request)
-        response: HttpResponse = super().changelist_view(request, extra_context=extra)
-        return response
 
-    def _build_cards(self) -> list[dict[str, Any]]:
-        configs = selectors.notification_config_map()
-        cards: list[dict[str, Any]] = []
-        for kind in sorted(NotificationKind, key=str):  # matches Meta.ordering
-            if catalog_entry(kind).authored_per_send:
-                # The broadcast composer: message AND channels are picked per
-                # broadcast, so the row has nothing an operator sets here.
-                continue
-            config = configs.get(kind)
-            missing = config is None
-            # A kind with no row yet renders unsaved, prefilled with the
-            # catalog's recommended values and flagged so the operator reviews
-            # it; its first Save creates the row (a GET never writes).
-            form = KindConfigForm(
-                instance=config,
-                initial=KindConfigForm.starting_values(kind) if missing else None,
-                kind=kind,
-                prefix=kind.value,
-            )
-            cards.append(
-                {
-                    "kind": str(kind),
-                    "new": missing,
-                    "label": kind.label,
-                    "vars": form.variables(),
-                    "form": form,
-                }
-            )
-        return cards
-
-    def config_save_view(self, request: HttpRequest) -> JsonResponse:
-        """One save for every edited card - all or nothing.
-
-        The page posts the fields of each dirty card under its own kind
-        prefix plus one ``kind`` value per card; a kind with no row yet is
-        created by its first save. Every form is validated
-        first (ModelForm._post_clean runs the model's clean()); a single
-        invalid card fails the whole request with errors keyed by kind, and
-        the writes happen in one transaction through the service, which
-        stays the single writer.
-        """
-        if not self.has_change_permission(request):
-            raise PermissionDenied
-        forms: list[KindConfigForm] = []
-        errors: dict[str, Any] = {}
-        configs = selectors.notification_config_map()
-        for raw in request.POST.getlist("kind"):
-            try:
-                kind = NotificationKind(raw)
-                if catalog_entry(kind).authored_per_send:
-                    raise ValueError(raw)  # noqa: TRY301 - same envelope as unknown
-            except ValueError:
-                return JsonResponse(
-                    {"ok": False, "errors": {"__all__": [_("Unknown action.")]}},
-                    status=400,
+    @display(description=_("Preview"))
+    def preview(self, obj: NotificationKindConfig) -> str:
+        """The saved copy rendered with the sample values, per language."""
+        kind = NotificationKind(obj.kind)
+        entry = catalog_entry(kind)
+        context = {key: SAMPLE_VALUES[key] for key in entry.context_keys}
+        panes = []
+        for code, label in (("en", _("English")), ("ar", _("Arabic"))):
+            with translation.override(code):
+                message = selectors.notification_render(
+                    kind=kind, context=context, configs={kind: obj}
                 )
-            form = KindConfigForm(
-                data=request.POST,
-                instance=configs.get(kind),  # None = this save creates the row
-                kind=kind,
-                prefix=str(kind),
-            )
-            if not form.is_valid():
-                errors[str(kind)] = form.errors
-            forms.append(form)
-        if not forms:
-            return JsonResponse(
-                {"ok": False, "errors": {"__all__": [_("Nothing to save.")]}},
-                status=400,
-            )
-        if errors:
-            return JsonResponse({"ok": False, "errors": errors}, status=400)
-        try:
-            with transaction.atomic():
-                for form in forms:
-                    services.notification_config_update(**form.service_kwargs())
-        except ApplicationError as exc:
-            return JsonResponse(
-                {"ok": False, "errors": {"__all__": [exc.message]}}, status=400
-            )
-        except ValidationError as exc:
-            return JsonResponse(
-                {"ok": False, "errors": {"__all__": exc.messages}}, status=400
-            )
-        return JsonResponse({"ok": True, "saved": [str(form.kind) for form in forms]})
+            panes.append((label, message.title, message.body))
+        return format_html_join(
+            "",
+            '<p dir="auto"><strong>{}</strong>: {} - {}</p>',
+            panes,
+        ) or format_html("")
+
+    def save_model(
+        self, request: HttpRequest, obj: Model, form: ModelForm[Any], change: bool
+    ) -> None:
+        """Every write goes through the service (the single writer): channels
+        from the picker, copy from the translation tabs when editable."""
+        config = cast("NotificationKindConfig", obj)
+        copy = {
+            field: form.cleaned_data[field]
+            for field in MESSAGE_FIELDS
+            if field in form.cleaned_data
+        }
+        services.notification_config_update(
+            kind=NotificationKind(config.kind),
+            channels=form.cleaned_data["channels"],
+            **copy,
+        )

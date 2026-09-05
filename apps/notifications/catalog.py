@@ -27,6 +27,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from django.utils import translation
 from django.utils.translation import gettext_lazy as _
 from django_stubs_ext import StrOrPromise
 
@@ -157,3 +158,22 @@ def validate_context(
             f"unexpected={unexpected})."
         )
         raise ValueError(msg)  # a wrong call site - programming error, no envelope
+
+
+def kind_config_seed(kind: NotificationKind) -> dict[str, Any]:
+    """The row state a kind's NotificationKindConfig starts in: the catalog's
+    default channels and its starting copy, English in BOTH language columns
+    (operators localize in the admin). Used by the seed migration and by the
+    test suite's reset - one source."""
+    entry = CATALOG[kind]
+    with translation.override("en"):
+        title, body = str(entry.title), str(entry.body)
+    return {
+        "channels": [str(channel) for channel in sorted(entry.default_channels)],
+        "title": title,
+        "title_ar": title,
+        "title_en": title,
+        "body": body,
+        "body_ar": body,
+        "body_en": body,
+    }

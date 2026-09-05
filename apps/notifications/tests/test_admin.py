@@ -1,4 +1,4 @@
-"""The Broadcast compose form: the admin's only authoring path.
+"""The Broadcast admin: the standard add form is the only authoring path.
 
 The point of these tests is the seam the form closes - before it, the admin
 add view called obj.save() directly, so services.notification_broadcast (and
@@ -8,8 +8,7 @@ announcement only failed later inside the worker.
 Every assertion is scoped by the marker message rather than
 ``Broadcast.objects.get()``: the admin basics gate seeds rows for every
 registered factory outside the test transaction, so the table is never
-empty (same reason the app conftest clears channel
-overrides).
+empty.
 """
 
 from typing import Any
@@ -33,6 +32,7 @@ pytestmark = pytest.mark.django_db
 ADD_URL = "admin:notifications_broadcast_add"
 TITLE = "Composer test title"
 MESSAGE = "Composer test announcement - unique to this module."
+CONFIRM = {"_form_submitted": "1"}  # what unfold's confirmation dialog posts
 
 
 def _superuser_client(client: Client) -> Client:
@@ -49,6 +49,7 @@ def _payload(**overrides: Any) -> dict[str, Any]:
         "joined_before": "",
         "channels": [Channel.PUSH],
         "target": "filters",
+        "_save": "Save",
     }
     payload.update(overrides)
     return payload
@@ -62,7 +63,26 @@ def _nothing_composed() -> bool:
     return not Broadcast.objects.filter(context__message=MESSAGE).exists()
 
 
-def test_add_page_renders_the_composer(client: Client) -> None:
+def _change_url(broadcast: Broadcast) -> str:
+    return reverse("admin:notifications_broadcast_change", args=[broadcast.pk])
+
+
+def _dispatch_url(broadcast: Broadcast) -> str:
+    return reverse(
+        "admin:notifications_broadcast_dispatch_broadcast", args=[broadcast.pk]
+    )
+
+
+def _resume_url(broadcast: Broadcast) -> str:
+    return reverse(
+        "admin:notifications_broadcast_resume_broadcast", args=[broadcast.pk]
+    )
+
+
+# --- the add form ---------------------------------------------------------------
+
+
+def test_add_page_renders_the_compose_form(client: Client) -> None:
     response = _superuser_client(client).get(reverse(ADD_URL))
 
     assert response.status_code == 200
@@ -71,6 +91,10 @@ def test_add_page_renders_the_composer(client: Client) -> None:
     assert 'name="title"' in body
     assert 'name="message"' in body
     assert 'name="context"' not in body
+    # Plain admin widgets: the user picker is Django's autocomplete, the
+    # dates are the native admin date widget.
+    assert "admin-autocomplete" in body
+    assert 'name="joined_after"' in body
 
 
 def test_compose_creates_a_draft_with_the_message_as_context(client: Client) -> None:
@@ -124,19 +148,6 @@ def test_compose_records_the_audience_filters(client: Client) -> None:
     assert str(broadcast.joined_before) == "2026-06-30"
 
 
-def test_dates_are_iso_text_fields_with_the_composer_calendar(
-    client: Client,
-) -> None:
-    """No browser-native date popover: the composer's own picker fills ISO
-    text inputs, and the form still accepts the same YYYY-MM-DD value."""
-    body = _superuser_client(client).get(reverse(ADD_URL)).content.decode()
-
-    assert 'name="joined_after"' in body
-    assert 'type="date"' not in body
-    assert body.count('class="bc-date-btn"') == 2
-    assert 'placeholder="YYYY-MM-DD"' in body
-
-
 def test_compose_records_selected_channels(client: Client) -> None:
     _superuser_client(client).post(
         reverse(ADD_URL), _payload(channels=[Channel.PUSH, Channel.SMS])
@@ -152,7 +163,7 @@ def test_compose_with_specific_users(client: Client) -> None:
         reverse(ADD_URL), _payload(target="users", recipients=[str(picked.pk)])
     )
 
-    assert _composed().recipient_ids == [str(picked.pk)]
+    assert list(_composed().recipients.all()) == [picked]
 
 
 def test_specific_users_needs_at_least_one(client: Client) -> None:
@@ -173,25 +184,7 @@ def test_filters_target_drops_a_leftover_pick(client: Client) -> None:
         reverse(ADD_URL), _payload(target="filters", recipients=[str(picked.pk)])
     )
 
-    assert _composed().recipient_ids == []
-
-
-def test_audience_users_search_endpoint(client: Client) -> None:
-    omar = UserFactory.create(name="Omar", email="omar@x.test")
-    client_ = _superuser_client(client)
-
-    body = client_.get(reverse(USERS_URL), {"q": "omar"}).json()
-
-    assert [u["id"] for u in body["users"]] == [str(omar.pk)]
-    assert body["users"][0]["email"] == "omar@x.test"
-
-
-def test_audience_users_search_requires_add_permission(client: Client) -> None:
-    client.force_login(UserFactory.create(is_staff=True))
-
-    response = client.get(reverse(USERS_URL), {"q": "x"})
-
-    assert response.status_code in (302, 403)
+    assert not _composed().recipients.exists()
 
 
 def test_channels_are_required(client: Client) -> None:
@@ -231,7 +224,7 @@ def test_an_unsupported_channel_cannot_be_chosen(client: Client) -> None:
 
 
 def test_the_context_field_cannot_be_posted_on_add(client: Client) -> None:
-    """The composer owns the context shape - a hand-crafted POST cannot win."""
+    """The form owns the context shape - a hand-crafted POST cannot win."""
     _superuser_client(client).post(
         reverse(ADD_URL), _payload(context='{"message": "smuggled"}')
     )
@@ -239,80 +232,19 @@ def test_the_context_field_cannot_be_posted_on_add(client: Client) -> None:
     assert _composed().context == {"title": TITLE, "message": MESSAGE}
 
 
-ESTIMATE_URL = "admin:notifications_broadcast_audience_estimate"
-USERS_URL = "admin:notifications_broadcast_audience_users"
+# --- the change form -----------------------------------------------------------
 
 
-class TestAudienceEstimate:
-    """The compose screen's live reach counter."""
+def test_change_form_shows_the_reach_of_a_draft(client: Client) -> None:
+    """The reach is computed server-side from the same audience query the
+    dispatcher pages - no live estimate endpoint."""
+    picked = UserFactory.create()
+    broadcast = BroadcastFactory.create(status=BroadcastStatus.DRAFT)
+    broadcast.recipients.set([picked])
 
-    def test_counts_active_users_with_no_filters(self, client: Client) -> None:
-        from apps.users.models import User
+    body = _superuser_client(client).get(_change_url(broadcast)).content.decode()
 
-        User.objects.update(is_active=False)  # rolled back with the test
-        UserFactory.create_batch(3)
-        staff = UserFactory.create(is_staff=True, is_superuser=True)
-        client.force_login(staff)
-
-        response = client.post(reverse(ESTIMATE_URL), {})
-
-        assert response.status_code == 200
-        body = response.json()
-        assert body["ok"] is True
-        assert body["recipients"] == 4  # the three plus the signed-in staff user
-        assert body["devices"] == 0
-
-    def test_counts_reachable_devices(self, client: Client) -> None:
-        from apps.notifications.tests.factories import DeviceFactory
-        from apps.users.models import User
-
-        User.objects.update(is_active=False)
-        staff = UserFactory.create(is_staff=True, is_superuser=True)
-        DeviceFactory.create(user=staff)
-        DeviceFactory.create(user=staff)  # two devices, one recipient
-        client.force_login(staff)
-
-        body = client.post(reverse(ESTIMATE_URL), {"require_device": "on"}).json()
-
-        assert body["recipients"] == 1
-        assert body["devices"] == 2
-
-    def test_counts_exactly_the_picked_users(self, client: Client) -> None:
-        picked = UserFactory.create()
-        UserFactory.create()
-        client = _superuser_client(client)
-
-        body = client.post(
-            reverse(ESTIMATE_URL), {"target": "users", "recipients": [str(picked.pk)]}
-        ).json()
-
-        assert body["recipients"] == 1
-
-    def test_reversed_dates_are_rejected(self, client: Client) -> None:
-        _superuser_client(client)
-
-        response = client.post(
-            reverse(ESTIMATE_URL),
-            {"joined_after": "2026-06-30", "joined_before": "2026-01-01"},
-        )
-
-        assert response.status_code == 400
-        assert response.json()["ok"] is False
-
-    def test_anonymous_callers_are_redirected_to_login(self, client: Client) -> None:
-        response = client.post(reverse(ESTIMATE_URL), {})
-
-        assert response.status_code == 302
-
-    def test_a_staff_user_without_add_permission_is_refused(
-        self, client: Client
-    ) -> None:
-        client.force_login(UserFactory.create(is_staff=True))
-
-        response = client.post(reverse(ESTIMATE_URL), {})
-
-        # admin_view bounces a staff user with no model perms at the door.
-        assert response.status_code in (302, 403)
+    assert "1 recipients, 0 registered devices" in body
 
 
 # --- lifecycle actions are permission-gated, not just status-gated ------------
@@ -321,20 +253,6 @@ class TestAudienceEstimate:
 # zero notifications permissions - could fan out a draft to the whole user
 # base by URL. The actions confirm through a dialog: GET renders it, only the
 # confirming POST runs the body.
-
-CONFIRM = {"_form_submitted": "1"}
-
-
-def _dispatch_url(broadcast: Broadcast) -> str:
-    return reverse(
-        "admin:notifications_broadcast_dispatch_broadcast", args=[broadcast.pk]
-    )
-
-
-def _resume_url(broadcast: Broadcast) -> str:
-    return reverse(
-        "admin:notifications_broadcast_resume_broadcast", args=[broadcast.pk]
-    )
 
 
 def test_staff_without_permission_cannot_dispatch(client: Client) -> None:
@@ -379,6 +297,21 @@ def test_change_permission_dispatches(client: Client) -> None:
     assert response.status_code == 302  # back to the change form, dispatched
     broadcast.refresh_from_db()
     assert broadcast.status != BroadcastStatus.DRAFT
+
+
+def test_dispatch_refuses_an_empty_audience(client: Client) -> None:
+    """The old composer's confirm modal did this in JS; the service does it
+    now, so every road (admin, shell) is covered."""
+    picked = UserFactory.create(is_active=False)  # picked, then deactivated
+    broadcast = BroadcastFactory.create(status=BroadcastStatus.DRAFT)
+    broadcast.recipients.set([picked])
+    client.force_login(UserFactory.create(is_staff=True, is_superuser=True))
+
+    response = client.post(_dispatch_url(broadcast), CONFIRM)
+
+    assert response.status_code == 302
+    broadcast.refresh_from_db()
+    assert broadcast.status == BroadcastStatus.DRAFT
 
 
 @pytest.mark.parametrize(

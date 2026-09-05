@@ -1,8 +1,7 @@
 """Write-side for NotificationKindConfig - the config screen's one seam.
 
-A kind's row is created the first time the actions page is opened (with the
-catalog's recommended values - there is no seed step); after that the same
-call updates it from the card. The model's clean()
+A kind's row is born from the seed migration (catalog starting values);
+this call updates it from the admin change form. The model's clean()
 holds the field invariants (channels ⊆ supported, placeholders ⊆
 context_keys, copy in both languages); this service adds the one rule the
 model cannot see alone: authored_per_send kinds never take message edits -

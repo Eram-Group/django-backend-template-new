@@ -1,15 +1,12 @@
 """Notification factories - factory_boy structure, mimesis values."""
 
-from typing import Any
-
-from django.utils import translation
 from factory.declarations import LazyAttribute
 from factory.declarations import Sequence
 from factory.declarations import SubFactory
 from factory.django import DjangoModelFactory
 
 from apps.common.tests import fake
-from apps.notifications.catalog import CATALOG
+from apps.notifications.catalog import kind_config_seed as _kind_config_seed
 from apps.notifications.constants import Channel
 from apps.notifications.constants import DevicePlatform
 from apps.notifications.constants import NotificationKind
@@ -85,27 +82,7 @@ class NotificationDeliveryFactory(DjangoModelFactory[NotificationDelivery]):
     channel = Channel.PUSH
 
 
-def kind_config_seed(kind: str) -> dict[str, Any]:
-    """The exact row state the seed command writes for one kind.
-
-    English text in BOTH language columns (the repo ships empty translation
-    catalogs, so str() under "en" returns the source string either way); the
-    base columns come first so the modeltranslation descriptor's write is
-    overwritten by the explicit shadow values on update_or_create.
-    """
-    entry = CATALOG[NotificationKind(kind)]
-    with translation.override("en"):
-        title = str(entry.title)
-        body = str(entry.body)
-    return {
-        "channels": [str(channel) for channel in sorted(entry.default_channels)],
-        "title": title,
-        "title_ar": title,
-        "title_en": title,
-        "body": body,
-        "body_ar": body,
-        "body_en": body,
-    }
+kind_config_seed = _kind_config_seed  # the catalog's one seed, re-exported
 
 
 def seed_kind_configs() -> None:
@@ -113,7 +90,7 @@ def seed_kind_configs() -> None:
     equivalent of an operator having saved each card once."""
     for kind in NotificationKind:
         NotificationKindConfig.objects.update_or_create(
-            kind=kind, defaults=kind_config_seed(kind)
+            kind=kind, defaults=kind_config_seed(NotificationKind(kind))
         )
 
 
@@ -131,10 +108,20 @@ class NotificationKindConfigFactory(DjangoModelFactory[NotificationKindConfig]):
         skip_postgeneration_save = True
 
     kind = NotificationKind.WELCOME
-    channels = LazyAttribute(lambda o: kind_config_seed(o.kind)["channels"])
-    title = LazyAttribute(lambda o: kind_config_seed(o.kind)["title"])
-    title_ar = LazyAttribute(lambda o: kind_config_seed(o.kind)["title_ar"])
-    title_en = LazyAttribute(lambda o: kind_config_seed(o.kind)["title_en"])
-    body = LazyAttribute(lambda o: kind_config_seed(o.kind)["body"])
-    body_ar = LazyAttribute(lambda o: kind_config_seed(o.kind)["body_ar"])
-    body_en = LazyAttribute(lambda o: kind_config_seed(o.kind)["body_en"])
+    channels = LazyAttribute(
+        lambda o: kind_config_seed(NotificationKind(o.kind))["channels"]
+    )
+    title = LazyAttribute(lambda o: kind_config_seed(NotificationKind(o.kind))["title"])
+    title_ar = LazyAttribute(
+        lambda o: kind_config_seed(NotificationKind(o.kind))["title_ar"]
+    )
+    title_en = LazyAttribute(
+        lambda o: kind_config_seed(NotificationKind(o.kind))["title_en"]
+    )
+    body = LazyAttribute(lambda o: kind_config_seed(NotificationKind(o.kind))["body"])
+    body_ar = LazyAttribute(
+        lambda o: kind_config_seed(NotificationKind(o.kind))["body_ar"]
+    )
+    body_en = LazyAttribute(
+        lambda o: kind_config_seed(NotificationKind(o.kind))["body_en"]
+    )

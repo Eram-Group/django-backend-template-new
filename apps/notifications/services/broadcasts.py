@@ -27,6 +27,7 @@ from apps.notifications.constants import NotificationKind
 from apps.notifications.exceptions import BroadcastAudienceError
 from apps.notifications.exceptions import BroadcastStateError
 from apps.notifications.models import Broadcast
+from apps.notifications.selectors.broadcasts import broadcast_audience_summary
 from apps.notifications.tasks import dispatch_broadcast
 from apps.users.models import User
 
@@ -40,7 +41,7 @@ def notification_broadcast(
     joined_after: date | None,
     joined_before: date | None,
     channels: Sequence[str],
-    recipient_ids: Sequence[str],
+    recipients: Sequence[User],
     actor: User,
 ) -> Broadcast:
     """Author a DRAFT broadcast; nothing sends until broadcast_dispatch.
@@ -48,30 +49,31 @@ def notification_broadcast(
     ``channels`` is exactly what this send goes out on - every broadcast picks
     its own (a non-empty subset of what the kind supports; "send on nothing"
     is not a broadcast). There is no kind-level default behind it.
-    ``recipient_ids`` hand-picks the audience: non-empty = exactly these
-    users (the language/date filters are then ignored); empty = the filters.
+    ``recipients`` hand-picks the audience: non-empty = exactly these users
+    (the language/date filters are then ignored); empty = the filters.
     """
     entry = catalog_entry(kind)
     validate_context(kind=kind, entry=entry, context=context)
     resolved_channels = _validate_channels(entry=entry, channels=channels)
-    resolved_recipients = _validate_recipients(recipient_ids=recipient_ids)
+    resolved_recipients = _validate_recipients(recipients=recipients)
     if joined_after and joined_before and joined_after > joined_before:
         raise BroadcastAudienceError(
             str(_("The joined-after date must not be later than joined-before."))
         )
-    broadcast = Broadcast(
-        kind=kind,
-        context=context,
-        language=language,
-        require_device=require_device,
-        joined_after=joined_after,
-        joined_before=joined_before,
-        channels=resolved_channels,
-        recipient_ids=resolved_recipients,
-        created_by=actor,
-    )
-    broadcast.full_clean()
-    broadcast.save()
+    with transaction.atomic():
+        broadcast = Broadcast(
+            kind=kind,
+            context=context,
+            language=language,
+            require_device=require_device,
+            joined_after=joined_after,
+            joined_before=joined_before,
+            channels=resolved_channels,
+            created_by=actor,
+        )
+        broadcast.full_clean()
+        broadcast.save()
+        broadcast.recipients.set(resolved_recipients)
     return broadcast
 
 
@@ -96,18 +98,15 @@ def _validate_channels(*, entry: MessageTemplate, channels: Sequence[str]) -> li
     return sorted(selected)
 
 
-def _validate_recipients(*, recipient_ids: Sequence[str]) -> list[str]:
-    """Deduplicated, sorted pks of ACTIVE users - a stale pick (deleted or
-    deactivated since the search) is operator-visible, not silently dropped."""
-    wanted = sorted({str(pk) for pk in recipient_ids})
+def _validate_recipients(*, recipients: Sequence[User]) -> list[User]:
+    """Deduplicated ACTIVE users - a stale pick (deleted or deactivated since
+    the pick) is operator-visible, not silently dropped."""
+    wanted = {user.pk: user for user in recipients}
     if not wanted:
         return []
-    found = {
-        str(pk)
-        for pk in User.objects.filter(is_active=True, pk__in=wanted).values_list(
-            "pk", flat=True
-        )
-    }
+    found = set(
+        User.objects.filter(is_active=True, pk__in=wanted).values_list("pk", flat=True)
+    )
     missing = [pk for pk in wanted if pk not in found]
     if missing:
         raise BroadcastAudienceError(
@@ -116,11 +115,20 @@ def _validate_recipients(*, recipient_ids: Sequence[str]) -> list[str]:
                 % {"count": len(missing)}
             )
         )
-    return wanted
+    return list(wanted.values())
 
 
 def broadcast_dispatch(*, broadcast: Broadcast) -> Broadcast:
-    """DRAFT -> DISPATCHING (guarded) + dispatcher enqueue, one transaction."""
+    """DRAFT -> DISPATCHING (guarded) + dispatcher enqueue, one transaction.
+
+    An empty audience is refused up front: dispatching nothing would only
+    mark the broadcast COMPLETED with zero deliveries, which reads as a
+    successful send.
+    """
+    if broadcast_audience_summary(broadcast=broadcast)["recipients"] == 0:
+        raise BroadcastAudienceError(
+            str(_("This audience is empty - nothing would be sent."))
+        )
     with transaction.atomic():
         updated = Broadcast.objects.filter(
             pk=broadcast.pk, status=BroadcastStatus.DRAFT

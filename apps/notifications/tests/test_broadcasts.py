@@ -1,7 +1,6 @@
 """Broadcast lifecycle: dispatch paging, eligibility, resume, guards."""
 
 import io
-import uuid
 from datetime import timedelta
 from typing import Any
 
@@ -151,7 +150,7 @@ def _author(**overrides: Any) -> Any:
         "joined_after": None,
         "joined_before": None,
         "channels": [Channel.PUSH],
-        "recipient_ids": [],
+        "recipients": [],
         "actor": UserFactory.create(),
     }
     return services.notification_broadcast(**{**kwargs, **overrides})
@@ -396,12 +395,12 @@ class TestAudienceFilters:
 class TestSpecificRecipients:
     """A hand-picked audience: exactly those users, filters ignored."""
 
-    def test_recipients_are_stored_deduplicated_and_sorted(self) -> None:
+    def test_recipients_are_stored_deduplicated(self) -> None:
         a, b = UserFactory.create(), UserFactory.create()
 
-        broadcast = _author(recipient_ids=[str(b.pk), str(a.pk), str(b.pk)])
+        broadcast = _author(recipients=[b, a, b])
 
-        assert broadcast.recipient_ids == sorted([str(a.pk), str(b.pk)])
+        assert set(broadcast.recipients.all()) == {a, b}
 
     def test_an_unknown_or_inactive_user_is_rejected(self) -> None:
         inactive = UserFactory.create(is_active=False)
@@ -410,18 +409,14 @@ class TestSpecificRecipients:
             "%(count)d selected user(s) no longer exist or are inactive."
         ) % {"count": 1}
         with pytest.raises(BroadcastAudienceError) as excinfo:
-            _author(recipient_ids=[str(inactive.pk)])
+            _author(recipients=[inactive])
         assert excinfo.value.message == expected
-        with pytest.raises(BroadcastAudienceError):
-            _author(recipient_ids=[str(uuid.uuid4())])
 
     def test_audience_is_exactly_the_picked_users(self) -> None:
         picked = UserFactory.create(language="ar")
         UserFactory.create(language="ar")  # same language, not picked
-        broadcast = BroadcastFactory.create(
-            recipient_ids=[str(picked.pk)],
-            language="en",  # filter ignored
-        )
+        broadcast = BroadcastFactory.create(language="en")  # filter ignored
+        broadcast.recipients.set([picked])
 
         audience = selectors.broadcast_audience(broadcast=broadcast)
 
@@ -430,23 +425,12 @@ class TestSpecificRecipients:
     def test_require_device_still_applies_to_picked_users(self) -> None:
         with_device, without = UserFactory.create(), UserFactory.create()
         DeviceFactory.create(user=with_device)
-        broadcast = BroadcastFactory.create(
-            recipient_ids=[str(with_device.pk), str(without.pk)], require_device=True
-        )
+        broadcast = BroadcastFactory.create(require_device=True)
+        broadcast.recipients.set([with_device, without])
 
         audience = selectors.broadcast_audience(broadcast=broadcast)
 
         assert list(audience.values_list("pk", flat=True)) == [with_device.pk]
-
-    def test_search_matches_name_email_or_phone_of_active_users(self) -> None:
-        omar = UserFactory.create(name="Omar Gawdat", email="omar@x.test")
-        UserFactory.create(name="Sara", email="sara@x.test", is_active=False)
-        by_phone = UserFactory.create(name="Zed", phone="+966501234567")
-
-        assert list(selectors.broadcast_user_search(query="omar")) == [omar]
-        assert list(selectors.broadcast_user_search(query="sara")) == []
-        assert list(selectors.broadcast_user_search(query="50123")) == [by_phone]
-        assert list(selectors.broadcast_user_search(query="  ")) == []
 
 
 class TestPerBroadcastChannels:
