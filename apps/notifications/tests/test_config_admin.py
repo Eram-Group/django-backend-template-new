@@ -202,8 +202,9 @@ class TestChangeFormSave:
 
         assert response.status_code == 302
         config = NotificationKindConfig.objects.get(kind=NotificationKind.ANNOUNCEMENT)
-        assert config.title_en == "{title}"
-        assert config.body_en == "{message}"
+        assert config.title_en == "{title_en}"
+        assert config.body_en == "{message_en}"
+        assert config.title_ar == "{title_ar}"
         assert config.channels == [Channel.SMS]
 
     def test_a_staff_user_without_change_permission_is_refused(
@@ -239,14 +240,14 @@ class TestConfigService:
         )
 
         assert config.channels == [Channel.PUSH, Channel.SMS]  # sorted, canonical
-        assert config.title_en == "{title}"  # untouched
+        assert config.title_en == "{title_en}"  # untouched
 
     def test_unchanged_message_values_do_not_trip_the_lock(self) -> None:
         """Round-tripping the stored copy is a no-op, not a violation."""
         config = services.notification_config_update(
             kind=NotificationKind.ANNOUNCEMENT,
             channels=[Channel.PUSH],
-            title_en="{title}",
+            title_en="{title_en}",
         )
 
         assert config.channels == [Channel.PUSH]

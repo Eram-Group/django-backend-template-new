@@ -8,6 +8,7 @@ from apps.notifications.catalog import CATALOG
 from apps.notifications.catalog import MessageTemplate
 from apps.notifications.catalog import WhatsAppTemplate
 from apps.notifications.catalog import catalog_entry
+from apps.notifications.catalog import kind_config_seed
 from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationCategory
 from apps.notifications.constants import NotificationKind
@@ -25,10 +26,17 @@ def test_every_kind_has_a_catalog_entry() -> None:
 
 
 def test_seed_placeholders_match_context_keys() -> None:
-    """The seed copy respects the same contract config rows are validated
-    against - a fresh row starts placeholder-clean."""
+    """The seed rows respect the same contract config rows are validated
+    against - a fresh row starts placeholder-clean, and across both language
+    columns the seed names every context key exactly (an authored kind's
+    per-language passthroughs cover their own language each)."""
     for kind, entry in CATALOG.items():
-        found = _placeholders(str(entry.title)) | _placeholders(str(entry.body))
+        seed = kind_config_seed(kind)
+        found: set[str] = set()
+        for column in ("title_ar", "body_ar", "title_en", "body_en"):
+            placeholders = _placeholders(seed[column])
+            assert placeholders <= entry.context_keys, (kind, column)
+            found |= placeholders
         assert found == entry.context_keys, kind
 
 

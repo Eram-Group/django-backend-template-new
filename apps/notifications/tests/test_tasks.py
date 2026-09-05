@@ -200,7 +200,7 @@ def test_whatsapp_sends_template_and_stores_provider_message_id() -> None:
     assert sent.to == "+966501234567"
     assert sent.template_name == "announcement"
     assert sent.language == "ar"
-    assert sent.variables == (notification.context["message"],)
+    assert sent.variables == (notification.context["message_ar"],)  # her language
     delivery.refresh_from_db()
     assert delivery.status == DeliveryStatus.SENT
     assert delivery.provider == "whatsapp"

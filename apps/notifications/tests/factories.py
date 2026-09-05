@@ -23,8 +23,10 @@ def _context_for(kind: str, *, name: str) -> dict[str, str]:
     contexts: dict[str, dict[str, str]] = {
         NotificationKind.WELCOME: {"name": name},
         NotificationKind.ANNOUNCEMENT: {
-            "title": "Maintenance",
-            "message": "Scheduled maintenance tonight.",
+            "title_ar": "صيانة",
+            "title_en": "Maintenance",
+            "message_ar": "صيانة مجدولة الليلة.",
+            "message_en": "Scheduled maintenance tonight.",
         },
         NotificationKind.PAYMENT_PAID: {"amount": "100.00", "currency": "SAR"},
         NotificationKind.WALLET_CREDITED: {
@@ -64,7 +66,12 @@ class BroadcastFactory(DjangoModelFactory[Broadcast]):
         skip_postgeneration_save = True
 
     kind = NotificationKind.ANNOUNCEMENT
-    context = {"title": "Maintenance", "message": "Scheduled maintenance tonight."}
+    context = {
+        "title_ar": "صيانة",
+        "title_en": "Maintenance",
+        "message_ar": "صيانة مجدولة الليلة.",
+        "message_en": "Scheduled maintenance tonight.",
+    }
     created_by = SubFactory(UserFactory)
     # Audience default mirrors an unfiltered push send: every active user.
     require_device = False

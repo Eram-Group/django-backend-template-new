@@ -343,8 +343,10 @@ class Command(BaseCommand):
                     (
                         NotificationKind.ANNOUNCEMENT,
                         {
-                            "title": "Seed announcement",
-                            "message": f"Seed announcement {uuid.uuid4().hex[:6]}",
+                            "title_ar": "إعلان تجريبي",
+                            "title_en": "Seed announcement",
+                            "message_ar": f"إعلان تجريبي {uuid.uuid4().hex[:6]}",
+                            "message_en": f"Seed announcement {uuid.uuid4().hex[:6]}",
                         },
                     )
                 )
@@ -498,8 +500,10 @@ class Command(BaseCommand):
             broadcast = Broadcast(
                 kind=NotificationKind.ANNOUNCEMENT,
                 context={
-                    "title": "Seed broadcast",
-                    "message": f"Seed broadcast {uuid.uuid4().hex[:6]}",
+                    "title_ar": "بث تجريبي",
+                    "title_en": "Seed broadcast",
+                    "message_ar": f"بث تجريبي {uuid.uuid4().hex[:6]}",
+                    "message_en": f"Seed broadcast {uuid.uuid4().hex[:6]}",
                 },
                 status=status,
                 created_by=population[0],

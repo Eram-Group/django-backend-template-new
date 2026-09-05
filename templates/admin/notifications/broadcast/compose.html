@@ -33,7 +33,13 @@
     .bc-count.is-over { color: var(--bc-warn); font-weight: 600; }
     .bc-row-head { display: flex; align-items: baseline; gap: 8px; }
     .bc-row-head label { margin: 0; }
-    .bc-preview { border: 1px solid var(--bc-line); border-radius: 12px; padding: 12px 14px; background: var(--bc-soft); max-width: 420px; }
+    .bc-langs { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+    .bc-lang-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--bc-strong); margin-bottom: 10px; }
+    .bc-lang-tag { font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 2px 6px; border-radius: 4px; background: var(--bc-accent-soft); color: var(--bc-accent); }
+    .bc-preview-wrap { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+    .bc-seg-sm { margin-bottom: 0; }
+    .bc-seg-sm label { padding: 4px 12px; font-size: 12px; }
+    .bc-preview { border: 1px solid var(--bc-line); border-radius: 12px; padding: 12px 14px; background: var(--bc-soft); width: 100%; max-width: 420px; }
     .bc-preview-app { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--bc-muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
     .bc-preview-app i { width: 14px; height: 14px; border-radius: 4px; background: var(--bc-accent); display: inline-block; }
     .bc-preview-title { font-size: 14px; font-weight: 600; color: var(--bc-strong); overflow-wrap: anywhere; }
@@ -63,42 +69,56 @@
 {% block field_sets %}
   {% with form=adminform.form %}
   <div class="bc"
-       x-data="{ title: '', message: '', target: 'filters', channels: [] }"
+       x-data="{ title_ar: '', title_en: '', message_ar: '', message_en: '', preview: 'ar', target: 'filters', channels: [] }"
        hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'>
 
     <div>
       {# ---- Message ---------------------------------------------------- #}
       <section class="bc-card">
         <h2>{% trans "Message" %}</h2>
-        <p>{% trans "What every recipient reads. The preview is the push notification." %}</p>
+        <p>{% trans "Written in both languages; every recipient reads the one they chose." %}</p>
 
-        <div class="form-field flex flex-col group mb-4 {% if form.title.errors %}errors{% endif %}">
-          <div class="bc-row-head">
-            {% include "unfold/helpers/form_label.html" with field=form.title %}
-            <span class="bc-count" x-bind:class="{ 'is-over': title.length > {{ title_limit }} }"
-                  x-text="title.length + ' / {{ title_limit }}'"></span>
-          </div>
-          <div class="mt-2">{{ form.title }}</div>
-          {% include "unfold/helpers/form_errors.html" with errors=form.title.errors %}
+        <div class="bc-langs">
+          {% for code, title_field, message_field, name in language_pairs %}
+            <div class="bc-lang" dir="{% if code == "ar" %}rtl{% else %}ltr{% endif %}">
+              <div class="bc-lang-head"><span class="bc-lang-tag">{{ code|upper }}</span>{{ name }}</div>
+
+              <div class="form-field flex flex-col group mb-4 {% if title_field.errors %}errors{% endif %}">
+                <div class="bc-row-head">
+                  {% include "unfold/helpers/form_label.html" with field=title_field %}
+                  <span class="bc-count" x-bind:class="{ 'is-over': title_{{ code }}.length > {{ title_limit }} }"
+                        x-text="title_{{ code }}.length + ' / {{ title_limit }}'"></span>
+                </div>
+                <div class="mt-2">{{ title_field }}</div>
+                {% include "unfold/helpers/form_errors.html" with errors=title_field.errors %}
+              </div>
+
+              <div class="form-field flex flex-col group mb-4 {% if message_field.errors %}errors{% endif %}">
+                <div class="bc-row-head">
+                  {% include "unfold/helpers/form_label.html" with field=message_field %}
+                  <span class="bc-count" x-bind:class="{ 'is-over': message_{{ code }}.length > {{ message_limit }} }"
+                        x-text="message_{{ code }}.length + ' / {{ message_limit }}'"></span>
+                </div>
+                <div class="mt-2">{{ message_field }}</div>
+                {% include "unfold/helpers/form_errors.html" with errors=message_field.errors %}
+              </div>
+            </div>
+          {% endfor %}
         </div>
+        <div class="leading-relaxed text-xs mb-4">{% trans "Push shows about the first 65 / 240 characters; platforms truncate at their own width, nothing is blocked." %}</div>
 
-        <div class="form-field flex flex-col group mb-4 {% if form.message.errors %}errors{% endif %}">
-          <div class="bc-row-head">
-            {% include "unfold/helpers/form_label.html" with field=form.message %}
-            <span class="bc-count" x-bind:class="{ 'is-over': message.length > {{ message_limit }} }"
-                  x-text="message.length + ' / {{ message_limit }}'"></span>
+        <div class="bc-preview-wrap">
+          <div class="bc-seg bc-seg-sm" role="tablist" aria-label="{% trans "Preview language" %}">
+            <label x-bind:class="{ 'is-on': preview === 'ar' }"><input type="radio" name="_preview" value="ar" x-model="preview">{% trans "Arabic" %}</label>
+            <label x-bind:class="{ 'is-on': preview === 'en' }"><input type="radio" name="_preview" value="en" x-model="preview">{% trans "English" %}</label>
           </div>
-          <div class="mt-2">{{ form.message }}</div>
-          {% include "unfold/helpers/form_errors.html" with errors=form.message.errors %}
-          <div class="leading-relaxed mt-2 text-xs">{% trans "Platforms truncate long text at their own width; nothing is blocked." %}</div>
-        </div>
-
-        <div class="bc-preview" dir="auto">
-          <div class="bc-preview-app"><i></i>{% trans "App" %} · {% trans "now" %}</div>
-          <div class="bc-preview-title" x-bind:class="{ 'is-empty': !title }"
-               x-text="title || '{% trans "Title" %}'"></div>
-          <div class="bc-preview-body" x-bind:class="{ 'is-empty': !message }"
-               x-text="message || '{% trans "Your message appears here." %}'"></div>
+          <div class="bc-preview" x-bind:dir="preview === 'ar' ? 'rtl' : 'ltr'">
+            <div class="bc-preview-app"><i></i>{% trans "App" %} · {% trans "now" %}</div>
+            <div class="bc-preview-title" x-bind:class="{ 'is-empty': !(preview === 'ar' ? title_ar : title_en) }"
+                 x-text="(preview === 'ar' ? title_ar : title_en) || '{% trans "Title" %}'"></div>
+            <div class="bc-preview-body" x-bind:class="{ 'is-empty': !(preview === 'ar' ? message_ar : message_en) }"
+                 x-text="(preview === 'ar' ? message_ar : message_en) || '{% trans "Your message appears here." %}'"></div>
+          </div>
         </div>
       </section>
 

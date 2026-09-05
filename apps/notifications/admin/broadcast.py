@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 from typing import Any
 from typing import cast
 
+from django.conf import settings
 from django.contrib import admin
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
@@ -95,7 +96,7 @@ class BroadcastAdmin(BaseModelAdmin):
     add_form = BroadcastComposeForm
     add_form_template = "admin/notifications/broadcast/compose.html"
     add_fieldsets = (
-        (None, {"fields": ("title", "message")}),
+        (None, {"fields": ("title_ar", "message_ar", "title_en", "message_en")}),
         (
             _("Audience"),
             {
@@ -209,6 +210,12 @@ class BroadcastAdmin(BaseModelAdmin):
             # and any future validation cannot drift apart.
             context["title_limit"] = TITLE_LIMIT
             context["message_limit"] = MESSAGE_LIMIT
+            form = context["adminform"].form
+            # One column per language: (code, title field, message field, name).
+            context["language_pairs"] = [
+                (code, form[f"title_{code}"], form[f"message_{code}"], name)
+                for code, name in settings.LANGUAGES
+            ]
         response: HttpResponse = super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
         )

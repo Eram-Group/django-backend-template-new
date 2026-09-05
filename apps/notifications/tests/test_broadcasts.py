@@ -142,7 +142,12 @@ def test_dispatch_twice_raises_state_error(
 def _author(**overrides: Any) -> Any:
     kwargs: dict[str, Any] = {
         "kind": NotificationKind.ANNOUNCEMENT,
-        "context": {"title": "t", "message": "m"},
+        "context": {
+            "title_ar": "ع",
+            "title_en": "t",
+            "message_ar": "ر",
+            "message_en": "m",
+        },
         "language": "",
         "require_device": False,
         "joined_after": None,
@@ -156,7 +161,7 @@ def _author(**overrides: Any) -> Any:
 
 def test_broadcast_validates_context() -> None:
     with pytest.raises(ValueError, match="unexpected"):
-        _author(context={"message": "x", "extra": "y"})
+        _author(context={"message_en": "x", "extra": "y"})
 
 
 class TestChannels:

@@ -36,6 +36,7 @@ from django.utils import translation
 
 from apps.notifications import selectors
 from apps.notifications.catalog import catalog_entry
+from apps.notifications.catalog import whatsapp_variable
 from apps.notifications.clients.push import PushMessage
 from apps.notifications.clients.push import push_send_many
 from apps.notifications.clients.sms import sms_send_many
@@ -248,7 +249,15 @@ def _deliver_whatsapp(
             continue
         entry = catalog_entry(NotificationKind(row.notification.kind))
         template = entry.whatsapp_template
-        variables = [str(row.notification.context[key]) for key in template.variables]
+        variables = [
+            whatsapp_variable(
+                entry=entry,
+                context=row.notification.context,
+                key=key,
+                language=recipient.language,
+            )
+            for key in template.variables
+        ]
         try:
             result = whatsapp_send_template(
                 to=str(recipient.phone),

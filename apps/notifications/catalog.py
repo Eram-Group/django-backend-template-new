@@ -27,6 +27,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from django.conf import settings
 from django.utils import translation
 from django.utils.translation import gettext_lazy as _
 from django_stubs_ext import StrOrPromise
@@ -34,6 +35,9 @@ from django_stubs_ext import StrOrPromise
 from apps.notifications.constants import Channel
 from apps.notifications.constants import NotificationCategory
 from apps.notifications.constants import NotificationKind
+
+#: The languages copy is authored in (settings.LANGUAGES: ar, en).
+_LANGUAGE_CODES: tuple[str, ...] = tuple(code for code, _label in settings.LANGUAGES)
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,11 +70,17 @@ class MessageTemplate:
         if (Channel.WHATSAPP in self.supported_channels) != (self.whatsapp is not None):
             msg = "whatsapp template is required iff WHATSAPP is supported"
             raise ValueError(msg)
-        if self.whatsapp is not None and not set(self.whatsapp.variables) <= set(
-            self.context_keys
+        if self.whatsapp is not None and not all(
+            variable in self.context_keys or self.is_per_language(variable)
+            for variable in self.whatsapp.variables
         ):
             msg = "whatsapp variables must be a subset of context_keys"
             raise ValueError(msg)
+
+    def is_per_language(self, key: str) -> bool:
+        """``key`` travels as one context entry per language (``key_ar``,
+        ``key_en``) - operator-authored copy in the recipient's language."""
+        return all(f"{key}_{code}" in self.context_keys for code in _LANGUAGE_CODES)
 
     @property
     def whatsapp_template(self) -> WhatsAppTemplate:
@@ -97,20 +107,24 @@ CATALOG: Mapping[NotificationKind, MessageTemplate] = {
         context_keys=frozenset({"name"}),
     ),
     NotificationKind.ANNOUNCEMENT: MessageTemplate(
-        # Both halves are operator-authored and travel in the context. A fixed
-        # gettext title would make every announcement read "Announcement" in
-        # the tray, which is exactly the line a recipient decides on.
-        title="{title}",
-        body="{message}",
+        # Both halves are operator-authored, in BOTH languages, and travel in
+        # the context; each language's config row is a passthrough to its own
+        # pair (``kind_config_seed``), so the renderer picks the recipient's
+        # language exactly as it does for every other kind. A fixed gettext
+        # title would make every announcement read "Announcement" in the
+        # tray, which is exactly the line a recipient decides on.
+        title="{title_en}",
+        body="{message_en}",
         category=NotificationCategory.MARKETING,
         supported_channels=frozenset({Channel.PUSH, Channel.SMS, Channel.WHATSAPP}),
         # Every broadcast picks its own channels in the composer; the config
         # row's channels are never consulted for this kind.
         default_channels=frozenset(),
-        context_keys=frozenset({"title", "message"}),
+        context_keys=frozenset({"title_ar", "title_en", "message_ar", "message_en"}),
         # One variable still: Meta approved this template body with a single
         # {{1}} slot and the slot count is fixed on their side, so carrying the
-        # title too would need a new template submitted and re-approved.
+        # title too would need a new template submitted and re-approved. The
+        # variable resolves to the recipient's language (message_ar/en).
         whatsapp=WhatsAppTemplate(name="announcement", variables=("message",)),
         authored_per_send=True,
     ),
@@ -163,17 +177,34 @@ def validate_context(
 def kind_config_seed(kind: NotificationKind) -> dict[str, Any]:
     """The row state a kind's NotificationKindConfig starts in: the catalog's
     default channels and its starting copy, English in BOTH language columns
-    (operators localize in the admin). Used by the seed migration and by the
-    test suite's reset - one source."""
+    (operators localize in the admin). An authored-per-send kind instead gets
+    one passthrough per language (``{title_ar}`` on the Arabic column,
+    ``{title_en}`` on the English one) so the renderer serves each recipient
+    the copy written for their language. Used by the seed migration and by
+    the test suite's reset - one source."""
     entry = CATALOG[kind]
     with translation.override("en"):
         title, body = str(entry.title), str(entry.body)
-    return {
+    seed: dict[str, Any] = {
         "channels": [str(channel) for channel in sorted(entry.default_channels)],
         "title": title,
-        "title_ar": title,
-        "title_en": title,
         "body": body,
-        "body_ar": body,
-        "body_en": body,
     }
+    for code in _LANGUAGE_CODES:
+        if entry.authored_per_send:
+            seed[f"title_{code}"] = f"{{title_{code}}}"
+            seed[f"body_{code}"] = f"{{message_{code}}}"
+        else:
+            seed[f"title_{code}"] = title
+            seed[f"body_{code}"] = body
+    return seed
+
+
+def whatsapp_variable(
+    *, entry: MessageTemplate, context: Mapping[str, Any], key: str, language: str
+) -> str:
+    """One WhatsApp template variable for a recipient: a per-language key
+    resolves to that language's entry, anything else to the key itself."""
+    if entry.is_per_language(key):
+        return str(context[f"{key}_{language}"])
+    return str(context[key])

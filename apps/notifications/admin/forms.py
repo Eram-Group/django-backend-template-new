@@ -66,8 +66,10 @@ SAMPLE_VALUES: Mapping[str, str] = {
     "amount": "150.00",
     "currency": "SAR",
     "balance": "1,250.00",
-    "title": "Weekend offer",
-    "message": "20% off everything until Sunday.",
+    "title_ar": "عرض نهاية الأسبوع",
+    "title_en": "Weekend offer",
+    "message_ar": "خصم 20% على كل شيء حتى الأحد.",
+    "message_en": "20% off everything until Sunday.",
 }
 
 TARGET_FILTERS = "filters"
@@ -153,22 +155,37 @@ class BroadcastAudienceForm(forms.ModelForm[Broadcast]):
 
 
 class BroadcastComposeForm(BroadcastAudienceForm):
-    """Title + message -> ``context``, plus the channels."""
+    """Title + message in BOTH languages -> ``context``, plus the channels.
 
-    title = forms.CharField(
-        label=_("Title"),
+    Every recipient reads the pair written for their language (the config
+    row's per-language passthrough); a broadcast is never sent half-blank.
+    """
+
+    title_ar = forms.CharField(
+        label=_("Title (Arabic)"),
         max_length=255,
         widget=UnfoldAdminTextInputWidget(
-            attrs={"autofocus": True, "x-model.fill": "title"}
+            attrs={"dir": "rtl", "x-model.fill": "title_ar"}
         ),
-        help_text=_("Push notifications show about %(limit)d characters.")
-        % {"limit": TITLE_LIMIT},
     )
-    message = forms.CharField(
-        label=_("Message"),
-        widget=UnfoldAdminTextareaWidget(attrs={"rows": 4, "x-model.fill": "message"}),
-        help_text=_("SMS and push preview about %(limit)d characters.")
-        % {"limit": MESSAGE_LIMIT},
+    message_ar = forms.CharField(
+        label=_("Message (Arabic)"),
+        widget=UnfoldAdminTextareaWidget(
+            attrs={"rows": 4, "dir": "rtl", "x-model.fill": "message_ar"}
+        ),
+    )
+    title_en = forms.CharField(
+        label=_("Title (English)"),
+        max_length=255,
+        widget=UnfoldAdminTextInputWidget(
+            attrs={"dir": "ltr", "x-model.fill": "title_en"}
+        ),
+    )
+    message_en = forms.CharField(
+        label=_("Message (English)"),
+        widget=UnfoldAdminTextareaWidget(
+            attrs={"rows": 4, "dir": "ltr", "x-model.fill": "message_en"}
+        ),
     )
     channels = forms.MultipleChoiceField(
         label=_("Channels"),
@@ -191,7 +208,10 @@ class BroadcastComposeForm(BroadcastAudienceForm):
         cleaned = self.cleaned_data
         return {
             "kind": COMPOSABLE_KIND,
-            "context": {"title": cleaned["title"], "message": cleaned["message"]},
+            "context": {
+                key: cleaned[key]
+                for key in ("title_ar", "title_en", "message_ar", "message_en")
+            },
             "language": cleaned["language"] or "",
             "require_device": cleaned["require_device"],
             "joined_after": cleaned["joined_after"],

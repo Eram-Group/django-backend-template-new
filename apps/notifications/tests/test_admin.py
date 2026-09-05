@@ -33,6 +33,8 @@ ADD_URL = "admin:notifications_broadcast_add"
 REACH_URL = "admin:notifications_broadcast_audience_reach"
 TITLE = "Composer test title"
 MESSAGE = "Composer test announcement - unique to this module."
+TITLE_AR = "عنوان الاختبار"
+MESSAGE_AR = "إعلان اختبار المؤلف - فريد لهذه الوحدة."
 CONFIRM = {"_form_submitted": "1"}  # what unfold's confirmation dialog posts
 
 
@@ -43,8 +45,10 @@ def _superuser_client(client: Client) -> Client:
 
 def _payload(**overrides: Any) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "title": TITLE,
-        "message": MESSAGE,
+        "title_ar": TITLE_AR,
+        "message_ar": MESSAGE_AR,
+        "title_en": TITLE,
+        "message_en": MESSAGE,
         "language": "",
         "joined_after": "",
         "joined_before": "",
@@ -57,11 +61,11 @@ def _payload(**overrides: Any) -> dict[str, Any]:
 
 
 def _composed() -> Broadcast:
-    return Broadcast.objects.get(context__message=MESSAGE)
+    return Broadcast.objects.get(context__message_en=MESSAGE)
 
 
 def _nothing_composed() -> bool:
-    return not Broadcast.objects.filter(context__message=MESSAGE).exists()
+    return not Broadcast.objects.filter(context__message_en=MESSAGE).exists()
 
 
 def _change_url(broadcast: Broadcast) -> str:
@@ -88,16 +92,16 @@ def test_add_page_renders_the_composer(client: Client) -> None:
 
     assert response.status_code == 200
     body = response.content.decode()
-    # The title/body pair replaces the raw context JSON box.
-    assert 'name="title"' in body
-    assert 'name="message"' in body
+    # The bilingual title/body pairs replace the raw context JSON box.
+    for name in ("title_ar", "message_ar", "title_en", "message_en"):
+        assert f'name="{name}"' in body
     assert 'name="context"' not in body
     # Stock admin widgets inside the composer layout: the user picker is
     # Django's autocomplete, the dates the admin date widget.
     assert "admin-autocomplete" in body
     assert 'name="joined_after"' in body
     # The live pieces: Alpine state fed by the widgets, htmx reach fragment.
-    assert 'x-model.fill="title"' in body
+    assert 'x-model.fill="title_en"' in body
     assert 'x-model.fill="target"' in body
     assert 'x-model.fill="channels"' in body
     assert f'hx-post="{reverse(REACH_URL)}"' in body
@@ -198,30 +202,49 @@ def test_compose_creates_a_draft_with_the_message_as_context(client: Client) -> 
     broadcast = _composed()
     assert broadcast.kind == NotificationKind.ANNOUNCEMENT
     assert broadcast.status == BroadcastStatus.DRAFT
-    assert broadcast.context == {"title": TITLE, "message": MESSAGE}
+    assert broadcast.context == {
+        "title_ar": TITLE_AR,
+        "message_ar": MESSAGE_AR,
+        "title_en": TITLE,
+        "message_en": MESSAGE,
+    }
     # Stamped by the service from the request user, never typed.
     assert broadcast.created_by is not None
 
 
-def test_a_title_is_required(client: Client) -> None:
-    response = _superuser_client(client).post(reverse(ADD_URL), _payload(title=""))
+@pytest.mark.parametrize("field", ["title_ar", "title_en", "message_ar", "message_en"])
+def test_both_languages_are_required(client: Client, field: str) -> None:
+    """A broadcast is never sent half-blank: every recipient gets copy in
+    their language."""
+    response = _superuser_client(client).post(reverse(ADD_URL), _payload(**{field: ""}))
 
     assert response.status_code == 200
     assert _nothing_composed()
-    assert response.context["adminform"].form.errors["title"]
+    assert response.context["adminform"].form.errors[field]
 
 
-def test_the_authored_title_is_what_renders(client: Client) -> None:
-    """The catalog title is "{title}" now - the operator's words, not a label."""
+def test_each_recipient_reads_their_own_language(client: Client) -> None:
+    """The config row is a per-language passthrough - the operator's words
+    render in the recipient's language, never a label."""
+    from django.utils import translation
+
     _superuser_client(client).post(reverse(ADD_URL), _payload())
+    configs = notification_config_map()
 
-    rendered = notification_render(
-        kind=NotificationKind.ANNOUNCEMENT,
-        context=_composed().context,
-        configs=notification_config_map(),
-    )
-    assert rendered.title == TITLE
-    assert rendered.body == MESSAGE
+    with translation.override("en"):
+        english = notification_render(
+            kind=NotificationKind.ANNOUNCEMENT,
+            context=_composed().context,
+            configs=configs,
+        )
+    with translation.override("ar"):
+        arabic = notification_render(
+            kind=NotificationKind.ANNOUNCEMENT,
+            context=_composed().context,
+            configs=configs,
+        )
+    assert (english.title, english.body) == (TITLE, MESSAGE)
+    assert (arabic.title, arabic.body) == (TITLE_AR, MESSAGE_AR)
 
 
 def test_compose_records_the_audience_filters(client: Client) -> None:
@@ -301,13 +324,6 @@ def test_reversed_dates_are_rejected_as_a_field_error(client: Client) -> None:
     assert response.context["adminform"].form.errors["joined_before"]
 
 
-def test_a_message_is_required(client: Client) -> None:
-    response = _superuser_client(client).post(reverse(ADD_URL), _payload(message=""))
-
-    assert response.status_code == 200
-    assert response.context["adminform"].form.errors["message"]
-
-
 def test_an_unsupported_channel_cannot_be_chosen(client: Client) -> None:
     response = _superuser_client(client).post(
         reverse(ADD_URL), _payload(channels=["carrier_pigeon"])
@@ -323,7 +339,8 @@ def test_the_context_field_cannot_be_posted_on_add(client: Client) -> None:
         reverse(ADD_URL), _payload(context='{"message": "smuggled"}')
     )
 
-    assert _composed().context == {"title": TITLE, "message": MESSAGE}
+    assert _composed().context["message_en"] == MESSAGE
+    assert "message" not in _composed().context
 
 
 # --- the change form -----------------------------------------------------------
