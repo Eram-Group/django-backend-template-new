@@ -603,9 +603,14 @@ SECURE_CSP: dict[str, list[str]] = {
     "default-src": [CSP.SELF],
     "img-src": [CSP.SELF, "data:"],
     "font-src": [CSP.SELF, "data:"],
-    # Admin widgets ship inline styles; scripts stay nonce-gated.
+    # Admin widgets ship inline styles; scripts stay nonce-gated. 'unsafe-eval'
+    # is what unfold needs: it ships the standard Alpine.js build, which
+    # compiles every x-data/x-show expression with the Function constructor
+    # (unfoldadmin/django-unfold#1344) - without it Alpine dies on the first
+    # expression and every hidden panel in the admin renders open. Scripts
+    # from other origins and un-nonced inline <script> stay blocked.
     "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
-    "script-src": [CSP.SELF, CSP.NONCE],
+    "script-src": [CSP.SELF, CSP.NONCE, CSP.UNSAFE_EVAL],
     # These four do NOT fall back to default-src.
     "base-uri": [CSP.SELF],  # an injected <base> would redirect relative scripts
     "form-action": [CSP.SELF],  # admin forms post to the admin only
