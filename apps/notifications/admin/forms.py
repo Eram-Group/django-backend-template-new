@@ -1,13 +1,16 @@
 """Admin forms for notifications - plain Django forms on unfold widgets.
 
-``BroadcastComposeForm`` (the Broadcast add view): an operator writes a
-title and a message instead of hand-typing the ``context`` JSON, picks an
-audience and the channels, and the add path hands real values to
+``BroadcastComposeForm`` (the Broadcast add view, laid out by
+``templates/admin/notifications/broadcast/compose.html``): an operator
+writes a title and a message instead of hand-typing the ``context`` JSON,
+picks an audience and the channels, and the add path hands real values to
 ``services.notification_broadcast`` - which is what makes the catalog's
-context validation run at all. Add view only: on change,
+context validation run at all. Its audience half (``BroadcastAudienceForm``)
+is also what the live reach counter validates. Add view only: on change,
 ``FieldPermissions`` freezes content and audience (a dispatched broadcast
 must show what was actually sent), so the change form stays the plain
-auto-built one.
+auto-built one. The ``x-model.fill`` attrs feed the page's Alpine state
+(counters, preview, the Everyone/Specific users switch).
 
 ``KindConfigAdminForm`` (the NotificationKindConfig change view): the
 channel picker limited to what the kind supports; the copy columns are the
@@ -80,22 +83,10 @@ def _channel_choices(supported: frozenset[Channel]) -> list[tuple[str, str]]:
     ]
 
 
-class BroadcastComposeForm(forms.ModelForm[Broadcast]):
-    """Title + message -> ``context``; audience by filters or by picked users."""
+class BroadcastAudienceForm(forms.ModelForm[Broadcast]):
+    """The audience half of the composer - also what the live reach counter
+    validates, so the number on screen comes from the same rules as the send."""
 
-    title = forms.CharField(
-        label=_("Title"),
-        max_length=255,
-        widget=UnfoldAdminTextInputWidget(attrs={"autofocus": True}),
-        help_text=_("Push notifications show about %(limit)d characters.")
-        % {"limit": TITLE_LIMIT},
-    )
-    message = forms.CharField(
-        label=_("Message"),
-        widget=UnfoldAdminTextareaWidget(attrs={"rows": 4}),
-        help_text=_("SMS and push preview about %(limit)d characters.")
-        % {"limit": MESSAGE_LIMIT},
-    )
     target = forms.ChoiceField(
         label=_("Send to"),
         choices=(
@@ -103,12 +94,7 @@ class BroadcastComposeForm(forms.ModelForm[Broadcast]):
             (TARGET_USERS, _("Specific users")),
         ),
         initial=TARGET_FILTERS,
-        widget=UnfoldAdminRadioSelectWidget,
-    )
-    channels = forms.MultipleChoiceField(
-        label=_("Channels"),
-        widget=UnfoldAdminCheckboxSelectMultipleWidget,
-        help_text=_("Every recipient also gets the inbox entry."),
+        widget=UnfoldAdminRadioSelectWidget(attrs={"x-model.fill": "target"}),
     )
 
     class Meta:
@@ -138,9 +124,6 @@ class BroadcastComposeForm(forms.ModelForm[Broadcast]):
             *[(code, label) for code, label in language.choices if code],  # type: ignore[attr-defined]
         ]
         self.fields["recipients"].required = False
-        self.fields["channels"].choices = _channel_choices(  # type: ignore[attr-defined]
-            catalog_entry(COMPOSABLE_KIND).supported_channels
-        )
 
     def clean(self) -> dict[str, Any]:
         cleaned = super().clean() or {}
@@ -156,6 +139,52 @@ class BroadcastComposeForm(forms.ModelForm[Broadcast]):
                 "joined_before", _("Must be on or after the joined-after date.")
             )
         return cleaned
+
+    def audience_filters(self) -> dict[str, Any]:
+        """The cleaned audience as ``selectors.audience_queryset`` kwargs."""
+        cleaned = self.cleaned_data
+        return {
+            "language": cleaned["language"] or "",
+            "require_device": cleaned["require_device"],
+            "joined_after": cleaned["joined_after"],
+            "joined_before": cleaned["joined_before"],
+            "recipient_ids": [user.pk for user in cleaned["recipients"]],
+        }
+
+
+class BroadcastComposeForm(BroadcastAudienceForm):
+    """Title + message -> ``context``, plus the channels."""
+
+    title = forms.CharField(
+        label=_("Title"),
+        max_length=255,
+        widget=UnfoldAdminTextInputWidget(
+            attrs={"autofocus": True, "x-model.fill": "title"}
+        ),
+        help_text=_("Push notifications show about %(limit)d characters.")
+        % {"limit": TITLE_LIMIT},
+    )
+    message = forms.CharField(
+        label=_("Message"),
+        widget=UnfoldAdminTextareaWidget(attrs={"rows": 4, "x-model.fill": "message"}),
+        help_text=_("SMS and push preview about %(limit)d characters.")
+        % {"limit": MESSAGE_LIMIT},
+    )
+    channels = forms.MultipleChoiceField(
+        label=_("Channels"),
+        widget=UnfoldAdminCheckboxSelectMultipleWidget,
+        help_text=_("Every recipient also gets the inbox entry."),
+    )
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        channels = self.fields["channels"]
+        channels.choices = _channel_choices(  # type: ignore[attr-defined]
+            catalog_entry(COMPOSABLE_KIND).supported_channels
+        )
+        # unfold's checkbox widget rebuilds ``attrs`` in __init__ (class only),
+        # so the Alpine binding is added afterwards.
+        channels.widget.attrs["x-model.fill"] = "channels"
 
     def service_kwargs(self) -> dict[str, Any]:
         """The add path's payload for services.notification_broadcast."""

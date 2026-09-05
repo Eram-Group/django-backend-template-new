@@ -1,3 +1,5 @@
+from apps.notifications.selectors.broadcasts import audience_queryset
+from apps.notifications.selectors.broadcasts import audience_summary
 from apps.notifications.selectors.broadcasts import broadcast_audience
 from apps.notifications.selectors.broadcasts import broadcast_audience_summary
 from apps.notifications.selectors.config import effective_channels
@@ -14,6 +16,8 @@ from apps.notifications.selectors.notifications import notification_unread_count
 __all__ = [
     "ConfigMap",
     "RenderedMessage",
+    "audience_queryset",
+    "audience_summary",
     "broadcast_audience",
     "broadcast_audience_summary",
     "deliveries_needing_attention",

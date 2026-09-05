@@ -30,6 +30,7 @@ from apps.users.tests.factories import UserFactory
 pytestmark = pytest.mark.django_db
 
 ADD_URL = "admin:notifications_broadcast_add"
+REACH_URL = "admin:notifications_broadcast_audience_reach"
 TITLE = "Composer test title"
 MESSAGE = "Composer test announcement - unique to this module."
 CONFIRM = {"_form_submitted": "1"}  # what unfold's confirmation dialog posts
@@ -82,7 +83,7 @@ def _resume_url(broadcast: Broadcast) -> str:
 # --- the add form ---------------------------------------------------------------
 
 
-def test_add_page_renders_the_compose_form(client: Client) -> None:
+def test_add_page_renders_the_composer(client: Client) -> None:
     response = _superuser_client(client).get(reverse(ADD_URL))
 
     assert response.status_code == 200
@@ -91,10 +92,103 @@ def test_add_page_renders_the_compose_form(client: Client) -> None:
     assert 'name="title"' in body
     assert 'name="message"' in body
     assert 'name="context"' not in body
-    # Plain admin widgets: the user picker is Django's autocomplete, the
-    # dates are the native admin date widget.
+    # Stock admin widgets inside the composer layout: the user picker is
+    # Django's autocomplete, the dates the admin date widget.
     assert "admin-autocomplete" in body
     assert 'name="joined_after"' in body
+    # The live pieces: Alpine state fed by the widgets, htmx reach fragment.
+    assert 'x-model.fill="title"' in body
+    assert 'x-model.fill="target"' in body
+    assert 'x-model.fill="channels"' in body
+    assert f'hx-post="{reverse(REACH_URL)}"' in body
+    assert 'hx-sync="this:replace"' in body  # a stale count can never win
+    assert "{#" not in body  # a template comment leaking into the page
+
+
+class TestAudienceReach:
+    """The composer's live reach counter: the same form and the same query
+    the dispatcher pages, rendered as an htmx fragment."""
+
+    def test_counts_active_users_with_no_filters(self, client: Client) -> None:
+        from apps.users.models import User
+
+        User.objects.update(is_active=False)  # rolled back with the test
+        UserFactory.create_batch(3)
+        client.force_login(UserFactory.create(is_staff=True, is_superuser=True))
+
+        response = client.post(reverse(REACH_URL), {"target": "filters"})
+
+        assert response.status_code == 200
+        body = response.content.decode()
+        assert ">4<" in body  # the three plus the signed-in staff user
+        assert "recipients" in body
+
+    def test_counts_reachable_devices(self, client: Client) -> None:
+        from apps.notifications.tests.factories import DeviceFactory
+        from apps.users.models import User
+
+        User.objects.update(is_active=False)
+        staff = UserFactory.create(is_staff=True, is_superuser=True)
+        DeviceFactory.create(user=staff)
+        DeviceFactory.create(user=staff)  # two devices, one recipient
+        client.force_login(staff)
+
+        body = client.post(
+            reverse(REACH_URL), {"target": "filters", "require_device": "on"}
+        ).content.decode()
+
+        assert ">1<" in body
+        assert ">2<" in body
+
+    def test_counts_exactly_the_picked_users(self, client: Client) -> None:
+        picked = UserFactory.create()
+        UserFactory.create()
+        _superuser_client(client)
+
+        body = client.post(
+            reverse(REACH_URL), {"target": "users", "recipients": [str(picked.pk)]}
+        ).content.decode()
+
+        assert ">1<" in body
+
+    def test_an_empty_audience_is_called_out(self, client: Client) -> None:
+        picked = UserFactory.create(is_active=False)
+        _superuser_client(client)
+
+        body = client.post(
+            reverse(REACH_URL), {"target": "users", "recipients": [str(picked.pk)]}
+        ).content.decode()
+
+        assert ">0<" in body
+        assert "Dispatch will refuse it" in body
+
+    def test_reversed_dates_render_the_error_not_a_count(self, client: Client) -> None:
+        _superuser_client(client)
+
+        body = client.post(
+            reverse(REACH_URL),
+            {
+                "target": "filters",
+                "joined_after": "2026-06-30",
+                "joined_before": "2026-01-01",
+            },
+        ).content.decode()
+
+        assert "bc-alert" in body  # the field error, in the viewer's language
+        assert "bc-reach-n" not in body
+
+    def test_anonymous_callers_are_redirected_to_login(self, client: Client) -> None:
+        assert client.post(reverse(REACH_URL), {}).status_code == 302
+
+    def test_a_staff_user_without_add_permission_is_refused(
+        self, client: Client
+    ) -> None:
+        client.force_login(UserFactory.create(is_staff=True))
+
+        response = client.post(reverse(REACH_URL), {})
+
+        # admin_view bounces a staff user with no model perms at the door.
+        assert response.status_code in (302, 403)
 
 
 def test_compose_creates_a_draft_with_the_message_as_context(client: Client) -> None:

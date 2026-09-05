@@ -4,11 +4,14 @@ from typing import cast
 
 from django.contrib import admin
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db.models import Model
 from django.forms import ModelForm
 from django.http import HttpRequest
 from django.http import HttpResponse
 from django.shortcuts import redirect
+from django.shortcuts import render
+from django.urls import path
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from unfold.contrib.filters.admin import RangeDateFilter
@@ -23,8 +26,9 @@ from apps.common.admin import on_change
 from apps.common.exceptions import ApplicationError
 from apps.notifications import selectors
 from apps.notifications import services
-from apps.notifications.admin.forms import TARGET_FILTERS
-from apps.notifications.admin.forms import TARGET_USERS
+from apps.notifications.admin.forms import MESSAGE_LIMIT
+from apps.notifications.admin.forms import TITLE_LIMIT
+from apps.notifications.admin.forms import BroadcastAudienceForm
 from apps.notifications.admin.forms import BroadcastComposeForm
 from apps.notifications.admin.resources import BroadcastResource
 from apps.notifications.constants import BroadcastStatus
@@ -83,9 +87,13 @@ class BroadcastAdmin(BaseModelAdmin):
     list_per_page = 50
 
     # Composing an announcement and inspecting a dispatched one are different
-    # jobs: the add view gets the message/audience form, the change view stays
-    # the plain frozen record. Mirrors django.contrib.auth's UserAdmin.
+    # jobs: the add view gets the message/audience form on the composer
+    # template (two panes: the form, and a live summary with the reach), the
+    # change view stays the plain frozen record. Mirrors
+    # django.contrib.auth's UserAdmin. Presentation only: Django still owns
+    # POST -> validate -> save_model -> redirect.
     add_form = BroadcastComposeForm
+    add_form_template = "admin/notifications/broadcast/compose.html"
     add_fieldsets = (
         (None, {"fields": ("title", "message")}),
         (
@@ -151,14 +159,60 @@ class BroadcastAdmin(BaseModelAdmin):
     # The user picker: Django's autocomplete against UserAdmin.search_fields
     # (the operator needs the users view permission the endpoint checks).
     autocomplete_fields = ["recipients"]
-    # unfold shows the picker only for "specific users" and the filters only
-    # for "everyone matching the filters" (Alpine expressions over the form).
-    conditional_fields = {
-        "recipients": f"target == '{TARGET_USERS}'",
-        "language": f"target == '{TARGET_FILTERS}'",
-        "joined_after": f"target == '{TARGET_FILTERS}'",
-        "joined_before": f"target == '{TARGET_FILTERS}'",
-    }
+
+    def get_urls(self) -> list[Any]:
+        # Prepended so it wins over the admin's `<path:object_id>` catch-all,
+        # which would otherwise read "audience-reach" as a primary key.
+        reach = [
+            path(
+                "audience-reach/",
+                self.admin_site.admin_view(self.audience_reach_view),
+                name="notifications_broadcast_audience_reach",
+            ),
+        ]
+        return reach + list(super().get_urls())
+
+    def audience_reach_view(self, request: HttpRequest) -> HttpResponse:
+        """The composer's live "who would this reach": an htmx fragment
+        re-rendered on every audience change (the request carries the whole
+        form; htmx's hx-sync drops a stale in-flight request, so the number
+        on screen always belongs to the current selection).
+
+        Validates only the audience half, through the same form and the same
+        query the dispatcher pages - never a parallel reimplementation.
+        """
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+        # Bound unconditionally, never `request.POST or None`: an empty POST
+        # is the meaningful "no filters" case (everyone).
+        form = BroadcastAudienceForm(data=request.POST)
+        context: dict[str, Any] = {"form": form, "summary": None}
+        if form.is_valid():
+            audience = selectors.audience_queryset(**form.audience_filters())
+            context["summary"] = selectors.audience_summary(audience=audience)
+        return render(request, "admin/notifications/broadcast/_reach.html", context)
+
+    def render_change_form(
+        self,
+        request: HttpRequest,
+        context: dict[str, Any],
+        add: bool = False,
+        change: bool = False,
+        form_url: str = "",
+        obj: Any | None = None,
+    ) -> HttpResponse:
+        if add:
+            context["reach_url"] = reverse(
+                "admin:notifications_broadcast_audience_reach"
+            )
+            # Advisory counter limits; the form owns the numbers so the page
+            # and any future validation cannot drift apart.
+            context["title_limit"] = TITLE_LIMIT
+            context["message_limit"] = MESSAGE_LIMIT
+        response: HttpResponse = super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+        return response
 
     # Lifecycle buttons on the change form - each calls a service, never
     # obj.save(); the fan-out itself runs in the bulk-queue worker.

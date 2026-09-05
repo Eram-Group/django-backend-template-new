@@ -1,0 +1,24 @@
+{% load i18n %}
+{# Rendered by audience_reach_view; swapped into #bc-reach by htmx. Also #}
+{# rendered once server-side (summary=None) as the initial placeholder.  #}
+{% if summary %}
+  <div>
+    <div class="bc-reach-n">{{ summary.recipients }}</div>
+    <div class="bc-reach-l">{% trans "recipients" %}</div>
+  </div>
+  <div>
+    <div class="bc-reach-n">{{ summary.devices }}</div>
+    <div class="bc-reach-l">{% trans "registered devices" %}</div>
+  </div>
+  {% if summary.recipients == 0 %}
+    <div class="bc-alert" style="grid-column: 1 / -1">{% trans "This audience is empty - the draft can be saved, but Dispatch will refuse it." %}</div>
+  {% endif %}
+{% elif form and form.errors %}
+  <div class="bc-alert" style="grid-column: 1 / -1">
+    {% for field in form %}{% for error in field.errors %}{{ field.label }}: {{ error }} {% endfor %}{% endfor %}
+    {% for error in form.non_field_errors %}{{ error }} {% endfor %}
+  </div>
+{% else %}
+  <div><div class="bc-reach-n">…</div><div class="bc-reach-l">{% trans "recipients" %}</div></div>
+  <div><div class="bc-reach-n">…</div><div class="bc-reach-l">{% trans "registered devices" %}</div></div>
+{% endif %}
