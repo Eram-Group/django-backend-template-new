@@ -225,7 +225,7 @@ layers = [
   "selectors",
   "models",
 ]
-containers = [ "apps.users", "apps.notifications", "apps.payments", "apps.location"{% if database == "postgis" %}, "apps.zones"{% endif %} ] # append each new app
+containers = [ "apps.users", "apps.notifications", "apps.payments", "apps.location", "apps.zones" ] # append each new app
 ignore_imports = [
   # Recorded exception (2026-07-18): the refund executor task trampolines
   # into its own app's services (function-level import) - the provider call
@@ -243,7 +243,7 @@ ignore_imports = [
 # re-exports only after an explicit decision - never silently.
 name = "Domain apps independent"
 type = "independence"
-modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.location"{% if database == "postgis" %}, "apps.zones"{% endif %} ] # append each new app
+modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.location", "apps.zones" ] # append each new app
 ignore_imports = [
   # Explicit decision (2026-07-12, restored 2026-07-27): notifications
   # addresses users - Notification/Device rows belong to a User,
@@ -270,14 +270,12 @@ ignore_imports = [
   # Test-only edge (2026-08-29): the load-sheet tests log a staff User into
   # the admin; location's and zones' runtime never imports users.
   "apps.location.tests.** -> apps.users.**",
-{%- if database == "postgis" %}
   "apps.zones.tests.** -> apps.users.**",
   # Explicit decision (2026-08-30): a zone belongs to a Country (PROTECT FK,
   # string ref) and the load sheet reads countries through location's
   # selectors. One-way only; location never imports zones - it is the app
   # that exists without PostGIS.
   "apps.zones.** -> apps.location.**",
-{%- endif %}
   # The shared fake-value helper is deliberately user-locale-aware; without
   # this, any app's tests importing fake form an indirect chain to users.
   "apps.common.tests.fake -> apps.users.constants",
@@ -294,15 +292,13 @@ unmatched_ignore_imports_alerting = "error"
 name = "Common imports no domain app"
 type = "forbidden"
 source_modules = [ "apps.common" ]
-forbidden_modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.location"{% if database == "postgis" %}, "apps.zones"{% endif %} ] # append each new app
+forbidden_modules = [ "apps.users", "apps.notifications", "apps.payments", "apps.location", "apps.zones" ] # append each new app
 ignore_imports = [
   "apps.common.tests.** -> apps.users.**",
   "apps.common.tests.** -> apps.notifications.**",
   "apps.common.tests.** -> apps.payments.**",
   "apps.common.tests.** -> apps.location.**",
-{%- if database == "postgis" %}
   "apps.common.tests.** -> apps.zones.**",
-{%- endif %}
   "apps.common.management.commands.seed_db -> apps.users.**",
   "apps.common.management.commands.seed_db -> apps.notifications.**",
   "apps.common.management.commands.seed_db -> apps.payments.**",

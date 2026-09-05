@@ -1,8 +1,7 @@
 # Project rules
 
-docs/ARCHITECTURE.md explains the conventions in depth. In the template repo
-(the one with `copier.yml`) PLAN.md is the design log and TODO.json the task
-tracker; neither is generated into projects.
+docs/ARCHITECTURE.md explains the conventions in depth. PLAN.md is the
+design log and TODO.json the task tracker.
 
 ## Architecture rules (digest)
 
@@ -152,20 +151,3 @@ transitive dependency of factory_boy — never import it.
 - Spread timestamps for realism with `QuerySet.update()` (bypasses
   auto_now/auto_now_add); remember `F()` reads pre-update values, so
   copying a freshly-randomized column needs a second UPDATE.
-
-## Template layer (only in the repo that has `copier.yml`)
-
-- The repo is a Copier template, not a runnable project: files ending in
-  `.jinja` are rendered, everything else is copied verbatim; `docs/TEMPLATE.md`
-  is the how-to. Knobs are `database` (postgres | postgis → the `apps/zones`
-  directory exists or not) and identity answers; nothing else - branding
-  (`BRAND_COLOR`, `SITE_SYMBOL`) is edited in `config/branding.py` after
-  generation, `ADMIN_URL` is a per-environment env value.
-- Work on a generated preset (`uvx copier copy --defaults --data-file
-  presets/<p>.yml . build/<p>`, gitignored), run its gates there, then
-  back-port into the `.jinja`/plain source. CI (`template.yml`) does exactly
-  that for every preset. Never commit `build/`.
-- Keep Jinja out of `apps/`; a feature that needs a conditional is its own
-  app behind a conditional directory name. Non-Copier `{{`/`{%` inside a
-  `.jinja` file must sit in `{% raw %}`.
-- Tag releases (`vX.Y.Z`) - `copier update` in projects resolves the tag.

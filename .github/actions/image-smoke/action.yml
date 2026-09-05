@@ -1,6 +1,6 @@
 # Boot a freshly built production image against a CI Postgres: the release
 # step, then the web process answering its probes. Used by the generated
-# project's ci.yml and by the template's own CI on every preset.
+# project's ci.yml.
 #
 # The deployed-only fields point at nothing reachable: the release step skips
 # collectstatic (no object store) and the probes never touch S3/SES/Sentry.

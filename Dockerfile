@@ -38,14 +38,12 @@ FROM python:3.14-slim-bookworm AS runtime
 ENV PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH" \
     DJANGO_SETTINGS_MODULE=config.settings.production
-{%- if database == "postgis" %}
 
 # GeoDjango (apps.zones) binds libgdal/libgeos/libproj via ctypes - shared
 # libraries only, no Python bindings, no -dev headers.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libgdal32 libgeos-c1v5 libproj25 \
     && rm -rf /var/lib/apt/lists/*
-{%- endif %}
 
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app
 

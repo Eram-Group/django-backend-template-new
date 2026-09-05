@@ -1,4 +1,4 @@
-# {{ project_name }}
+# Backend
 
 API-only Django backend: [django-ninja](https://django-ninja.dev) REST API +
 Django admin (unfold), passwordless auth (allauth headless, 6-digit email
@@ -8,10 +8,10 @@ task queue), one Docker image deployed as an ECS Express Mode web service +
 a Fargate worker (CDK in `infra/`). Arabic-first
 (ar/en).
 
-Generated from the company backend template with Copier (answers in
-`.copier-answers.yml`; `uvx copier update` pulls later template improvements).
-[docs/NEW_PROJECT.md](docs/NEW_PROJECT.md) lists what is still a per-project
-decision: optional modules, languages, GitHub variables, the first deploy.
+This is the company backend template: clone it to start a new product.
+[docs/NEW_PROJECT.md](docs/NEW_PROJECT.md) lists what to change per project:
+identity values, optional modules, languages, GitHub variables, the first
+deploy.
 
 How the code is organized: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md);
 why the AWS shape is what it is: [docs/AWS_ARCHITECTURE.md](docs/AWS_ARCHITECTURE.md);
@@ -32,13 +32,9 @@ sequence lives in [TODO.json](TODO.json).
 ## Quickstart
 
 Prerequisites: [uv](https://docs.astral.sh/uv/), [just](https://just.systems)
-{%- if database == "postgis" %}
 and Docker (for PostGIS + Mailpit), plus GDAL/GEOS on the host for GeoDjango
 (`just bootstrap` runs `brew install gdal geos` on macOS; on Linux install
 your distro's `libgdal`/`libgeos` packages).
-{%- else %}
-and Docker (for Postgres + Mailpit).
-{%- endif %}
 
 ```bash
 just bootstrap   # deps, .env, git hooks, postgres 18 + mailpit, migrate + cache table

@@ -157,8 +157,9 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
 2. `cd infra && npx cdk bootstrap aws://<account>/eu-central-1` (once per
    account/region).
 3. `infra/backend_infra/config.py` already carries `APP.name` and
-   `APP.github_repo` from the Copier answers (the account-level fields stay
-   as they are for every app in the same account); edit `ENVIRONMENTS`:
+   `APP.github_repo` (set per project - docs/NEW_PROJECT.md; the
+   account-level fields stay as they are for every app in the same
+   account); edit `ENVIRONMENTS`:
    sizes, domain, frontend origins.
 4. `just infra-deploy-shared` — ECR, cluster, roles (stack `<app>-Shared`).
    If the ECR repository `eram/<app>` already exists, import it first
@@ -175,10 +176,8 @@ Prerequisites: `aws login` with an admin profile, Node 22 (`npx cdk`), `jq`.
    CREATE ROLE <app>_dev LOGIN PASSWORD '<choose one>';
    GRANT <app>_dev TO postgres;   -- RDS master is not a superuser: needed to hand over ownership
    CREATE DATABASE <app>_dev OWNER <app>_dev;
-{%- if database == "postgis" %}
    \c <app>_dev
    CREATE EXTENSION IF NOT EXISTS postgis;  -- not an RDS trusted extension: only rds_superuser (the master) can create it
-{%- endif %}
    ```
    then set `DATABASE_URL=postgres://<app>_dev:<password>@<endpoint>:5432/<app>_dev`
    in the `dev/<app>` secret.

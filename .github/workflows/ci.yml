@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-{% raw %}${{ github.head_ref || github.ref }}{% endraw %}
+  group: ci-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -22,11 +22,7 @@ jobs:
       DJANGO_SETTINGS_MODULE: config.settings.local
     services:
       postgres:
-{%- if database == "postgis" %}
         image: imresamu/postgis:18-3.6
-{%- else %}
-        image: postgres:18
-{%- endif %}
         env:
           POSTGRES_DB: backend
           POSTGRES_USER: postgres
@@ -43,13 +39,11 @@ jobs:
       - uses: ./.github/actions/setup-python-env
 
       - uses: extractions/setup-just@v3
-{%- if database == "postgis" %}
 
       # GeoDjango loads GDAL/GEOS through ctypes on the runner host (pytest
       # runs outside Docker here); the image job gets them from the Dockerfile.
       - name: Install GDAL and GEOS
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libgdal-dev libgeos-dev
-{%- endif %}
 
       # Env has no code defaults by design - the example IS the CI config.
       - name: Bootstrap env file
@@ -95,11 +89,7 @@ jobs:
     timeout-minutes: 20
     services:
       postgres:
-{%- if database == "postgis" %}
         image: imresamu/postgis:18-3.6
-{%- else %}
-        image: postgres:18
-{%- endif %}
         env:
           POSTGRES_DB: backend
           POSTGRES_USER: postgres

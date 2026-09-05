@@ -12,7 +12,8 @@
     "Tips are guidance, not prescriptions - decide from context; PLAN.md wins over any tip; record resolutions by appending to the task's tips.",
     "Any task that adds an Env field updates config/env.py AND .env.example in the same task.",
     "From G03 onward ruff+mypy must be green at every checkpoint. Since 2026-07-18 the remote exists and CI runs for real, so GitHub is a gate alongside the local checkpoint - not a substitute: CI is the only place `cp .env.example .env` happens, which is exactly how the .env.example comment-as-value bug surfaced.",
-    "2026-07-18 saved cards built (user request): SavedCard vault + opt-in save at checkout + one-click CIT + service-only MIT (payment_charge_saved) + cards API + admin, Tap tokens->charge with payment_agreement, Paymob TOKEN callback (own 8-field HMAC) + card_tokens CIT + MOTO payments/pay; local suites green - the live test-mode proof is G22. Simplified later the same day (user request): save is always-on (save_card left the API), and the add-card-without-payment flow (Tap authorize+auto-void, Paymob Verification intention - both live-verified) was removed; git history keeps the working implementation."
+    "2026-07-18 saved cards built (user request): SavedCard vault + opt-in save at checkout + one-click CIT + service-only MIT (payment_charge_saved) + cards API + admin, Tap tokens->charge with payment_agreement, Paymob TOKEN callback (own 8-field HMAC) + card_tokens CIT + MOTO payments/pay; local suites green - the live test-mode proof is G22. Simplified later the same day (user request): save is always-on (save_card left the API), and the add-card-without-payment flow (Tap authorize+auto-void, Paymob Verification intention - both live-verified) was removed; git history keeps the working implementation.",
+    "2026-09-05 (owner request): the Copier template layer added on 2026-08-30 was removed - every `.jinja` file is rendered into plain source with the pre-Copier identity (SITE_NAME `Backend`, app `template`, PostGIS + zones), the conditional `apps/zones` directory is a plain directory again, and copier.yml / presets / template.yml / docs/TEMPLATE.md are gone. The repo is a runnable project once more: `just bootstrap`, `just run`, `just worker`; `just gates` runs at the root. The template distribution question is the last task (G25 `copier-decision`); git history 407a1ee..85bc2c9 keeps the working template."
   ],
   "groups": [
     {
@@ -56,6 +57,12 @@
       "title": "Scheduling",
       "rationale": "The EventBridge Scheduler integration was removed on 2026-09-05 (owner decision): a schedule pinned a task-definition revision that the deploy never advanced, and the fix added deploy-time plumbing the owner did not want yet. Until a decision is made, the recurring commands run by hand.",
       "checkpoint": "A written decision on how recurring commands run in AWS, then its implementation with a test that ties the cadence to the released revision."
+    },
+    {
+      "id": "G25",
+      "title": "Template distribution",
+      "rationale": "The repo is used as a template by cloning, and the Copier layer (2026-08-30 to 2026-09-05) made the root non-runnable for a distribution mechanism nobody had decided to adopt. Decide the mechanism last, once the product code has settled.",
+      "checkpoint": "A written decision on how new projects are created from this repo and how they receive later improvements; if Copier, a generated preset passes `just gates` and `just infra-gates` in CI; commit."
     }
   ],
   "tasks": [
@@ -291,6 +298,19 @@
         "Not for now. The owner handles stuck state by hand: Sentry ERRORs at every known-risk moment + the admin's \"Needs attention\" badges/filters + the Verify / Re-queue / Resume actions (docs/DEPLOYMENT.md#recovery).",
         "The sweep commands themselves were removed on 2026-09-05 (reconcile_payments incl. payment_expire + payment_refund_verify + gateway fetch_refund, and sweep_deliveries) - git history 85bc2c9^ has the last working versions with tests.",
         "Candidates for the timer: EventBridge Scheduler -> ecs:RunTask (was implemented and removed; the trap is that a schedule pins a task-definition revision, so CD must repoint every schedule after the worker rolls - see 68647cd for a working version incl. the IAM); a db_worker-side periodic loop (no infra, couples cadence to the worker process); EventBridge rules."
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "copier-decision",
+      "group": "G25",
+      "title": "Think about Copier (or another template mechanism) - last",
+      "endGoal": "A recorded decision on how a new product starts from this repo (plain clone + docs/NEW_PROJECT.md, Copier, GitHub template repository, or something else) and whether projects can pull later template improvements; the chosen mechanism implemented with CI proving a fresh project passes every gate.",
+      "tips": [
+        "Do this last: the owner removed the Copier layer on 2026-09-05 because it made the root non-runnable (`just run` -> `no justfile found`) and every change had to be developed in a generated preset and back-ported into `.jinja` sources.",
+        "The full working Copier implementation is in git history (407a1ee feat: Copier template ... 85bc2c9): copier.yml with the `database` (postgres|postgis -> conditional `apps/zones` directory) and identity knobs, presets/ for CI, .github/workflows/template.yml rendering every preset and running its gates, docs/TEMPLATE.md with the authoring rules. Restore from there rather than redesigning.",
+        "Identity values a new project must set today are listed in docs/NEW_PROJECT.md section 1 (SITE_NAME, app_name in justfile + APP.name, APP.github_repo, domain in ENVIRONMENTS, deployed emails, Dependabot timezone) - whatever mechanism wins must cover exactly that list.",
+        "Weigh the cost that bit last time: `.jinja` suffixes break editor tooling and pre-commit on the template repo itself, tests can only run on rendered output, and `copier update` needs tagged releases (a local v0.1.0 tag exists, never pushed)."
       ],
       "status": "pending"
     }

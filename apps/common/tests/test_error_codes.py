@@ -40,7 +40,7 @@ PUBLIC_CODES = {
     "webhook_rejected",
     "location",
 }
-#: Only in projects generated with the PostGIS knob (apps.zones).
+#: Present only when apps.zones is installed (the PostGIS consumer).
 ZONES_CODES = {"zones", "zone_file", "invalid_coordinates"}
 
 

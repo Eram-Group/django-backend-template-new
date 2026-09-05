@@ -1,9 +1,0 @@
-# Template CI preset: plain Postgres - no GeoDjango, no zones app.
-project_name: Plain Demo
-app_name: plain-demo
-github_repo: Eram-Group/plain-demo
-domain: plain-demo.eramapps.com
-database: postgres
-default_from_email: no-reply@eramapps.com
-superuser_email: admin@eramapps.com
-timezone: Asia/Riyadh

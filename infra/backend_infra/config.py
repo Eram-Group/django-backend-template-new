@@ -89,10 +89,8 @@ ENV_PLAIN: frozenset[str] = frozenset(
         "DB_POOL_TIMEOUT",
         "DB_POOL_MAX_LIFETIME",
         "DB_POOL_MAX_IDLE",
-{%- if database == "postgis" %}
         "GDAL_LIBRARY_PATH",
         "GEOS_LIBRARY_PATH",
-{%- endif %}
         "DJANGO_SUPERUSER_EMAIL",
         "FRONTEND_BASE_URL",
         "FRONTEND_ALLOWED_ORIGINS",
@@ -154,10 +152,10 @@ ENV_FROM_CD: frozenset[str] = frozenset({"SENTRY_RELEASE"})
 # --- This application ------------------------------------------------------------
 
 APP = AppConfig(
-    name="{{ app_name }}",
+    name="template",
     account="975049989256",
     region="eu-central-1",
-    github_repo="{{ github_repo }}",
+    github_repo="Eram-Group/django-backend-template-new",
     vpc_id="vpc-01a4ccaae4f845880",
     vpc_cidr="172.31.0.0/16",
     public_subnets=(
@@ -186,12 +184,10 @@ def _plain_env(*, environment: EnvName, base_url: str, hosts: str) -> dict[str, 
         "DB_POOL_TIMEOUT": "10",
         "DB_POOL_MAX_LIFETIME": "1800",
         "DB_POOL_MAX_IDLE": "300",
-{%- if database == "postgis" %}
         # Empty: the image finds libgdal/libgeos on the system library path.
         "GDAL_LIBRARY_PATH": "",
         "GEOS_LIBRARY_PATH": "",
-{%- endif %}
-        "DJANGO_SUPERUSER_EMAIL": "{{ superuser_email }}",
+        "DJANGO_SUPERUSER_EMAIL": "admin@eramapps.com",
         "FRONTEND_BASE_URL": base_url,
         "FRONTEND_ALLOWED_ORIGINS": base_url,
         "COOKIE_DOMAIN": "",
@@ -199,7 +195,7 @@ def _plain_env(*, environment: EnvName, base_url: str, hosts: str) -> dict[str, 
         "APPLE_OAUTH_CLIENT_ID": "",
         "APPLE_OAUTH_TEAM_ID": "",
         "APPLE_OAUTH_KEY_ID": "",
-        "DEFAULT_FROM_EMAIL": "{{ default_from_email }}",
+        "DEFAULT_FROM_EMAIL": "no-reply@eramapps.com",
         # Required by the env contract; SES replaces SMTP when deployed.
         "EMAIL_HOST": "localhost",
         "EMAIL_PORT": "25",
@@ -232,7 +228,7 @@ ENVIRONMENTS: dict[EnvName, EnvConfig] = {
         database="shared",
         plain_env=_plain_env(
             environment="dev",
-            base_url="https://dev.{{ domain }}",
+            base_url="https://dev.template.eramapps.com",
             hosts=_EXPRESS_HOSTS,
         )
         | {"SENTRY_TRACES_SAMPLE_RATE": "1.0"},
@@ -249,12 +245,12 @@ ENVIRONMENTS: dict[EnvName, EnvConfig] = {
         # non-restartable jobs; the template has none.
         worker_spot=True,
         database="dedicated",
-        custom_domain="api.{{ domain }}",
+        custom_domain="api.template.eramapps.com",
         plain_env=_plain_env(
             environment="production",
-            base_url="https://{{ domain }}",
-            hosts=f"api.{{ domain }},{_EXPRESS_HOSTS}",
+            base_url="https://template.eramapps.com",
+            hosts=f"api.template.eramapps.com,{_EXPRESS_HOSTS}",
         )
-        | {"BACKEND_BASE_URL": "https://api.{{ domain }}"},
+        | {"BACKEND_BASE_URL": "https://api.template.eramapps.com"},
     ),
 }

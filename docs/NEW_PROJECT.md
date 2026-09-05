@@ -1,19 +1,30 @@
-# After generating {{ project_name }}
+# Starting a project from this template
 
-Copier already wrote every identity value (`.copier-answers.yml`: `app_name`
-= `{{ app_name }}` prefixes every AWS resource and stack, `github_repo`,
-`domain`, emails). Everything
-below is still a deliberate per-project decision; the rest of the repo is
-meant to be used as-is. Account-level values (AWS account, VPC, subnets,
+Everything below is a deliberate per-project decision; the rest of the repo
+is meant to be used as-is. Account-level values (AWS account, VPC, subnets,
 hosted zone, OIDC provider, DB security group) stay exactly as they are for
 every app deployed into the same account.
 
-## 1. Identity changes later
+## 1. Identity
 
-Re-run `uvx copier update` to change an answer (it re-asks with the stored
-values as defaults) rather than editing the rendered sites by hand - the
-same command pulls template improvements, and the answers file is what makes
-that merge clean.
+Set these once, in the places that own them (grep for the current values):
+
+- `SITE_NAME` in `config/settings/base.py` (currently `Backend`): admin
+  header and title, API title, email branding, OTP subject prefix.
+- `app_name` in the `justfile` and `APP.name` in
+  `infra/backend_infra/config.py` (currently `template`): the slug that
+  prefixes every AWS resource - stacks, ECR `eram/<slug>`, bucket
+  `eram-<slug>-<env>`, secret `<env>/<slug>`. Lowercase letters, digits and
+  dashes.
+- `APP.github_repo` in `infra/backend_infra/config.py`: scopes the OIDC
+  deploy role trust.
+- The product domain in `ENVIRONMENTS` (`infra/backend_infra/config.py`,
+  currently `template.eramapps.com`): API at `api.<domain>`, dev at
+  `dev.<domain>`; must be a subdomain of the hosted zone the account owns.
+- `DJANGO_SUPERUSER_EMAIL` and `DEFAULT_FROM_EMAIL` in the deployed env
+  (`infra/backend_infra/config.py`): the sender must be on the verified SES
+  identity.
+- `timezone` in `.github/dependabot.yml`: the team's update window.
 
 ## 2. Branding and admin path
 
@@ -74,7 +85,7 @@ anything left half-removed.
 
 ## 5. GitHub
 
-Repo variables/secrets: `AWS_ECR_REPOSITORY=eram/{{ app_name }}`,
+Repo variables/secrets: `AWS_ECR_REPOSITORY=eram/template`,
 `AWS_OIDC_ROLE_ARN` (`<name>-Shared` output), `AWS_REGION`; the Apidog trio
 (`APIDOG_PROJECT_ID`, `APIDOG_SERVER_URL`, secret `APIDOG_ACCESS_TOKEN`) or
 remove the `apidog` job from `.github/workflows/deploy-dev.yml`. Branch

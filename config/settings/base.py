@@ -26,8 +26,8 @@ BASE_DIR = Path(__file__).resolve(strict=True).parent.parent.parent
 
 # --- Branding ---------------------------------------------------------------
 # One name everywhere: admin header + title, API title, email layouts, OTP
-# subject prefix. The Copier template sets it from `project_name`.
-SITE_NAME = "{{ project_name }}"
+# subject prefix. Set once per project (docs/NEW_PROJECT.md).
+SITE_NAME = "Backend"
 
 # --- Core ---------------------------------------------------------------
 # Surfaced as a setting (rather than read from env directly) so system checks
@@ -54,9 +54,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-{%- if database == "postgis" %}
     "django.contrib.gis",  # PostGIS fields + lookups (apps.zones)
-{%- endif %}
     # Third-party
     "ninja",  # registers export_openapi_schema (the Apidog sync artifact)
     "corsheaders",
@@ -75,9 +73,7 @@ INSTALLED_APPS = [
     "apps.notifications",
     "apps.payments",
     "apps.location",
-{%- if database == "postgis" %}
     "apps.zones",
-{%- endif %}
 ]
 
 # --- Middleware (probe first, axes last - order is load-bearing) ---------
@@ -134,20 +130,16 @@ TEMPLATES = [
 DATABASES = {
     "default": {
         **dj_database_url.parse(env.DATABASE_URL),
-{%- if database == "postgis" %}
         # PostGIS backend regardless of the URL scheme: one DATABASE_URL shape
         # everywhere (postgres://), the engine is a code decision.
         "ENGINE": "django.contrib.gis.db.backends.postgis",
-{%- endif %}
     },
 }
-{%- if database == "postgis" %}
 # GeoDjango finds libgdal/libgeos via ctypes.util.find_library, which does not
 # search Homebrew's prefix on macOS - hosts set the explicit paths in .env;
 # the Docker image and CI runners leave them empty (system library path).
 GDAL_LIBRARY_PATH = env.GDAL_LIBRARY_PATH
 GEOS_LIBRARY_PATH = env.GEOS_LIBRARY_PATH
-{%- endif %}
 
 # --- Cache / sessions / tasks (Postgres-only infrastructure) --------------
 # One shared cache: it also backs every rate limit (allauth's per-ip/per-key
@@ -230,10 +222,10 @@ ACCOUNT_EMAIL_SUBJECT_PREFIX = f"[{SITE_NAME}] "
 HEADLESS_ONLY = True
 HEADLESS_SERVE_SPECIFICATION = True
 HEADLESS_FRONTEND_URLS = {
-    "account_confirm_email": f"{env.FRONTEND_BASE_URL}/auth/verify-email/{% raw %}{{key}}{% endraw %}",
+    "account_confirm_email": f"{env.FRONTEND_BASE_URL}/auth/verify-email/{{key}}",
     "account_reset_password": f"{env.FRONTEND_BASE_URL}/auth/password-reset",
     "account_reset_password_from_key": (
-        f"{env.FRONTEND_BASE_URL}/auth/password-reset/{% raw %}{{key}}{% endraw %}"
+        f"{env.FRONTEND_BASE_URL}/auth/password-reset/{{key}}"
     ),
     "account_signup": f"{env.FRONTEND_BASE_URL}/auth/signup",
 }
@@ -498,7 +490,6 @@ UNFOLD = {
                             "location.view_country"
                         ),
                     },
-{%- if database == "postgis" %}
                     {
                         "title": _("Zones"),
                         "icon": "map",
@@ -507,7 +498,6 @@ UNFOLD = {
                             "zones.view_zone"
                         ),
                     },
-{%- endif %}
                 ],
             },
             {

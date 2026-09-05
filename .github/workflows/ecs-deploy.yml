@@ -1,4 +1,4 @@
-{% raw %}# Reusable ECS rollout (called by deploy-dev.yml and deploy-prod.yml):
+# Reusable ECS rollout (called by deploy-dev.yml and deploy-prod.yml):
 # release task on the worker family -> web (ECS Express Mode) -> worker.
 # Every ECS_* / EXPRESS_* variable comes from the GitHub environment.
 
@@ -123,4 +123,4 @@ jobs:
           cluster: ${{ vars.ECS_CLUSTER }}
           service: ${{ vars.ECS_SERVICE_WORKER }}
           wait-for-service-stability: true
-          wait-for-minutes: 12{% endraw %}
+          wait-for-minutes: 12

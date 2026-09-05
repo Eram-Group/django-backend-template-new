@@ -32,10 +32,8 @@ from apps.payments.tests.factories import WalletFactory
 from apps.payments.tests.factories import WalletTransactionFactory
 from apps.users.models import User
 from apps.users.tests.factories import UserFactory
-{%- if database == "postgis" %}
 from apps.zones.models import Zone
 from apps.zones.tests.factories import ZoneFactory
-{%- endif %}
 
 FACTORIES: dict[type[Model], type[DjangoModelFactory[Any]]] = {
     User: UserFactory,
@@ -49,9 +47,7 @@ FACTORIES: dict[type[Model], type[DjangoModelFactory[Any]]] = {
     SavedCard: SavedCardFactory,
     Wallet: WalletFactory,
     WalletTransaction: WalletTransactionFactory,
-{%- if database == "postgis" %}
     Zone: ZoneFactory,
-{%- endif %}
 }
 
 
