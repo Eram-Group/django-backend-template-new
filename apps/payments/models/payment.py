@@ -68,12 +68,22 @@ class Payment(BaseModel):
     idempotency_key = models.UUIDField(
         _("idempotency key"), db_default=UUID7(), unique=True, editable=False
     )
-    # Checkout-time id (Tap charge id / Paymob intention id) ...
+    # The client's operation key for POST /payments: a retried request with
+    # the same key returns this row instead of opening a second checkout.
+    # Null for rows made outside the API (ops commands, sweeps).
+    client_request_id = models.UUIDField(
+        _("client request id"), null=True, blank=True, editable=False
+    )
+    # Checkout-time identity: Tap charge id / Paymob ORDER id - the one
+    # field every signed callback carries (Tap x_id, Paymob order.id). A
+    # gateway event must match it before it may touch the row: the merchant
+    # reference the row is found by is outside both providers' signatures.
     gateway_charge_id = models.CharField(
         _("gateway charge id"), max_length=255, blank=True
     )
     # ... vs the settled transaction id reported by the webhook (refunds
-    # target this one on Paymob).
+    # target this one on Paymob). Unique per gateway once set: one provider
+    # transaction settles exactly one row.
     gateway_transaction_id = models.CharField(
         _("gateway transaction id"), max_length=255, blank=True
     )
@@ -92,6 +102,15 @@ class Payment(BaseModel):
     refund_attempted_at = models.DateTimeField(
         _("refund attempted at"), null=True, blank=True, editable=False
     )
+    # The provider's refund object (Tap "re_...", Paymob child transaction):
+    # set when the refund call was accepted; the reconcile sweep polls it
+    # until the provider reports completion or failure.
+    gateway_refund_id = models.CharField(
+        _("gateway refund id"), max_length=255, blank=True, editable=False
+    )
+    gateway_refund_response = models.JSONField(  # raw last refund payload (audit)
+        _("gateway refund response"), null=True, blank=True
+    )
 
     class Meta:
         verbose_name = _("payment")
@@ -108,6 +127,19 @@ class Payment(BaseModel):
             models.CheckConstraint(
                 condition=models.Q(amount__gt=0),
                 name="payment_amount_positive",
+            ),
+            # A client key opens one checkout per user, ever.
+            models.UniqueConstraint(
+                fields=["user", "client_request_id"],
+                condition=models.Q(client_request_id__isnull=False),
+                name="payment_client_request_unique",
+            ),
+            # One settled provider transaction, one row - a signed event
+            # cannot settle a second checkout with the same transaction.
+            models.UniqueConstraint(
+                fields=["gateway", "gateway_transaction_id"],
+                condition=~models.Q(gateway_transaction_id=""),
+                name="payment_provider_transaction_unique",
             ),
         ]
 

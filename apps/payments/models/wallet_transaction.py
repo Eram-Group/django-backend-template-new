@@ -46,6 +46,15 @@ class WalletTransaction(BaseModel):
     class Meta:
         verbose_name = _("wallet transaction")
         verbose_name_plural = _("wallet transactions")
+        constraints = [
+            # A payment credits its wallet ONCE - the DB backstop for the
+            # service's terminal-status guard against replayed/racing events.
+            models.UniqueConstraint(
+                fields=["payment"],
+                condition=models.Q(kind=WalletTransactionKind.TOPUP),
+                name="wallet_topup_payment_unique",
+            ),
+        ]
 
     def __str__(self) -> str:
         return f"{self.kind} {self.amount} (balance {self.balance_after})"

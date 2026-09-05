@@ -191,7 +191,7 @@
       "title": "Payments/notifications correctness items from the review",
       "endGoal": "Provider HTTP never runs inside a held row lock or the request transaction; sweeps are bounded; list endpoints have indexes matching the cursor; the inbox renderer cannot 500 on a stale row; notifications task bodies are thin trampolines into services.",
       "tips": [
-        "services/payments.py:312 calls saved_card_store (-> Tap fingerprint API) while holding select_for_update on the Payment; payment_initiate/payment_charge_saved hold ATOMIC_REQUESTS across create_checkout.",
+        "Provider HTTP runs outside every row lock and outside any request transaction (done: saved_card_store after the transition commits; checkouts commit the PENDING row before the provider call; refund phases commit separately).",
         "services/deliveries.py deliveries_resume materializes every PENDING pk unbounded; reconcile_payments is serial with no time budget (500 x 10 s worst case).",
         "Indexes: payment (user, id), notification (recipient, id), wallet_transaction (wallet, id) + filter on wallet_id instead of the join; payment (status, updated_at) for the sweep; Broadcast has none.",
         "selectors/messages.py notification_render .format(**context) raises KeyError on rows written before a catalog change - make it defensive.",

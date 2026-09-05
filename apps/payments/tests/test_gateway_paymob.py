@@ -18,6 +18,7 @@ from apps.payments.gateways.base import CheckoutRequest
 from apps.payments.gateways.base import GatewayConfigurationError
 from apps.payments.gateways.base import GatewayResponseError
 from apps.payments.gateways.base import PaymentEvent
+from apps.payments.gateways.base import RefundStatus
 from apps.payments.gateways.base import SavedCardRef
 from apps.payments.gateways.base import WebhookVerificationError
 from apps.payments.gateways.paymob import PaymobGateway
@@ -118,7 +119,8 @@ def test_constructor_refuses_a_blank_hmac_secret(settings: Any, blank: Any) -> N
 def test_create_checkout_uses_minor_units_and_special_reference() -> None:
     route = respx.post(INTENTION).mock(
         return_value=httpx.Response(
-            200, json={"id": "int_1", "client_secret": "cs_abc"}
+            200,
+            json={"id": "int_1", "client_secret": "cs_abc", "intention_order_id": 5550},
         )
     )
 
@@ -147,7 +149,9 @@ def test_create_checkout_uses_minor_units_and_special_reference() -> None:
 @respx.mock
 def test_create_checkout_splits_full_name_into_billing_fields() -> None:
     route = respx.post(INTENTION).mock(
-        return_value=httpx.Response(200, json={"id": "int_1", "client_secret": "cs"})
+        return_value=httpx.Response(
+            200, json={"id": "int_1", "client_secret": "cs", "intention_order_id": 5550}
+        )
     )
 
     PaymobGateway().create_checkout(request=_request(customer_name="Omar Ahmed Gawdat"))
@@ -157,10 +161,10 @@ def test_create_checkout_splits_full_name_into_billing_fields() -> None:
     assert billing["last_name"] == "Ahmed Gawdat"
 
 
-@pytest.mark.parametrize("missing", ["id", "client_secret"])
+@pytest.mark.parametrize("missing", ["id", "client_secret", "intention_order_id"])
 @respx.mock
 def test_create_checkout_with_incomplete_intention_is_loud(missing: str) -> None:
-    payload = {"id": "int_1", "client_secret": "cs"}
+    payload = {"id": "int_1", "client_secret": "cs", "intention_order_id": 5550}
     del payload[missing]
     respx.post(INTENTION).mock(return_value=httpx.Response(200, json=payload))
 
@@ -406,6 +410,7 @@ def test_fetch_status_by_merchant_order_id_with_cached_auth_token() -> None:
                 "is_refunded": False,
                 "amount_cents": 7550,
                 "currency": "EGP",
+                "order": {"id": 5550, "merchant_order_id": "ref-456"},
             },
         )
     )
@@ -460,6 +465,7 @@ def test_fetch_status_refund_child_is_not_paid() -> None:
                 "has_parent_transaction": True,
                 "amount_cents": 2000,
                 "currency": "EGP",
+                "order": {"id": 5550, "merchant_order_id": "ref-456"},
             },
         )
     )
@@ -481,7 +487,13 @@ def test_fetch_status_without_amount_is_loud() -> None:
     )
     respx.post(INQUIRY).mock(
         return_value=httpx.Response(
-            200, json={"id": 987654, "success": True, "currency": "EGP"}
+            200,
+            json={
+                "id": 987654,
+                "success": True,
+                "currency": "EGP",
+                "order": {"id": 5550, "merchant_order_id": "ref-456"},
+            },
         )
     )
 
@@ -504,13 +516,14 @@ def test_fetch_status_with_tokenless_auth_response_is_loud() -> None:
 def test_refund_sends_minor_units() -> None:
     route = respx.post(
         "https://accept.paymob.com/api/acceptance/void_refund/refund"
-    ).mock(return_value=httpx.Response(200, json={"success": True}))
+    ).mock(return_value=httpx.Response(200, json={"id": 555111, "success": True}))
 
     result = PaymobGateway().refund(
         transaction_id="987654", amount=Decimal("75.50"), currency="EGP"
     )
 
-    assert result.ok is True
+    assert result.status == RefundStatus.SUCCEEDED
+    assert result.refund_id == "555111"
     assert json.loads(route.calls.last.request.content)["amount_cents"] == 7550
 
 
@@ -614,7 +627,10 @@ def test_token_webhook_with_tampered_token_is_rejected() -> None:
 @respx.mock
 def test_create_checkout_with_saved_card_uses_cof_integration_and_card_tokens() -> None:
     route = respx.post(INTENTION).mock(
-        return_value=httpx.Response(200, json={"id": "int_2", "client_secret": "cs_x"})
+        return_value=httpx.Response(
+            200,
+            json={"id": "int_2", "client_secret": "cs_x", "intention_order_id": 5550},
+        )
     )
 
     PaymobGateway().create_checkout(request=_saved_request())
@@ -632,6 +648,7 @@ def test_charge_saved_moto_intention_then_pay() -> None:
             json={
                 "id": "int_9",
                 "client_secret": "cs_moto",
+                "intention_order_id": 5550,
                 "payment_keys": [
                     {"integration": 11, "key": "pk_card_1"},
                     {"integration": MOTO_ID, "key": "pk_moto_1"},
@@ -647,6 +664,7 @@ def test_charge_saved_moto_intention_then_pay() -> None:
                 "success": True,
                 "amount_cents": 7550,
                 "currency": "EGP",
+                "order": {"id": 5550, "merchant_order_id": "ref-456"},
             },
         )
     )
@@ -663,7 +681,7 @@ def test_charge_saved_moto_intention_then_pay() -> None:
         "payment_token": "pk_moto_1",  # the MOTO key, never "the first one"
     }
     assert session.checkout_url == ""
-    assert session.charge_id == "int_9"
+    assert session.charge_id == "5550"  # the ORDER id: what callbacks sign
     assert session.outcome is not None
     assert session.outcome.is_paid is True
     assert session.outcome.status == "success"
@@ -682,6 +700,7 @@ def test_charge_saved_pending_pay_leaves_the_row_to_the_webhook() -> None:
             json={
                 "id": "int_9",
                 "client_secret": "cs_moto",
+                "intention_order_id": 5550,
                 "payment_keys": [{"integration": MOTO_ID, "key": "pk_moto_1"}],
             },
         )
@@ -695,6 +714,7 @@ def test_charge_saved_pending_pay_leaves_the_row_to_the_webhook() -> None:
                 "pending": True,
                 "amount_cents": 7550,
                 "currency": "EGP",
+                "order": {"id": 5550, "merchant_order_id": "ref-456"},
             },
         )
     )
@@ -714,6 +734,7 @@ def test_charge_saved_without_a_moto_payment_key_is_loud() -> None:
             json={
                 "id": "int_9",
                 "client_secret": "cs",
+                "intention_order_id": 5550,
                 "payment_keys": [{"integration": 11, "key": "pk_card_1"}],
             },
         )

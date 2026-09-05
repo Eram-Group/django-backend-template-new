@@ -18,9 +18,11 @@ from apps.payments.constants import CURRENCY_BY_LANGUAGE
 from apps.payments.constants import Currency
 from apps.payments.constants import WalletTransactionKind
 from apps.payments.exceptions import InsufficientBalanceError
+from apps.payments.exceptions import WalletCurrencyMismatchError
 from apps.payments.models import Payment
 from apps.payments.models import Wallet
 from apps.payments.models import WalletTransaction
+from apps.payments.selectors.wallets import wallet_get
 from apps.users.constants import Language
 from apps.users.models import User
 
@@ -41,6 +43,17 @@ def wallet_create(*, user: User, currency: Currency) -> Wallet:
     wallet = Wallet(user=user, currency=currency)
     wallet.full_clean()
     wallet.save()
+    return wallet
+
+
+def wallet_for_currency(*, user: User, currency: str) -> Wallet:
+    """Resolve the user's signup-provisioned wallet for a payment in
+    ``currency``, rejecting a currency mismatch before any money moves."""
+    wallet = wallet_get(user=user)
+    if wallet.currency != currency:
+        raise WalletCurrencyMismatchError(
+            str(_("Wallet currency does not match the payment currency."))
+        )
     return wallet
 
 

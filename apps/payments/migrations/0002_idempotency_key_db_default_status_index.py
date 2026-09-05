@@ -6,40 +6,66 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('payments', '0001_initial'),
+        ("payments", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='payment',
-            name='id',
-            field=models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False),
+            model_name="payment",
+            name="id",
+            field=models.UUIDField(
+                db_default=django.db.models.functions.uuid.UUID7(),
+                editable=False,
+                primary_key=True,
+                serialize=False,
+            ),
         ),
         migrations.AlterField(
-            model_name='payment',
-            name='idempotency_key',
-            field=models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, unique=True, verbose_name='idempotency key'),
+            model_name="payment",
+            name="idempotency_key",
+            field=models.UUIDField(
+                db_default=django.db.models.functions.uuid.UUID7(),
+                editable=False,
+                unique=True,
+                verbose_name="idempotency key",
+            ),
         ),
         migrations.AlterField(
-            model_name='savedcard',
-            name='id',
-            field=models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False),
+            model_name="savedcard",
+            name="id",
+            field=models.UUIDField(
+                db_default=django.db.models.functions.uuid.UUID7(),
+                editable=False,
+                primary_key=True,
+                serialize=False,
+            ),
         ),
         migrations.AlterField(
-            model_name='wallet',
-            name='id',
-            field=models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False),
+            model_name="wallet",
+            name="id",
+            field=models.UUIDField(
+                db_default=django.db.models.functions.uuid.UUID7(),
+                editable=False,
+                primary_key=True,
+                serialize=False,
+            ),
         ),
         migrations.AlterField(
-            model_name='wallettransaction',
-            name='id',
-            field=models.UUIDField(db_default=django.db.models.functions.uuid.UUID7(), editable=False, primary_key=True, serialize=False),
+            model_name="wallettransaction",
+            name="id",
+            field=models.UUIDField(
+                db_default=django.db.models.functions.uuid.UUID7(),
+                editable=False,
+                primary_key=True,
+                serialize=False,
+            ),
         ),
         migrations.AddIndex(
-            model_name='payment',
-            index=models.Index(fields=['status', 'updated_at'], name='payments_pa_status_d4d624_idx'),
+            model_name="payment",
+            index=models.Index(
+                fields=["status", "updated_at"], name="payments_pa_status_d4d624_idx"
+            ),
         ),
     ]

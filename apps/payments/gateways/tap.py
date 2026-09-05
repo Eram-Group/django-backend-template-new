@@ -33,6 +33,7 @@ from apps.payments.gateways.base import GatewayConfigurationError
 from apps.payments.gateways.base import GatewayResponseError
 from apps.payments.gateways.base import PaymentEvent
 from apps.payments.gateways.base import RefundResult
+from apps.payments.gateways.base import RefundStatus
 from apps.payments.gateways.base import SavedCardData
 from apps.payments.gateways.base import SavedCardRef
 from apps.payments.gateways.base import WebhookVerificationError
@@ -44,6 +45,11 @@ _PAID_STATUS = "CAPTURED"
 # webhook / payment_verify / the reconcile sweep rather than being declared
 # final here.
 _PENDING_STATUSES = {"INITIATED", "IN_PROGRESS"}
+# Refund object statuses (developers.tap.company/reference/refunds). Only
+# REFUNDED is completion; ACCEPTED/PENDING mean the acquirer still has it,
+# and anything unknown is treated the same way - never as done.
+_REFUND_DONE = {"REFUNDED"}
+_REFUND_FAILED = {"FAILED", "DECLINED", "CANCELLED", "REJECTED", "ERROR"}
 
 
 class TapGateway:
@@ -229,9 +235,16 @@ class TapGateway:
             msg = "hashstring mismatch"
             raise WebhookVerificationError(msg)
         charge = _parse_charge(payload)
-        return charge.event(reference=_str(_dict(payload, "reference"), "transaction"))
+        return charge.event(reference=_planted_reference(payload))
 
     def fetch_status(self, *, charge_id: str, reference: str) -> PaymentEvent | None:
+        """The charge as Tap holds it. The reference on the event is the one
+        Tap echoes back, not the one asked for: the service compares the two,
+        which is what makes an authenticated lookup a binding proof. Tap has
+        no lookup by merchant reference, so a row that never learned its
+        charge id has nothing to ask for (None = still pending)."""
+        if not charge_id:
+            return None
         response = request_json(
             service="tap",
             method="GET",
@@ -240,8 +253,9 @@ class TapGateway:
             timeout=PROVIDER_TIMEOUT,
             retry="transient",  # GET is idempotent
         )
+        payload = response.json()
         # A Tap charge always exists once created - never None here.
-        return _parse_charge(response.json()).event(reference=reference)
+        return _parse_charge(payload).event(reference=_planted_reference(payload))
 
     def refund(
         self, *, transaction_id: str, amount: Decimal, currency: str
@@ -260,14 +274,18 @@ class TapGateway:
             timeout=PROVIDER_TIMEOUT,
             retry="connect-only",
         )
-        payload = response.json()
-        if not isinstance(payload, dict):
-            msg = f"tap refund response is not an object: {payload}"
-            raise GatewayResponseError(msg)
-        status = _str(payload, "status").upper()
-        return RefundResult(
-            ok=status in {"REFUNDED", "ACCEPTED", "PENDING"}, raw=payload
+        return _refund_result(response.json())
+
+    def fetch_refund(self, *, refund_id: str) -> RefundResult:
+        response = request_json(
+            service="tap",
+            method="GET",
+            url=f"{_BASE}/refunds/{refund_id}",
+            headers=self._headers(),
+            timeout=PROVIDER_TIMEOUT,
+            retry="transient",  # GET is idempotent
         )
+        return _refund_result(response.json())
 
     def _expected_hashstring(self, payload: dict[str, Any]) -> str:
         """The documented concatenation. Every field is indexed: a payload
@@ -323,6 +341,7 @@ class _Charge:
         status = self.status.upper()
         return PaymentEvent(
             reference=reference,
+            charge_id=self.id,  # signed (x_id) on every webhook
             transaction_id=self.id,  # Tap's charge id IS the settled txn id
             is_paid=status == _PAID_STATUS,
             is_pending=status in _PENDING_STATUSES,
@@ -360,6 +379,27 @@ def _parse_charge(payload: Any) -> _Charge:
         saved_card=_extract_saved_card(payload),
         raw=payload,
     )
+
+
+def _planted_reference(payload: dict[str, Any]) -> str:
+    """The merchant reference we planted (``reference.transaction``) as Tap
+    echoes it. NOT part of the hashstring - the service binds the signed
+    charge id to the row instead of trusting this alone."""
+    return _str(_dict(payload, "reference"), "transaction")
+
+
+def _refund_result(payload: Any) -> RefundResult:
+    if not isinstance(payload, dict):
+        msg = f"tap refund response is not an object: {payload}"
+        raise GatewayResponseError(msg)
+    status = _str(payload, "status").upper()
+    if status in _REFUND_DONE:
+        outcome = RefundStatus.SUCCEEDED
+    elif status in _REFUND_FAILED:
+        outcome = RefundStatus.FAILED
+    else:
+        outcome = RefundStatus.PENDING
+    return RefundResult(status=outcome, refund_id=_str(payload, "id"), raw=payload)
 
 
 def _extract_saved_card(payload: dict[str, Any]) -> SavedCardData | None:

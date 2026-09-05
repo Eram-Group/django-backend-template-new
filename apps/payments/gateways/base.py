@@ -22,9 +22,13 @@ required key is missing (``GatewayConfigurationError``) - the registry in
 from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
+from enum import StrEnum
 from typing import Any
 from typing import Protocol
 from typing import runtime_checkable
+
+from apps.common.http import OutboundStatusError
+from apps.common.http import OutboundTransportError
 
 
 class GatewayError(Exception):
@@ -100,6 +104,12 @@ class PaymentEvent:
     charge response or status inquiry alike."""
 
     reference: str  # the planted idempotency key, echoed back
+    #: The SIGNED identity of the parent object this event is about - Tap's
+    #: charge id, Paymob's order id - the one field every callback shape
+    #: covers with its HMAC. The service binds it to ``Payment.gateway_charge_id``
+    #: so a valid signature cannot be re-addressed to another row by editing
+    #: the unsigned merchant reference around it.
+    charge_id: str
     #: The settled transaction id. "" ONLY on a refund/void/capture child
     #: action (Paymob), which must not replace the id our refund targets.
     transaction_id: str
@@ -129,6 +139,8 @@ class CardTokenEvent:
 
 @dataclass(frozen=True, slots=True)
 class CheckoutSession:
+    #: Tap charge id / Paymob order id - the identity every later signed
+    #: callback carries (see ``PaymentEvent.charge_id``).
     charge_id: str
     checkout_url: str  # "" when there is nothing to redirect to
     raw: dict[str, Any]
@@ -137,10 +149,41 @@ class CheckoutSession:
     outcome: PaymentEvent | None
 
 
+class RefundStatus(StrEnum):
+    """What the provider says about a refund - three answers, never a bool.
+
+    PENDING means "accepted, not settled": the row must stay REFUND_PENDING
+    until ``fetch_refund`` (the reconcile sweep) reports SUCCEEDED/FAILED.
+    """
+
+    PENDING = "pending"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 @dataclass(frozen=True, slots=True)
 class RefundResult:
-    ok: bool
+    status: RefundStatus
+    #: The provider's refund object id (Tap "re_...", Paymob child
+    #: transaction id) - persisted so a pending refund can be looked up.
+    refund_id: str
     raw: dict[str, Any]
+
+
+def provider_outcome_unknown(exc: Exception) -> bool:
+    """Could the provider have processed the request despite the error?
+
+    The answer decides whether a caller may treat its side effect as "never
+    happened": only a provably-unsent request (DNS/connect phase) or a
+    definitive 4xx rejection is a hard no. A read timeout, a 5xx, or a 2xx
+    with an unusable body (``GatewayResponseError``) all mean the money MAY
+    have moved, so the row must be left for reconciliation, never reverted.
+    """
+    if isinstance(exc, OutboundTransportError):
+        return exc.request_sent
+    if isinstance(exc, OutboundStatusError):
+        return exc.status_code is None or exc.status_code >= 500
+    return True
 
 
 class PaymentGateway(Protocol):
@@ -164,6 +207,10 @@ class PaymentGateway(Protocol):
     def refund(
         self, *, transaction_id: str, amount: Decimal, currency: str
     ) -> RefundResult: ...
+
+    def fetch_refund(self, *, refund_id: str) -> RefundResult:
+        """The provider's current view of a refund it accepted earlier."""
+        ...
 
     def charge_saved(self, *, request: CheckoutRequest) -> CheckoutSession: ...
 

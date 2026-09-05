@@ -1,5 +1,6 @@
 """Services: checkout lifecycle, idempotent transitions, wallet integrity."""
 
+import uuid
 from datetime import timedelta
 from decimal import Decimal
 from typing import Any
@@ -38,6 +39,7 @@ from apps.payments.gateways.base import CheckoutRequest
 from apps.payments.gateways.base import CheckoutSession
 from apps.payments.gateways.base import PaymentEvent
 from apps.payments.gateways.base import RefundResult
+from apps.payments.gateways.base import RefundStatus
 from apps.payments.gateways.base import SavedCardData
 from apps.payments.models import Payment
 from apps.payments.models import SavedCard
@@ -89,6 +91,7 @@ def _event(payment: Payment, **overrides: Any) -> PaymentEvent:
     informational / mismatching variants."""
     fields: dict[str, Any] = {
         "reference": str(payment.idempotency_key),
+        "charge_id": payment.gateway_charge_id,
         "transaction_id": "txn_1",
         "is_paid": True,
         "is_pending": False,
@@ -127,6 +130,7 @@ def _age(payment: Payment, *, minutes: int) -> None:
 def _initiate(user: User, **overrides: Any) -> Payment:
     fields: dict[str, Any] = {
         "user": user,
+        "request_id": uuid.uuid4(),
         "amount": Decimal("50.00"),
         "currency": Currency.SAR,
         "kind": PaymentKind.WALLET_TOPUP,
@@ -476,7 +480,9 @@ def test_refund_gateway_hit_once_when_second_refund_races(
             services.payment_refund_start(
                 payment=Payment.objects.get(pk=payment.pk), actor=staff
             )
-        return RefundResult(ok=True, raw={"fake": True})
+        return RefundResult(
+            status=RefundStatus.SUCCEEDED, refund_id="re_1", raw={"fake": True}
+        )
 
     monkeypatch.setattr(FakeGateway, "refund", racing_refund)
 
@@ -500,7 +506,9 @@ def test_refund_reverts_wallet_and_status_when_gateway_rejects(
     monkeypatch.setattr(
         FakeGateway,
         "refund",
-        lambda self, **kwargs: RefundResult(ok=False, raw={"fake": True}),
+        lambda self, **kwargs: RefundResult(
+            status=RefundStatus.FAILED, refund_id="re_1", raw={"fake": True}
+        ),
     )
 
     # The executor's PaymentRefundFailedError lands in the task result
@@ -758,7 +766,9 @@ def test_reconcile_counts_a_failed_refund_execution(
     monkeypatch.setattr(
         FakeGateway,
         "refund",
-        lambda self, **kwargs: RefundResult(ok=False, raw={"fake": True}),
+        lambda self, **kwargs: RefundResult(
+            status=RefundStatus.FAILED, refund_id="re_1", raw={"fake": True}
+        ),
     )
 
     with pytest.raises(CommandError, match="1 provider calls failed"):
@@ -880,6 +890,7 @@ def test_charge_saved_declined_marks_failed(monkeypatch: pytest.MonkeyPatch) -> 
             raw={"fake": True},
             outcome=PaymentEvent(
                 reference=request.reference,
+                charge_id=f"fake_charge_{request.reference}",
                 transaction_id=f"fake_txn_{request.reference}",
                 is_paid=False,
                 is_pending=False,

@@ -230,7 +230,7 @@ ignore_imports = [
   # into its own app's services (function-level import) - the provider call
   # must run in the worker, outside any request, while the money logic
   # (wallet_apply, revert) stays in services.
-  "apps.payments.tasks.refunds -> apps.payments.services.payments",
+  "apps.payments.tasks.refunds -> apps.payments.services.refunds",
 ]
 
 [[tool.importlinter.contracts]]

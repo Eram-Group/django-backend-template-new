@@ -33,6 +33,10 @@ def payment_create(request: AuthedRequest[User], payload: PaymentCreateIn) -> Pa
     """Returns the payment with ``checkout_url`` - open it to complete the
     payment; then poll GET /payments/{id} (the webhook flips the status).
 
+    ``request_id`` makes the call safe to retry: send the same id (and the
+    same payload) again after a timeout and you get the same payment back,
+    never a second checkout or charge. A new payment needs a new id.
+
     With ``saved_card_id`` the charge may settle synchronously: redirect only
     when ``checkout_url`` is non-empty, otherwise ``status`` is already
     terminal (paid/failed).
@@ -44,6 +48,7 @@ def payment_create(request: AuthedRequest[User], payload: PaymentCreateIn) -> Pa
     )
     return services.payment_initiate(
         user=request.auth,
+        request_id=payload.request_id,
         amount=payload.amount,
         currency=payload.currency,
         kind=payload.kind,

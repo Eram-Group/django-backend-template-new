@@ -1,6 +1,7 @@
 """Checkout, wallet, and webhook endpoints."""
 
 import json
+import uuid
 from decimal import Decimal
 from typing import Any
 
@@ -35,6 +36,7 @@ def _payer(**kwargs: Any) -> User:
 
 def _checkout(client: Client, **overrides: Any) -> Any:
     body: dict[str, Any] = {
+        "request_id": str(uuid.uuid4()),
         "amount": "50.00",
         "currency": "SAR",
         "kind": "wallet_topup",
@@ -78,7 +80,52 @@ def test_kind_is_required(client: Client) -> None:
 
     response = client.post(
         f"{PAYMENTS}/",
-        {"amount": "50.00", "currency": "SAR"},
+        {"request_id": str(uuid.uuid4()), "amount": "50.00", "currency": "SAR"},
+        content_type="application/json",
+    )
+
+    assert response.status_code == 422
+
+
+def test_checkout_retry_with_the_same_request_id_returns_the_same_payment(
+    client: Client,
+) -> None:
+    """A client that timed out and retried gets its checkout back, not a
+    second one."""
+    user = _payer()
+    client.force_login(user)
+    request_id = str(uuid.uuid4())
+
+    first = _checkout(client, request_id=request_id).json()
+    again = _checkout(client, request_id=request_id)
+
+    assert again.status_code == 200
+    assert again.json()["id"] == first["id"]
+    assert again.json()["client_request_id"] == request_id
+    assert user.payments.count() == 1
+
+
+def test_checkout_reusing_a_request_id_for_another_payment_is_a_conflict(
+    client: Client,
+) -> None:
+    user = _payer()
+    client.force_login(user)
+    request_id = str(uuid.uuid4())
+    _checkout(client, request_id=request_id)
+
+    response = _checkout(client, request_id=request_id, amount="60.00")
+
+    assert response.status_code == 409
+    assert response.json()["extra"]["code"] == "payment_request_conflict"
+    assert user.payments.count() == 1
+
+
+def test_checkout_requires_a_request_id(client: Client) -> None:
+    client.force_login(_payer())
+
+    response = client.post(
+        f"{PAYMENTS}/",
+        {"amount": "50.00", "currency": "SAR", "kind": "wallet_topup"},
         content_type="application/json",
     )
 
@@ -109,6 +156,7 @@ def test_payments_are_scoped_to_their_owner(auth_client: Client) -> None:
 def _webhook_body(payment: Payment, **overrides: Any) -> str:
     body: dict[str, Any] = {
         "reference": str(payment.idempotency_key),
+        "charge_id": payment.gateway_charge_id,
         "paid": True,
         "amount_minor": int(payment.amount * 100),
         "currency": str(payment.currency),

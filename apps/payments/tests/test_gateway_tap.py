@@ -18,6 +18,7 @@ from apps.payments.gateways.base import CheckoutRequest
 from apps.payments.gateways.base import GatewayConfigurationError
 from apps.payments.gateways.base import GatewayResponseError
 from apps.payments.gateways.base import PaymentEvent
+from apps.payments.gateways.base import RefundStatus
 from apps.payments.gateways.base import SavedCardRef
 from apps.payments.gateways.base import WebhookVerificationError
 from apps.payments.gateways.tap import TapGateway
@@ -261,7 +262,10 @@ def test_refund_maps_status() -> None:
         transaction_id="chg_1", amount=Decimal("50.00"), currency="SAR"
     )
 
-    assert result.ok is True
+    # Accepted is not done: the row stays REFUND_PENDING until fetch_refund
+    # reports REFUNDED.
+    assert result.status == RefundStatus.PENDING
+    assert result.refund_id == "re_1"
 
 
 @respx.mock

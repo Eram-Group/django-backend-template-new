@@ -226,17 +226,33 @@ Per-area notes:
   WhatsApp status webhooks are HMAC-verified and never 5xx on input shape
   (`test_catalog` keeps `NotificationKind` ↔ `CATALOG` in lockstep).
 - **Payments** (Tap SAR / Paymob EGP): gateway Protocol + frozen DTOs in
-  `apps/payments/gateways/`. Money is Decimal end-to-end; the wire uses
-  integer minor units (`to_minor_units`). Charge creation plants
+  `apps/payments/gateways/`; services split by lifecycle —
+  `services/checkouts.py` (open a session, MIT, verify, expire),
+  `services/events.py` (the one guarded transition) and
+  `services/refunds.py`. Money is Decimal end-to-end; the wire uses
+  integer minor units (`to_minor_units`). `POST /payments` takes a
+  client `request_id` (`Payment.client_request_id`, unique per user): a
+  retried request returns the checkout it already opened, a reused id
+  with a different payload is a 409. Charge creation plants
   `Payment.idempotency_key` at the gateway (Tap `reference.transaction`,
   Paymob `special_reference`) — webhooks echo it back and
   `payment_apply_gateway_event` finds the row by it, under
   `select_for_update`, never overwriting terminal statuses (replays ack
-  with 200 and cannot re-credit). Webhooks REALLY verify: Tap `hashstring`
+  with 200 and cannot re-credit; the ledger's one-TOPUP-per-payment
+  constraint is the DB backstop). Webhooks REALLY verify: Tap `hashstring`
   HMAC-SHA256, Paymob `hmac` HMAC-SHA512 over its 20 documented fields,
-  constant-time compares. After the signature, the service cross-checks
-  the signed `amount_minor`/`currency` against the row
-  (`PaymentEventMismatchError`, nothing written on a mismatch). Only two
+  constant-time compares. The merchant reference is OUTSIDE both
+  signatures, so after the signature the service binds the signed
+  provider identity (`PaymentEvent.charge_id`: Tap charge id, Paymob
+  order id — the `intention_order_id` stored as `gateway_charge_id`) to
+  the row, and cross-checks the signed `amount_minor`/`currency`
+  (`PaymentEventMismatchError`, nothing written on a mismatch). A row
+  whose checkout response was lost (no identity yet) is bound only from
+  the provider's own authenticated answer, outside the lock. The settled
+  `gateway_transaction_id` is unique per gateway and never replaced on a
+  settled row. A provider failure during checkout marks the row FAILED
+  only when the request provably never went out (conditional UPDATE);
+  an unknown outcome leaves it PENDING for the webhook/sweep. Only two
   event shapes ever transition a row — paid and declined; everything else
   is `is_pending` (still in flight on the bank's OTP page, an
   authorization we never capture, or a refund/void/capture CHILD
@@ -253,6 +269,12 @@ Per-area notes:
   `constants.PENDING_EXPIRY` (2 h, above Paymob's 1 h intention
   `expiration`) to FAILED so abandoned rows stop clogging its oldest-first
   window — FAILED is non-terminal, so a late webhook still heals one.
+  Refunds are three commits (`payment_refund_start` interlock in the
+  request, `payment_refund_execute` in the worker behind a write-ahead
+  marker, finalization): the provider answers `RefundStatus`
+  SUCCEEDED/FAILED/PENDING — PENDING keeps REFUND_PENDING with the
+  provider's `gateway_refund_id` and the sweep's `payment_refund_verify`
+  (`fetch_refund`) finishes it; "accepted" is never "done".
   Wallet balance moves only through `wallet_apply` (Wallet row lock +
   append-only `WalletTransaction` ledger with `balance_after`). Locally,
   provider TEST-mode keys plus a webhook tunnel drive the same transition

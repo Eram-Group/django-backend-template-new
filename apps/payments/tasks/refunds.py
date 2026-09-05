@@ -20,7 +20,7 @@ def process_payment_refund(*, payment_id: str, actor_id: str) -> None:
     # Trampoline into the owning service: refund finalization moves money
     # (wallet_apply), which is business logic and stays in services -
     # recorded layering exception in pyproject.toml.
-    from apps.payments.services.payments import payment_refund_execute
+    from apps.payments.services.refunds import payment_refund_execute
     from apps.users.models import User
 
     # A staff row deleted between enqueue and run must not strand the refund

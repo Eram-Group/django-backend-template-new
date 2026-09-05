@@ -11,9 +11,11 @@ is the retry mechanism for both. Cron: EventBridge Scheduler -> ECS run-task.
   oldest-first window.
 - REFUND_PENDING rows older than ``REFUNDING_MAX_AGE`` are re-driven through
   ``payment_refund_execute`` when the provider was provably never contacted
-  (``refund_attempted_at`` unset). Rows already attempted are only reported:
-  the provider may have processed the refund, so they need manual
-  reconciliation against its dashboard.
+  (``refund_attempted_at`` unset); rows the provider ACCEPTED but had not
+  settled (``gateway_refund_id`` set) are asked about again through
+  ``payment_refund_verify``. Rows attempted without a stored refund id are
+  only reported: the provider may have processed the refund, so they need
+  manual reconciliation against its dashboard.
 
 A provider call that fails is logged and the sweep moves on (the next run
 retries), but the command then exits non-zero so the scheduled task alerts
@@ -55,6 +57,7 @@ class PendingSweep(NamedTuple):
 
 class RefundSweep(NamedTuple):
     executed: int
+    verified: int
     needs_reconciliation: int
     failures: int
 
@@ -67,12 +70,13 @@ class Command(BaseCommand):
         verified, expired, pending_failures = self._sweep_pending(
             cutoff=now - PENDING_MAX_AGE
         )
-        executed, reconcile, refund_failures = self._sweep_refunding(
+        executed, refunds_verified, reconcile, refund_failures = self._sweep_refunding(
             cutoff=now - REFUNDING_MAX_AGE
         )
         summary = (
             f"{verified} pending verified, {expired} expired, "
-            f"{executed} refunds executed, {reconcile} need manual reconciliation"
+            f"{executed} refunds executed, {refunds_verified} refunds verified, "
+            f"{reconcile} need manual reconciliation"
         )
         failures = pending_failures + refund_failures
         if failures:
@@ -110,13 +114,17 @@ class Command(BaseCommand):
 
     def _sweep_refunding(self, *, cutoff: datetime) -> RefundSweep:
         executed = 0
+        verified = 0
         failures = 0
         stale = Payment.objects.filter(
             status=PaymentStatus.REFUND_PENDING, updated_at__lt=cutoff
         ).order_by("updated_at")[:SWEEP_LIMIT]
         needs_reconciliation = 0
         for payment in stale:
-            if payment.refund_attempted_at is not None:
+            if payment.gateway_refund_id:
+                # Accepted by the provider, not settled when last asked.
+                step, counter = services.payment_refund_verify, "verify"
+            elif payment.refund_attempted_at is not None:
                 # The provider may already have processed this refund -
                 # never re-send it; a human reconciles against the dashboard.
                 needs_reconciliation += 1
@@ -127,8 +135,13 @@ class Command(BaseCommand):
                     refund_attempted_at=payment.refund_attempted_at.isoformat(),
                 )
                 continue
+            else:
+                step, counter = None, "execute"
             try:
-                services.payment_refund_execute(payment_id=payment.pk, actor=None)
+                if step is None:
+                    services.payment_refund_execute(payment_id=payment.pk, actor=None)
+                else:
+                    step(payment=payment)
             except (PaymentError, OutboundError, GatewayError) as exc:
                 # PaymentError subtypes mean the interlock was reverted (safe
                 # state); raw outbound errors were already logged by the
@@ -137,8 +150,12 @@ class Command(BaseCommand):
                 logger.warning(
                     "payment_refund_sweep_failed",
                     payment_id=str(payment.pk),
+                    step=counter,
                     error=type(exc).__name__,
                 )
             else:
-                executed += 1
-        return RefundSweep(executed, needs_reconciliation, failures)
+                if counter == "execute":
+                    executed += 1
+                else:
+                    verified += 1
+        return RefundSweep(executed, verified, needs_reconciliation, failures)

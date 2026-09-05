@@ -56,6 +56,7 @@ from apps.payments.gateways.base import GatewayConfigurationError
 from apps.payments.gateways.base import GatewayResponseError
 from apps.payments.gateways.base import PaymentEvent
 from apps.payments.gateways.base import RefundResult
+from apps.payments.gateways.base import RefundStatus
 from apps.payments.gateways.base import SavedCardData
 from apps.payments.gateways.base import WebhookVerificationError
 from apps.payments.gateways.base import to_minor_units
@@ -222,9 +223,10 @@ class PaymobGateway:
             body["payment_methods"] = [self._cof_id]
             body["card_tokens"] = [request.saved_card.token]
         payload = self._post_intention(body)
+        _id(payload)  # shape check: an intention without an id is broken
         client_secret = _str(payload, "client_secret")
         return CheckoutSession(
-            charge_id=str(_id(payload)),
+            charge_id=_order_id(payload),
             checkout_url=(
                 f"{_CHECKOUT_BASE}?publicKey={self._public_key}"
                 f"&clientSecret={client_secret}"
@@ -248,7 +250,7 @@ class PaymobGateway:
         intention = self._post_intention(
             self._intention_body(request=request, payment_methods=[self._moto_id])
         )
-        intention_id = str(_id(intention))
+        _id(intention)  # shape check: an intention without an id is broken
         payment_key = next(
             (
                 key.get("key")
@@ -278,7 +280,7 @@ class PaymobGateway:
         pay = pay_response.json()
         event = _transaction_event(pay, reference=request.reference)
         return CheckoutSession(
-            charge_id=intention_id,
+            charge_id=_order_id(intention),
             checkout_url="",
             raw={"intention": intention, "payment": pay},
             # Still pending: the webhook / reconcile sweep settles it.
@@ -373,10 +375,7 @@ class PaymobGateway:
         ):
             msg = "hmac mismatch"
             raise WebhookVerificationError(msg)
-        order = obj.get("order")
-        if not isinstance(order, dict):
-            msg = f"paymob transaction lacks an order object: {obj}"
-            raise GatewayResponseError(msg)
+        order = _order(obj)
         # Paymob's own callback sample carries ``merchant_order_id: null`` for
         # transactions not created through an intention of ours - "" then
         # resolves to no Payment row (404), which is the right answer.
@@ -425,11 +424,20 @@ class PaymobGateway:
             timeout=PROVIDER_TIMEOUT,
             retry="connect-only",
         )
-        payload = response.json()
-        if not isinstance(payload, dict):
-            msg = f"paymob refund response is not an object: {payload}"
-            raise GatewayResponseError(msg)
-        return RefundResult(ok=payload.get("success") is True, raw=payload)
+        return _refund_result(response.json())
+
+    def fetch_refund(self, *, refund_id: str) -> RefundResult:
+        """The refund child transaction as Paymob holds it (Retrieve
+        Transaction, Bearer auth token)."""
+        response = request_json(
+            service="paymob",
+            method="GET",
+            url=f"{_BASE}/api/acceptance/transactions/{refund_id}",
+            headers={"Authorization": f"Bearer {self._auth_token()}"},
+            timeout=PROVIDER_TIMEOUT,
+            retry="transient",  # read-only
+        )
+        return _refund_result(response.json())
 
     def _expected_hmac(self, obj: dict[str, Any], *, fields: tuple[str, ...]) -> str:
         concatenated = "".join(_field_value(obj, field) for field in fields)
@@ -451,6 +459,9 @@ def _transaction_event(
     is_child = obj.get("has_parent_transaction") is True
     return PaymentEvent(
         reference=reference,
+        # order.id is HMAC-signed on every callback (merchant_order_id is
+        # not) and is the intention's order - the identity the row keeps.
+        charge_id=str(_id(_order(obj))),
         # A refund/void/capture child must not replace the settled
         # transaction id the refund path targets.
         transaction_id="" if is_child else str(_id(obj)),
@@ -465,6 +476,40 @@ def _transaction_event(
         saved_card=None,  # Paymob vaults cards via its own TOKEN callback
         raw=raw if raw is not None else obj,
     )
+
+
+def _order(obj: dict[str, Any]) -> dict[str, Any]:
+    order = obj.get("order")
+    if not isinstance(order, dict):
+        msg = f"paymob transaction lacks an order object: {obj}"
+        raise GatewayResponseError(msg)
+    return order
+
+
+def _order_id(intention: dict[str, Any]) -> str:
+    """The order an intention created (``intention_order_id``) - what every
+    signed transaction callback and inquiry reports as ``order.id``."""
+    value = intention.get("intention_order_id")
+    if isinstance(value, bool) or not isinstance(value, int | str) or value == "":
+        msg = f"paymob intention lacks intention_order_id: {intention}"
+        raise GatewayResponseError(msg)
+    return str(value)
+
+
+def _refund_result(payload: Any) -> RefundResult:
+    """A refund transaction object -> outcome. ``success`` with
+    ``pending=false`` is done; ``pending`` is still with the acquirer;
+    anything else is a rejection."""
+    if not isinstance(payload, dict):
+        msg = f"paymob refund response is not an object: {payload}"
+        raise GatewayResponseError(msg)
+    if payload.get("pending") is True:
+        status = RefundStatus.PENDING
+    elif payload.get("success") is True:
+        status = RefundStatus.SUCCEEDED
+    else:
+        status = RefundStatus.FAILED
+    return RefundResult(status=status, refund_id=str(_id(payload)), raw=payload)
 
 
 def _last4(masked_pan: str) -> str:

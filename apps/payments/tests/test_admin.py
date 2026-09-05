@@ -31,6 +31,7 @@ def test_refund_action_runs_interlock_and_executor(
         gateway_name=GatewayName.TAP,  # the test FakeGateway answers to it
         event=PaymentEvent(
             reference=str(payment.idempotency_key),
+            charge_id=payment.gateway_charge_id,
             transaction_id="txn_1",
             is_paid=True,
             is_pending=False,

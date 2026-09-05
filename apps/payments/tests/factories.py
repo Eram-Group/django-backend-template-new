@@ -32,6 +32,9 @@ class PaymentFactory(DjangoModelFactory[Payment]):
     # The test FakeGateway answers to Tap's name (test.py maps every
     # currency to it), so factory rows resolve to the fake at runtime.
     gateway = GatewayName.TAP
+    # A row the provider knows: gateway events must name this identity.
+    # Tests for the "checkout response lost" path pass "" explicitly.
+    gateway_charge_id = Sequence(lambda n: f"fake_charge_{n}")
 
 
 class SavedCardFactory(DjangoModelFactory[SavedCard]):

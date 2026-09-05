@@ -39,8 +39,16 @@ class WebhookRejectedError(PaymentError):
 
 
 class PaymentEventMismatchError(PaymentError):
-    """A verified gateway event carries an amount/currency that is not the
-    Payment row's - never applied; logged for reconciliation."""
+    """A verified gateway event does not belong to the Payment row it names:
+    its amount/currency or its signed provider identity disagree with the
+    row. Never applied; logged for reconciliation."""
+
+
+class PaymentRequestConflictError(PaymentError):
+    """The client reused a ``request_id`` with a different payload: a retry
+    must repeat the same operation, a new operation needs a new key."""
+
+    status_code = 409
 
 
 class SavedCardNotFoundError(PaymentError):

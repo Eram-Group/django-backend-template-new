@@ -21,6 +21,7 @@ from apps.payments.gateways.base import CheckoutRequest
 from apps.payments.gateways.base import CheckoutSession
 from apps.payments.gateways.base import PaymentEvent
 from apps.payments.gateways.base import RefundResult
+from apps.payments.gateways.base import RefundStatus
 from apps.payments.gateways.base import SavedCardData
 from apps.payments.gateways.base import SavedCardRef
 from apps.payments.gateways.base import WebhookVerificationError
@@ -64,6 +65,7 @@ class FakeGateway:
             raw={"fake": True},
             outcome=PaymentEvent(
                 reference=request.reference,
+                charge_id=f"fake_charge_{request.reference}",
                 transaction_id=f"fake_txn_{request.reference}",
                 is_paid=True,
                 is_pending=False,
@@ -117,6 +119,9 @@ class FakeGateway:
         paid = bool(payload["paid"])
         return PaymentEvent(
             reference=reference,
+            # The identity a real gateway signs; the simulated body may name
+            # another checkout's to exercise the binding check.
+            charge_id=str(payload.get("charge_id", f"fake_charge_{reference}")),
             transaction_id=str(payload.get("transaction_id", "fake_txn")),
             is_paid=paid,
             is_pending=False,
@@ -134,4 +139,13 @@ class FakeGateway:
     def refund(
         self, *, transaction_id: str, amount: Decimal, currency: str
     ) -> RefundResult:
-        return RefundResult(ok=True, raw={"fake": True})
+        return RefundResult(
+            status=RefundStatus.SUCCEEDED,
+            refund_id=f"fake_refund_{transaction_id}",
+            raw={"fake": True},
+        )
+
+    def fetch_refund(self, *, refund_id: str) -> RefundResult:
+        return RefundResult(
+            status=RefundStatus.SUCCEEDED, refund_id=refund_id, raw={"fake": True}
+        )
