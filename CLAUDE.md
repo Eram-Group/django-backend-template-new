@@ -1,7 +1,8 @@
 # Project rules
 
 docs/ARCHITECTURE.md explains the conventions in depth. PLAN.md is the
-design log and TODO.json the task tracker.
+design log and TODO.json the task tracker. Architecture decisions live in
+`docs/decisions/` (one numbered record each; add one when a convention changes).
 
 ## Architecture rules (digest)
 

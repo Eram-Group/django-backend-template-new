@@ -28,14 +28,12 @@ CSRF_COOKIE_NAME = "__Secure-csrftoken"
 # --- Database: psycopg native pool owns connection health ----------------------
 # CONN_MAX_AGE stays at Django's default 0 - the required pairing with the
 # pool; no CONN_HEALTH_CHECKS either (that is for persistent connections).
-DATABASES["default"]["OPTIONS"] = {
-    "pool": {
-        "min_size": env.DB_POOL_MIN_SIZE,
-        "max_size": env.DB_POOL_MAX_SIZE,
-        "timeout": env.DB_POOL_TIMEOUT,
-        "max_lifetime": env.DB_POOL_MAX_LIFETIME,
-        "max_idle": env.DB_POOL_MAX_IDLE,
-    },
+DATABASES["default"]["OPTIONS"]["pool"] = {
+    "min_size": env.DB_POOL_MIN_SIZE,
+    "max_size": env.DB_POOL_MAX_SIZE,
+    "timeout": env.DB_POOL_TIMEOUT,
+    "max_lifetime": env.DB_POOL_MAX_LIFETIME,
+    "max_idle": env.DB_POOL_MAX_IDLE,
 }
 
 # --- Static/media on S3 (collectstatic runs in the release step, never at build)

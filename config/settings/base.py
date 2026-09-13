@@ -133,6 +133,10 @@ DATABASES = {
         # PostGIS backend regardless of the URL scheme: one DATABASE_URL shape
         # everywhere (postgres://), the engine is a code decision.
         "ENGINE": "django.contrib.gis.db.backends.postgis",
+        # JIT compiles every plan costed above jit_above_cost, on every run;
+        # correlated-subquery annotations cross it and spend more time in LLVM
+        # than executing. OLTP queries never win it back.
+        "OPTIONS": {"options": "-c jit=off"},
     },
 }
 # GeoDjango finds libgdal/libgeos via ctypes.util.find_library, which does not
